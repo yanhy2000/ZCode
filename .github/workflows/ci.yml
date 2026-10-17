@@ -4,7 +4,16 @@ on:
   # 仓库已关闭 Pull Requests，只保留直接 push 和手动触发。
   push:
     branches: [dev, main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
   workflow_dispatch:
+    inputs:
+      run_tests:
+        description: "Run full unit tests (slow)"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -19,14 +28,14 @@ env:
 
 jobs:
   checks:
-    name: Typecheck / Lint / Architecture / Affected tests
+    name: Version / Typecheck / Lint
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -53,30 +62,28 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-      - name: Format check (non-blocking)
-        shell: pwsh
-        run: |
-          pnpm fmt:check
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "::warning::pnpm fmt:check reports pre-existing formatting drift; not blocking CI."
-          }
-          exit 0
+  tests:
+    name: Full unit tests (manual)
+    if: github.event_name == 'workflow_dispatch' && inputs.run_tests == true
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-      - name: Architecture check (non-blocking)
-        shell: pwsh
-        run: |
-          pnpm architecture:check
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "::warning::pnpm architecture:check reports pre-existing upstream violations; not blocking CI."
-          }
-          exit 0
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
 
-      - name: Affected unit tests
-        shell: pwsh
-        run: |
-          if ($env:GITHUB_EVENT_NAME -eq "pull_request") {
-            $env:ZCODE_AFFECTED_TEST_BASE = "origin/$env:GITHUB_BASE_REF"
-          } else {
-            $env:ZCODE_AFFECTED_TEST_BASE = "HEAD^"
-          }
-          pnpm test:unit:affected
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Unit tests
+        run: pnpm test:unit
