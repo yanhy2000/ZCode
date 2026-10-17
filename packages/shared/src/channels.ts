@@ -26,10 +26,6 @@ import type {
   RendererTelemetryEventPayload,
   TelemetryRendererContext,
 } from "./telemetry.js";
-import type {
-  RendererActionTraceBatchV1,
-  RendererActionTraceConfigV1,
-} from "./rendererActionTrace.js";
 import type { RendererHeapSample } from "./validation.js";
 import type {
   CancelPendingRemoteConnectionRequest,

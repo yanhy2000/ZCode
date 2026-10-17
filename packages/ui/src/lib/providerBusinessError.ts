@@ -2,17 +2,6 @@
 export const SUSPICIOUS_EMPTY_MODEL_RESULT_MESSAGE =
   "Model returned no text, no tool calls, and no usage before completing the turn.";
 
-import {
-  requestVerificationActionMessages,
-  requestVerificationRecoveryAction,
-  type RequestVerificationRecoveryAction,
-} from "@/request-security-edition/errors.js";
-export {
-  resolveRequestVerificationBusinessCode,
-  isRequestVerificationTerminalError,
-  isRequestVerificationRejectedMessage,
-  REQUEST_VERIFICATION_REJECTED_MESSAGE,
-} from "@/request-security-edition/errors.js";
 /**
  * zcode-plan / Coding Plan 业务错误码与前端处理约定。
  *
@@ -35,7 +24,6 @@ export const PROVIDER_BUSINESS_ERROR_CODES = [
   "1005",
   "3006",
   "3001",
-  "3007",
   "3008",
   "3009",
   "3010",
@@ -51,7 +39,6 @@ export type ProviderBusinessErrorUiAction =
   | "login"
   | "refresh-quota"
   | "switch-model"
-  | RequestVerificationRecoveryAction
   | "retry-later"
   | "upgrade";
 
@@ -61,7 +48,6 @@ export const PROVIDER_BUSINESS_ERROR_MESSAGE_IDS: Record<ProviderBusinessErrorCo
   "3006": "zcode.error.providerBusiness.3006",
   "3002": "zcode.error.providerBusiness.3002",
   "3001": "zcode.error.providerBusiness.3001",
-  "3007": "zcode.error.providerBusiness.3007",
   "3008": "zcode.error.providerBusiness.3008",
   "3009": "zcode.error.providerBusiness.3009",
   "3010": "zcode.error.providerBusiness.3010",
@@ -77,7 +63,6 @@ export const PROVIDER_BUSINESS_ERROR_ACTION_MESSAGE_IDS: Record<
   login: "chat.error.action.relogin",
   "refresh-quota": "chat.error.action.refreshQuota",
   "switch-model": "chat.error.action.switchModel",
-  ...requestVerificationActionMessages,
   "retry-later": "chat.error.action.retryLater",
   upgrade: "chat.quota.action.upgrade",
 };
@@ -90,7 +75,6 @@ const PROVIDER_BUSINESS_ERROR_UI_ACTIONS: Record<
   "1005": "refresh-quota",
   "3006": "switch-model",
   "3001": null,
-  "3007": requestVerificationRecoveryAction,
   // 3008/3009/3010 并发上限：Start Plan 下走升级横幅，非 Start Plan 走 upgrade 动作
   "3008": "upgrade",
   "3009": "upgrade",

@@ -6,10 +6,7 @@ import {
   getConversationTelemetryParityScenario,
   type ConversationTelemetryParityOperation,
 } from "@/lib/conversationTelemetryParityScenarioDefinitions.js";
-import {
-  runRequestVerificationParityAssertions,
-  runQuotaParityStateAssertions,
-} from "@/lib/conversationTelemetryParityStateE2E.js";
+import { runQuotaParityStateAssertions } from "@/lib/conversationTelemetryParityStateE2E.js";
 import { shouldExposeE2EStoreBridge } from "@/lib/e2eStoreBridge.js";
 import { resetMessageTelemetryForTest } from "@/lib/messageTelemetry.js";
 import { setUiPerfArmsReporter } from "@/lib/uiPerfArmsTelemetry.js";
@@ -132,10 +129,6 @@ async function applyCurrentOperation(input: {
   }
   if (operation.kind === "quota.assert") {
     input.stateAssertions.push(...runQuotaParityStateAssertions());
-    return;
-  }
-  if (operation.kind === "verification.assert") {
-    input.stateAssertions.push(...runRequestVerificationParityAssertions());
     return;
   }
   const scope = input.getScope(operation.scope);

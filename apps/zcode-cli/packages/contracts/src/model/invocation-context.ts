@@ -1,4 +1,3 @@
-import type { RequestVerificationReason } from "@zcode/shared";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { ZCodeProviderAccountAccess } from "@zcode/shared";
 import type { ModelApiCallObservation } from "../telemetry/index.js";
@@ -35,7 +34,7 @@ export interface ModelInvocationContext {
     expectedAccountScope?: string;
     rejectedProjectTokenFingerprint?: string;
     attempt: number;
-    reason?: RequestVerificationReason;
+    reason?: "model-request";
     abortSignal?: AbortSignal;
     providerId: string;
     modelId: string;

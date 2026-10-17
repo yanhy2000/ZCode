@@ -1,7 +1,5 @@
-import type { RequestVerificationReason } from "@zcode/shared";
 import { projectAccessTokenFingerprint, isRequestSecurityFailure } from "@zcode/shared";
 import type { Logger, ModelRequestAuth } from "@zcode/contracts";
-import { RequestVerificationRetry } from "./request-security-edition/recovery.js";
 import { inspectProviderFailure } from "./failure-classifier.js";
 import {
   getApiCallResponseBody,
@@ -11,7 +9,6 @@ import {
 import type { AiSdkModelTextRequest, ResolvedAiSdkModel } from "./runner-runtime.js";
 
 export class AccountRequestRetry {
-  readonly #verification: RequestVerificationRetry;
   #used = false;
   #pending = false;
   #auth?: ModelRequestAuth;
@@ -20,16 +17,10 @@ export class AccountRequestRetry {
     private readonly request: AiSdkModelTextRequest,
     private readonly model: ResolvedAiSdkModel,
     private readonly logger?: Logger,
-  ) {
-    this.#verification = new RequestVerificationRetry(request, model);
-  }
+  ) {}
 
   get extraAttempts(): number {
-    return this.#verification.extraAttempts + Number(this.#used);
-  }
-
-  takeReason(): RequestVerificationReason {
-    return this.#verification.takeReason();
+    return Number(this.#used);
   }
 
   prepareRequest(request: AiSdkModelTextRequest): AiSdkModelTextRequest {
@@ -61,7 +52,6 @@ export class AccountRequestRetry {
   }
 
   claim(error: unknown, blocked = false): boolean {
-    if (this.#verification.claim(error, blocked)) return true;
     if (!this.canRecoverProjectToken(error, blocked)) return false;
     this.#used = true;
     this.#pending = true;

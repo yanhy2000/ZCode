@@ -1,4 +1,3 @@
-import { recordRequestObservation } from "./request-security-edition/index.js";
 /* oxlint-disable eslint(max-lines) -- concrete Writer 在同一文件显式维护各自 canonical key，避免运行时 Schema/Registry 再造一层映射。 */
 import {
   context,
@@ -1429,15 +1428,7 @@ class ModelAttemptWriter extends TrackedBaseWriter implements ModelAttemptSpanWr
     this.addEvent("stream_stalled", { idle_ms: normalized });
   }
 
-  recordRequestObservation(observation: ModelRequestObservation): void {
-    recordRequestObservation(
-      {
-        setAttribute: (name, value) => this.setAttribute(name, value),
-        addEvent: (name, attributes) => this.addEvent(name, attributes),
-      },
-      observation,
-    );
-  }
+  recordRequestObservation(_observation: ModelRequestObservation): void {}
 
   finishCompleted(): void {
     this.finishCompletedIfOpen();

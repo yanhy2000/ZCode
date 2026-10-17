@@ -1,4 +1,3 @@
-import type { RequestVerificationReason } from "@zcode/shared";
 import { createHash } from "node:crypto";
 import {
   BIGMODEL_PROVIDER_ID,
@@ -24,7 +23,7 @@ export interface AccountRequestAuthInput {
   accountAccess: ZCodeProviderAccountAccess | ZCodeAccountAccess;
   expectedAccountScope?: string;
   rejectedProjectTokenFingerprint?: string;
-  reason: RequestVerificationReason | "off-peak" | "usage";
+  reason: "model-request" | "off-peak" | "usage";
 }
 
 export interface AccountAccessIdentityInput {

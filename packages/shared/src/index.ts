@@ -81,7 +81,6 @@ export {
   normalizeZCodeProductFlavor,
 } from "./env.js";
 export * from "./errors.js";
-export * from "./rendererActionTrace.js";
 export * from "./validation.js";
 export * from "./api.js";
 export * from "./zcode-protocol/index.js";
@@ -360,4 +359,3 @@ export {
   requestSecuritySensitiveHeaders,
   isRequestSecurityFailure,
 } from "./request-security-edition/policy.js";
-export * from "./request-security-edition/verification-policy.js";

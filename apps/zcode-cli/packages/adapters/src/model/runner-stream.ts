@@ -55,7 +55,6 @@ import {
 import { toModelStreamEvent } from "./runner-normalization.js";
 import type { EnvRecord } from "./model-execution.js";
 import { detectProviderBusinessFinishError } from "./provider-finish-business-error.js";
-import { createRequestVerificationEmptyStreamError } from "./request-security-edition/recovery.js";
 import {
   calculateRetryDelay,
   logRetryDelayDecision,
@@ -78,7 +77,6 @@ import type {
   AiSdkModelTextRequest,
   ResolvedAiSdkModel,
 } from "./runner-runtime.js";
-import { isRequestVerificationRejection } from "./request-security-edition/recovery.js";
 import { AccountRequestRetry } from "./account-request-retry.js";
 import { resolveModelForAttempt, RuntimeHeadersRefreshError } from "./runner-runtime-headers.js";
 import { retryAllowedByFailurePolicy } from "./workflow-model-failure-policy.js";
@@ -279,7 +277,6 @@ export async function* runStreamText(input: {
     try {
       resolved = await resolveModelForAttempt({
         attempt,
-        reason: authRetry.takeReason(),
         request: authRetry.prepareRequest(attemptRequest),
         resolveModel: input.resolveModel,
       });
@@ -490,8 +487,6 @@ export async function* runStreamText(input: {
             } satisfies Record<string, unknown>),
         });
         if (hiddenProviderBusinessError) {
-          if (isRequestVerificationRejection(hiddenProviderBusinessError))
-            throw hiddenProviderBusinessError;
           const failure = classifyModelFailure(
             hiddenProviderBusinessError,
             input.request.abortSignal,
@@ -510,21 +505,12 @@ export async function* runStreamText(input: {
         if (isSuspiciousStreamDiagnostics(diagnostics)) {
           // 403 JSON 等业务错误有时不会让 AI SDK 抛出 error chunk，流会以空 completion 结束；
           // 若不在 adapter 层终止，core 会误报 “Model returned no text...”。
-          const streamEndedWithoutOutputError =
-            detectProviderBusinessFinishError({
-              providerId: String(statusContext.providerId),
-              providerKind: statusContext.providerKind,
-              source: diagnostics.lastErrorChunk ?? diagnostics.lastFinishChunk,
-            }) ??
-            createRequestVerificationEmptyStreamError({
-              accountMode: resolved.accountAccess?.mode,
-              headers: resolved.headers,
-              providerId: String(statusContext.providerId),
-              providerKind: resolved.providerKind,
-            });
+          const streamEndedWithoutOutputError = detectProviderBusinessFinishError({
+            providerId: String(statusContext.providerId),
+            providerKind: statusContext.providerKind,
+            source: diagnostics.lastErrorChunk ?? diagnostics.lastFinishChunk,
+          });
           if (streamEndedWithoutOutputError) {
-            if (isRequestVerificationRejection(streamEndedWithoutOutputError))
-              throw streamEndedWithoutOutputError;
             const failure = classifyModelFailure(
               streamEndedWithoutOutputError,
               input.request.abortSignal,
@@ -1240,7 +1226,7 @@ async function handleStreamErrorEvent(
   input: Parameters<typeof handleStreamChunk>[0],
   error: unknown,
 ): Promise<Awaited<ReturnType<typeof handleStreamChunk>>> {
-  if (isRequestVerificationRejection(error) || input.canRecoverProjectToken(error)) throw error;
+  if (input.canRecoverProjectToken(error)) throw error;
   const retryWithRepairedHistory =
     !input.emittedRetryBoundaryEvent && input.repairThinkingSignatureRejection(error);
   const statusContext = retryWithRepairedHistory
@@ -1607,13 +1593,11 @@ function statusPublishOptions(
   input: {
     logger?: Logger;
     request: AiSdkModelTextRequest;
-    resolved?: Pick<ResolvedAiSdkModel, "requestObservations">;
     statusSink?: ModelStatusSink;
   },
   admission?: AttemptAdmission,
 ) {
   return {
-    requestObservations: input.resolved?.requestObservations,
     logger: input.logger,
     requestStatusSink: input.request.statusSink,
     statusSink: input.statusSink,

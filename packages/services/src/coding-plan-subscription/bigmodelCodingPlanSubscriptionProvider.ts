@@ -1,13 +1,7 @@
-import {
-  requestVerificationClaimHeaders,
-  isRequestVerificationMessage,
-  type RequestVerificationClientConfig,
-} from "@zcode/shared";
 /* eslint-disable max-lines -- Coding Plan provider 需要集中维护 BigModel 支付宝与 Z.ai Stripe/PayPal 接口映射，拆分会让共享鉴权和响应解包更难追踪。 */
 import type {
   ApiClient,
   ApiRequestInit,
-  RequestVerificationConfig,
   CodingPlanAgreementResponse,
   CodingPlanBatchPreviewRequest,
   CodingPlanBatchPreviewResponse,
@@ -64,7 +58,6 @@ import type { OffPeakClientConfig } from "./codingPlanSubscription.js";
 import {
   BIGMODEL_PROVIDER_ID,
   BUILTIN_MODEL_PROVIDER_IDS,
-  REQUEST_VERIFICATION_REQUIRED,
   CODING_PLAN_SYSTEM_BUSY,
   buildRuntimeZCodeApiUrl,
   isZaiCodingPlanProviderId,
@@ -89,7 +82,6 @@ import {
 
 const BIGMODEL_CODING_PLAN_API_PREFIX = "/api/biz";
 const ZAI_CODING_PLAN_PAY_API_PREFIX = "/api/pay";
-const ZCODE_CLIENT_CONFIG_API_PREFIX = "/api/v1/client/configs";
 const REQUEST_TIMEOUT_MS = 15_000;
 const CODING_PLAN_ZAI_OVERSEAS_PAYMENT_REQUIRED = "coding_plan_zai_overseas_payment_required";
 const ZCODE_JWT_TOKEN_KEY = "zcodejwttoken";
@@ -152,22 +144,20 @@ interface ZCodeClientConfigEnvelope {
   msg?: string;
   success?: boolean;
   data?: {
-    configs?:
-      | (RequestVerificationClientConfig & {
-          // 闲时任务灰度（服务端）：内层字段服务端为 snake_case，与外层 camelCase 混排。
-          offPeak?: {
-            enable_offpeak_task?: boolean;
-          } | null;
-          modelContextBudget?: {
-            strategy?: unknown;
-          } | null;
-          // 动态工作流灰度：mode 的取值域由
-          // shared 的 normalizeDynamicWorkflowMode 裁决，这里保持 unknown，不在类型层假设服务端合法。
-          dynamicWorkflow?: {
-            mode?: unknown;
-          } | null;
-        })
-      | null;
+    configs?: {
+      // 闲时任务灰度（服务端）：内层字段服务端为 snake_case，与外层 camelCase 混排。
+      offPeak?: {
+        enable_offpeak_task?: boolean;
+      } | null;
+      modelContextBudget?: {
+        strategy?: unknown;
+      } | null;
+      // 动态工作流灰度：mode 的取值域由
+      // shared 的 normalizeDynamicWorkflowMode 裁决，这里保持 unknown，不在类型层假设服务端合法。
+      dynamicWorkflow?: {
+        mode?: unknown;
+      } | null;
+    } | null;
   } | null;
 }
 
@@ -334,7 +324,6 @@ export class BigModelCodingPlanSubscriptionProvider {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
-          ...requestVerificationClaimHeaders(request),
           "X-ZCode-App-Version": ZCODE_VERSION,
           "X-Platform": resolveClientPlatformKey(),
         },
@@ -395,7 +384,9 @@ export class BigModelCodingPlanSubscriptionProvider {
   /**
    * 闲时任务：自维护构建不提供，不读取 `/client/configs`。
    */
-  async getOffPeakClientConfig(_options?: { forceRefresh?: boolean }): Promise<OffPeakClientConfig> {
+  async getOffPeakClientConfig(_options?: {
+    forceRefresh?: boolean;
+  }): Promise<OffPeakClientConfig> {
     const modelSelectionView = await this.resolveOffPeakModelSelectionView?.();
     return {
       enabled: false,
@@ -427,11 +418,6 @@ export class BigModelCodingPlanSubscriptionProvider {
   async getBillingDiscount(): Promise<CodingPlanBillingDiscountConfig | undefined> {
     // 自维护构建不展示官方账单折扣。
     return undefined;
-  }
-
-  async getRequestVerificationConfig(): Promise<RequestVerificationConfig | null> {
-    // 自维护构建不启用官方请求验证。
-    return null;
   }
 
   async preview(request: CodingPlanPreviewRequest): Promise<CodingPlanPreviewResponse> {
@@ -936,10 +922,6 @@ export class BigModelCodingPlanSubscriptionProvider {
   }
 }
 
-export function resolveCodingPlanClientConfigUrl(env: NodeJS.ProcessEnv): URL {
-  return new URL(buildRuntimeZCodeApiUrl(env, ZCODE_CLIENT_CONFIG_API_PREFIX));
-}
-
 function resolveFallbackEnterpriseTeamPlanProduct(
   products: EnterpriseCodingPlanPricingProduct[],
 ): EnterpriseCodingPlanPricingProduct | null {
@@ -1233,9 +1215,6 @@ function normalizeRemoteErrorMessage(
   const message = msg?.trim();
   if (message && isUnrenderableRemoteErrorMessage(message)) {
     return CODING_PLAN_SYSTEM_BUSY;
-  }
-  if (message && isRequestVerificationMessage(message)) {
-    return REQUEST_VERIFICATION_REQUIRED;
   }
   const providerName = resolveCodingPlanProviderName(providerId);
   return message || `${providerName} request failed${code ? `: ${code}` : ""}`;

@@ -1,4 +1,3 @@
-import type { RequestVerificationReason } from "@zcode/shared";
 import { generateText as aiGenerateText, streamText as aiStreamText } from "ai";
 import type {
   ModelProperties,
@@ -33,7 +32,7 @@ export interface AiSdkModelTextRequest extends ModelTextRequest {
     expectedAccountScope?: string;
     rejectedProjectTokenFingerprint?: string;
     attempt: number;
-    reason?: RequestVerificationReason;
+    reason?: "model-request";
     abortSignal?: AbortSignal;
     providerId: string;
     modelId: string;

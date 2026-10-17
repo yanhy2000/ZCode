@@ -1,4 +1,3 @@
-import { additionalRequestModalSelectors } from "@/request-security-edition/errors.js";
 import { isStartPlanModelProviderId, type MarketingPopup } from "@zcode/shared";
 import type {
   CloudContentDialogPayload,
@@ -13,7 +12,6 @@ export function canOpenMarketingPopup() {
         '[role="dialog"]',
         '[role="alertdialog"]',
         '[data-testid="coding-plan-upgrade-surface"]',
-        ...additionalRequestModalSelectors,
       ].join(", "),
     )
   );

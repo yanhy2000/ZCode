@@ -1,4 +1,3 @@
-import type { RequestVerificationReason } from "@zcode/shared";
 import { traceContextToLogContext } from "../deps.js";
 import type { ModelRequestAuth } from "@zcode/contracts";
 import type { ZCodeProviderAccountAccess } from "@zcode/shared";
@@ -18,7 +17,7 @@ export function createRefreshRuntimeHeadersBeforeModelAttempt(
       expectedAccountScope?: string;
       rejectedProjectTokenFingerprint?: string;
       attempt: number;
-      reason?: RequestVerificationReason;
+      reason?: "model-request";
       abortSignal?: AbortSignal;
     }) => Promise<{
       headersApplied: boolean;

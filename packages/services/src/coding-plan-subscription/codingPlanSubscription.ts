@@ -1,5 +1,4 @@
 import type {
-  RequestVerificationConfig,
   CodingPlanAgreementResponse,
   CodingPlanBatchPreviewRequest,
   CodingPlanBatchPreviewResponse,
@@ -80,7 +79,6 @@ export interface ICodingPlanSubscriptionService {
   getModelContextBudgetStrategy(): Promise<ZCodeModelContextBudgetStrategy>;
   /** 兼容接口：自维护构建不展示官方账单折扣。 */
   getBillingDiscount(): Promise<CodingPlanBillingDiscountConfig | undefined>;
-  getRequestVerificationConfig(): Promise<RequestVerificationConfig | null>;
   productInfo(request: CodingPlanProductInfoRequest): Promise<CodingPlanProductInfo>;
   preview(request: CodingPlanPreviewRequest): Promise<CodingPlanPreviewResponse>;
   createSign(request: CodingPlanCreateSignRequest): Promise<CodingPlanAgreementResponse>;

@@ -10,5 +10,3 @@ export * from "./tool-transform.js";
 export { createProviderEndpointRoutingPort } from "./endpoint-routing-edition/index.js";
 export type { ProviderEndpointRoutingFactoryOptions } from "./provider-endpoint-routing-options.js";
 export * from "./provider-endpoint-routing-fetch.js";
-export { createModelRequestSecurityState } from "./request-security-edition/index.js";
-export type { ModelRequestSecurityState } from "./request-security.js";

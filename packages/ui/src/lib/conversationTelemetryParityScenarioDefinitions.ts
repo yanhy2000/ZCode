@@ -1,4 +1,3 @@
-import { requestSecurityMessagesEnUS } from "@/request-security-edition/messages.js";
 /* eslint-disable max-lines -- 19 个差分 case 的受控输入必须集中保存，避免新旧驱动各自复制后悄悄漂移。 */
 
 export type ParityModelStatus =
@@ -189,7 +188,6 @@ export type ConversationTelemetryParityOperation =
       scope?: string;
     }
   | { kind: "quota.assert" }
-  | { kind: "verification.assert" }
   | { kind: "scope.dispose"; scope?: string }
   | { kind: "web.noop"; operations: ConversationTelemetryParityOperation[] };
 
@@ -988,17 +986,6 @@ function buildScenarios(): ConversationTelemetryParityScenario[] {
     },
   ];
 
-  const tdp17: ConversationTelemetryParityOperation[] = [
-    {
-      kind: "visible.error",
-      errorKey: "tdp17-3007",
-      displayMessage: requestSecurityMessagesEnUS["zcode.error.providerBusiness.3007"],
-      code: "3007",
-      traceId: "tdp17-trace",
-      sessionId: "tdp17-session",
-    },
-  ];
-
   const tdp18 = successfulTextTurn({ caseId: "TDP18", includeNetwork: true });
   const duplicateChunk = tdp18.find(
     (operation): operation is Extract<ConversationTelemetryParityOperation, { kind: "chunk" }> =>
@@ -1197,14 +1184,6 @@ function buildScenarios(): ConversationTelemetryParityScenario[] {
       "entitlement-refresh",
       "upgrade-context",
       "purchase-events-pruned",
-    ]),
-    scenario("TDP17", [{ kind: "verification.assert" }, ...tdp17], {}, { chat_error_banner: 1 }, [
-      "visible-3007",
-      "exact-zcode-plan-provider",
-      "one-shot-header",
-      "accepted-duplicate-handled",
-      "failure-retryable",
-      "non-zcode-plan-skipped",
     ]),
     scenario(
       "TDP18",

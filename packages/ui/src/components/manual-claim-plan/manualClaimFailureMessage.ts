@@ -1,4 +1,3 @@
-import { requestVerificationClaimFailureMessageId } from "@/request-security-edition/errors.js";
 export function resolveManualClaimFailureMessageId(
   code: number,
   failureEndsAt?: number,
@@ -35,8 +34,6 @@ export function resolveManualClaimFailureMessageId(
     }
     case 3001:
       return "manualClaimPlan.claim.failure.invalidRequest";
-    case 3007:
-      return requestVerificationClaimFailureMessageId;
     case 401:
       return "manualClaimPlan.claim.failure.loginRequired";
     default:

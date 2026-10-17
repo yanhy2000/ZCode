@@ -47,8 +47,6 @@ import type {
   RemoteTarget,
   SSHConfigAliasOption,
   RendererTelemetryEventPayload,
-  RendererActionTraceBatchV1,
-  RendererActionTraceConfigV1,
   RendererHeapSample,
   TelemetryRendererContext,
   TaskNotificationPayload,

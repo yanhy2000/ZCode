@@ -1,4 +1,3 @@
-import { requestVerificationTimeoutMessage } from "@zcode/shared";
 import { randomUUID } from "node:crypto";
 import {
   zcodeProtocolMethods,
@@ -73,7 +72,7 @@ export function createProviderRuntimeHeadersPort(
         if (timedOut) {
           const timeoutError = new ProtocolRequestError(
             CLIENT_REQUEST_TIMEOUT_CODE,
-            requestVerificationTimeoutMessage,
+            "Provider runtime headers request timed out. Please send your message again.",
             error.data,
           );
           timeoutError.cause = error;

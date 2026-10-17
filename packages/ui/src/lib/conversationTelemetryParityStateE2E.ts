@@ -64,5 +64,3 @@ function assertState(condition: boolean, label: string, assertions: string[]): v
   }
   assertions.push(label);
 }
-
-export { runRequestVerificationParityAssertions } from "@/request-security-edition/parity.js";

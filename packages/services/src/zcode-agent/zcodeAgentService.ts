@@ -1,8 +1,3 @@
-import {
-  requiresRequestVerification,
-  allowRequestVerificationHeaders,
-  requestVerificationInteractionAvailable,
-} from "@zcode/shared";
 import { zcodeMcpUiSamplingResultSchema } from "@zcode/shared";
 import { MCP_APPS_SAMPLING_TRANSPORT_TIMEOUT_MS } from "@zcode/shared/mcp-apps";
 import {
@@ -2533,11 +2528,7 @@ export function createZCodeAgentService(
             workspacePath: workspace.workspacePath,
           });
           const accountAccess = parsed.data.accountAccess;
-          if (
-            accountRequestAuthService &&
-            accountAccess &&
-            !requiresRequestVerification(accountAccess)
-          ) {
+          if (accountRequestAuthService && accountAccess) {
             // Account API Key / Team Runtime Key 不需要 Renderer 交互。Host 按 Model
             // 固定的 Account Access 自动应答，避免后台任务和无 pane 会话依赖 UI 订阅者。
             void respondAccountRequestAuthWithoutInteraction({
@@ -2546,23 +2537,11 @@ export function createZCodeAgentService(
             });
             return;
           }
-          if (!requestVerificationInteractionAvailable) {
-            pendingProviderRuntimeHeaders.delete(pendingKey);
-            void pending.client.respond(pending.protocolRequestId, {
-              headersApplied: false,
-              errorMessage: "Provider request auth is unavailable",
-            });
-            return;
-          }
-          emitSessionEvent(workspace, parsed.data.sessionId, {
-            type: "providerRuntimeHeaders.request",
-            request: parsed.data,
+          pendingProviderRuntimeHeaders.delete(pendingKey);
+          void pending.client.respond(pending.protocolRequestId, {
+            headersApplied: false,
+            errorMessage: "Provider request auth is unavailable",
           });
-          // workspace 级镜像投递：桌面窗口常驻应答方（每个打开的 workspace tab 一个）
-          // 不感知 sessionId，必须在这里按 workspaceKey 收到同一请求。
-          providerRuntimeHeadersWorkspaceEmitters
-            .get(resolveWorkspaceKey(workspace))
-            ?.fire(parsed.data);
           return;
         }
 
@@ -5524,10 +5503,6 @@ export function createZCodeAgentService(
       const requestHeaders = {
         ...accountRequestAuth?.headers,
       };
-      Object.assign(
-        requestHeaders,
-        allowRequestVerificationHeaders(params.response.runtimeProviderHeaders ?? {}),
-      );
       const requestAuth =
         accountRequestAuth?.apiKey || Object.keys(requestHeaders).length > 0
           ? {

@@ -4,7 +4,6 @@ import {
   BigModelCodingPlanSubscriptionProvider,
   createBigModelLoginAuthHeaders,
   createZaiLoginAuthHeaders,
-  resolveCodingPlanClientConfigUrl,
 } from "../src/coding-plan-subscription/bigmodelCodingPlanSubscriptionProvider.js";
 import { ZaiCodingPlanSubscriptionProvider } from "../src/coding-plan-subscription/zaiCodingPlanSubscriptionProvider.js";
 import { createCodingPlanSubscriptionService } from "../src/coding-plan-subscription/codingPlanSubscriptionService.js";
@@ -297,8 +296,7 @@ describe("BigModelCodingPlanSubscriptionProvider", () => {
         apiClient: { request },
         credentialService: { load: vi.fn() },
       });
-      // 由其他消费者填充真实共享缓存；预算不能再读出旧算法或发起刷新。
-      await provider.getRequestVerificationConfig();
+      // 预算不能再读出旧算法或发起刷新。
       request.mockClear();
       await expect(provider.getModelContextBudgetStrategy()).resolves.toBe("preflight-v1");
       expect(request).not.toHaveBeenCalled();
@@ -592,7 +590,6 @@ describe("BigModelCodingPlanSubscriptionProvider", () => {
     ).rejects.toThrow("zai_oauth_required");
     expect(apiClient.request).not.toHaveBeenCalled();
   });
-
 
   it("getEnterprisePricing 未登录时走公开定价接口且不读取 OAuth", async () => {
     const apiClient: ApiClient = {

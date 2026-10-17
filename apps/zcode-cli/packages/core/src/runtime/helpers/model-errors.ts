@@ -1,4 +1,3 @@
-import { requestVerificationDiagnostics } from "@zcode/shared";
 import { CoreErrorType, ModelErrorCode, createCoreError, isCoreError } from "../deps.js";
 import type { ModelUsage } from "../deps.js";
 import { isPlainRecord, stringProperty } from "./data.js";
@@ -117,7 +116,6 @@ export function buildSuspiciousEmptyDiagnostics(
     finishReason: input.finishReason ?? null,
     rawFinishReason: input.rawFinishReason ?? null,
     outboundHeaderKeys: input.outboundHeaderKeys ?? [],
-    ...requestVerificationDiagnostics(input),
     providerMetadataKeys: input.providerMetadata
       ? Object.keys(input.providerMetadata).slice(0, 20)
       : [],

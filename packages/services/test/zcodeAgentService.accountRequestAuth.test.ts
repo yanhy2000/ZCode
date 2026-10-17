@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  zcodeProtocolMethods,
-  zcodeProtocolNotifications,
-  requiresRequestVerification,
-} from "@zcode/shared";
+import { zcodeProtocolMethods, zcodeProtocolNotifications } from "@zcode/shared";
 import type { AccountRequestAuthMaterial } from "../src/model-provider/accountRequestAuthService.js";
 import { offPeakSelectionView } from "./fixtures/offPeakSelection.js";
 
@@ -145,16 +141,7 @@ it("edition policy selects interaction without changing the Host credential owne
   })(listener);
   try {
     fire("start-plan");
-    if (requiresRequestVerification({ mode: "start-plan" })) {
-      expect(listener).toHaveBeenCalledOnce();
-      expect(resolveCurrent).not.toHaveBeenCalled();
-      await service.respondProviderRuntimeHeaders({
-        ...target,
-        response: { headersApplied: true, runtimeProviderHeaders: {} },
-      });
-    } else {
-      expect(listener).not.toHaveBeenCalled();
-    }
+    expect(listener).not.toHaveBeenCalled();
     await vi.waitFor(() =>
       expect(respond).toHaveBeenCalledExactlyOnceWith("protocol-1", {
         headersApplied: true,

@@ -1,8 +1,3 @@
-import {
-  prepareRequestVerificationClaim,
-  useRequestVerificationPrewarm,
-} from "@/request-security-edition/claim.js";
-import { requestVerificationClaimFailureMessageId } from "@/request-security-edition/errors.js";
 import { useStartPlanEntitlement } from "@/hooks/useStartPlanEntitlement.js";
 import { createContext, useContext, useEffect, useCallback, useState, useRef } from "react";
 import type { ReactNode } from "react";
@@ -247,21 +242,10 @@ export function MarketingTouchProvider({
         }
         let submitted = false;
         try {
-          const proof = await prepareRequestVerificationClaim(
-            services.codingPlanSubscriptionService,
-            signal,
-            () => phase("verifying"),
-          );
-          if (!proof)
-            return {
-              status: "cancelled",
-              message: intl.formatMessage({ id: requestVerificationClaimFailureMessageId }),
-            };
           phase("submitting");
           submitted = true;
           const result = await services.codingPlanSubscriptionService.claimManualPlan({
             planId: action.args.plan_id,
-            ...proof,
           });
           signal.throwIfAborted();
           if (!result.success)
@@ -362,14 +346,6 @@ function ConnectedBanner({ controller }: { controller: MarketingTouchController 
   const { dark } = useCloudHeroEnvironment();
   const { intl, locale } = useZCodeIntl();
   const banner = state.banner;
-  useRequestVerificationPrewarm(
-    Boolean(
-      banner?.delivery.resource_position === "banner" &&
-      (banner.image || banner.bannerHero) &&
-      banner.delivery.banner.buttons.find((button) => button.action.type !== "close")?.action
-        .type === "claim_zcode_plan",
-    ),
-  );
   // 与仲裁层（SidebarBottomActivity）共用同一可见性谓词，避免两处判断漂移。
   if (!isMarketingBannerRenderable(banner)) return null;
   const buttons = banner.delivery.banner.buttons;

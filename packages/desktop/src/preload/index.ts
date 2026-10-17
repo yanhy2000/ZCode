@@ -52,8 +52,6 @@ import type {
   RemoteTarget,
   TaskNotificationPayload,
   TelemetryRendererContext,
-  RendererActionTraceBatchV1,
-  RendererActionTraceConfigV1,
   RendererHeapSample,
   PostUpdateReleaseNotesPayload,
   RemoteSessionClosedEvent,

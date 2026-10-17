@@ -31,7 +31,6 @@ import { buildErrorFeedbackDescription } from "@/lib/errorFeedbackDraft.js";
 import {
   isSuspiciousEmptyModelResultMessage,
   resolveOffPeakTicketExpiredBusinessCode,
-  resolveRequestVerificationBusinessCode,
 } from "@/lib/providerBusinessError.js";
 import type { ZCodeUiError } from "@/lib/zcodeUiError.js";
 
@@ -111,9 +110,7 @@ export function resolveChatErrorBannerDisplayMessage(
   }
 
   const providerBusinessCode =
-    resolveRequestVerificationBusinessCode(error.code, error.message) ??
-    resolveOffPeakTicketExpiredBusinessCode(error.code, error.message) ??
-    error.code;
+    resolveOffPeakTicketExpiredBusinessCode(error.code, error.message) ?? error.code;
   const providerBusinessMessageId = getProviderBusinessErrorMessageId(providerBusinessCode);
   if (providerBusinessMessageId) {
     return intl.formatMessage({ id: providerBusinessMessageId });

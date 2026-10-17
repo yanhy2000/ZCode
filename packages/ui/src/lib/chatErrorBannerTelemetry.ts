@@ -8,7 +8,6 @@ import { logger } from "@/logger.js";
 import {
   getProviderBusinessErrorUiAction,
   isProviderBusinessErrorCode,
-  resolveRequestVerificationBusinessCode,
   type ProviderBusinessErrorUiAction,
 } from "@/lib/providerBusinessError.js";
 import { resolveTelemetryAttribution } from "@/lib/chatErrorAttribution.js";
@@ -45,11 +44,7 @@ interface ChatProviderBusinessRecoveryAction {
 export function resolveVisibleChatErrorTelemetryRecoveryAction(
   error: Pick<ZCodeUiError, "code" | "message">,
 ): ChatProviderBusinessRecoveryAction | null {
-  // 修复原因：旧 UI 会把普通 provider 业务错误的可见恢复动作作为聚合维度上报；
-  // 3007 的 request verification retry 是内部自动恢复动作，不显示按钮，因此必须继续留空。
-  if (resolveRequestVerificationBusinessCode(error.code, error.message)) {
-    return null;
-  }
+  // 修复原因：旧 UI 会把普通 provider 业务错误的可见恢复动作作为聚合维度上报。
   if (!isProviderBusinessErrorCode(error.code)) {
     return null;
   }

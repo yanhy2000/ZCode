@@ -112,9 +112,9 @@
 
 自维护构建只保留第三方 Provider 所需的本地配置、模型选择与执行链路。以下官方云控或商业功能不再提供：
 
-- 渲染器动作追踪与本地 TTFT 采样：不再读取 `rendererActionTrace` 配置，不注册相关 IPC，不上报渲染器动作或 TTFT 数据。
+- 渲染器动作追踪：物理删除 UI `userActionTelemetry` 辅助函数、shared `rendererActionTrace` schema、platform/channels 类型与全部调用点；点击操作直接执行，不产生 renderer action span 或本地 TTFT 上报。
 - 闲时任务（Off-Peak task）：移除 UI 入口、任务调度、Host 协议、服务端取号与模型选择分支。
-- 请求验证（Request Verification）：移除开源版空壳实现、UI 提示与相关网关分支；Provider runtime headers 的线协议字段保留，避免破坏第三方 Provider 兼容性。
+- 请求验证（Request Verification）：物理删除 shared `verification-policy`、UI claim/error/parity/messages、CLI recovery 空壳、Coding Plan claim 头与 3007 错误映射；Provider runtime headers 的账号鉴权刷新链路保留，但不再携带 verification reason/proof。
 - 强制更新（forceUpdate / minimalVersion）：移除残留类型、Provider 方法、Main 标志与文案。
 - Coding Plan 商品目录、团队静态商品、体验套餐预览与账单折扣：移除解析、服务方法与展示组件；不读取对应 client/configs 字段。
 - 漏洞上报（zsrc）：移除公开配置字段、帮助菜单入口与文案。
@@ -149,3 +149,6 @@
 13. 无可用模型横幅只保留“配置”入口，不展示 Coding Plan“升级”按钮；提示文案不再要求开通编程套餐。
 14. 草稿页推荐项包含 `NAVIGATE:AUTOMATIONS:OFFPEAK` 时直接丢弃，不展示“闲时任务”快捷建议；本地主动推荐池不包含闲时任务推荐语。
 15. 自动化页空态描述只说明定时任务，不再提“排队在闲时算力空闲时后台执行”。
+16. 渲染器动作追踪已物理删除：仓库中不存在 `userActionTelemetry`、`userActionTraceCatalog`、`rendererActionTrace`，UI 点击不再包一层 action span；点击行为与移除前一致。
+17. 请求验证已物理删除：仓库中不存在 verification-policy、claim、parity、3007 映射或 `getRequestVerificationConfig`；Provider runtime headers 只用于账号鉴权刷新，缺少账号鉴权时直接返回不可用，不再等待 Renderer 交互。
+18. 无可用模型横幅和错误归因不再引用请求验证业务码；`zcode.error.modelSuspiciousEmpty` 在 zh-CN / en-US 都有本地文案。
