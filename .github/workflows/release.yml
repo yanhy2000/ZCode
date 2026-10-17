@@ -22,8 +22,6 @@ jobs:
   build:
     name: Build Windows x64
     uses: ./.github/workflows/build-windows.yml
-    with:
-      product_identity: preview
 
   release:
     name: Create draft GitHub release

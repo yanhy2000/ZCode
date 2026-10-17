@@ -12,6 +12,19 @@
 - Release tag 为 `v<version>`，例如 `v1.0.0+3.15.1`；tag 必须与 `package.json` 完全一致。
 - 版本比较按“私有版本优先，官方基线次之”的二元组进行。SemVer 会忽略 `+` 之后的 build metadata，因此更新检查不得直接使用 `semver.gt`。
 
+## 产品身份与数据目录
+
+- 发布与手动 Windows 构建固定使用 production 身份：
+  - `productName`：`ZCode`
+  - `appId` / Windows AUMID：`dev.zcode.app`
+  - Linux executable / package：`zcode`
+- 快捷方式、开始菜单、托盘、About、卸载项只显示 `ZCode`，不出现 `Preview`。
+- 正式身份会替换同机已安装的官方 ZCode，不能再与官方版并排安装。
+- Electron 用户数据使用 `%APPDATA%\ZCode`，业务数据继续使用 `~/.zcode`；两者都不因身份切换而迁移。
+- 首次从官方版或 Preview 版切换过来前，先备份 `%APPDATA%\ZCode` 和 `%USERPROFILE%\.zcode`。如果官方安装版本高于当前上游基线，必须先确认数据格式可回退，不能只依赖安装包覆盖。
+- `ZCODE_PREVIEW_IDENTITY` 只保留给 `ZCODE_ENV=test` 的本地/e2e 构建；发布与手动 Windows 构建必须显式产出 production 身份。
+- `Build Windows` 不提供 `product_identity` 输入；`release.yml` 直接复用正式身份构建。
+
 ## 更新检查
 
 ### 来源
@@ -90,4 +103,5 @@
 5. 设置页不再出现预览版更新、自动下载安装两个开关。
 6. 打包应用不初始化 ARMS，不发送产品事件。
 7. 内置 Provider 云刷新关闭，第三方 Provider 配置仍可正常加载。
-8. `pnpm typecheck`、`pnpm lint`、相关单测通过。
+8. Windows 产物只包含正式身份：安装包名 `ZCode-<version>-win-x64.exe`，解包目录存在 `ZCode.exe`，不存在 `ZCode Preview.exe`，`app.asar` 内 `zcodeProductFlavor` 为 `production`。
+9. `pnpm typecheck`、`pnpm lint`、相关单测通过。

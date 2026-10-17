@@ -2,22 +2,7 @@ name: Build Windows
 
 on:
   workflow_call:
-    inputs:
-      product_identity:
-        description: "production or preview"
-        required: false
-        default: preview
-        type: string
   workflow_dispatch:
-    inputs:
-      product_identity:
-        description: "production or preview"
-        required: true
-        default: preview
-        type: choice
-        options:
-          - preview
-          - production
   # 只在手动触发或 release workflow 复用时打包；日常提交不自动构建。
 
 concurrency:
@@ -30,9 +15,9 @@ permissions:
 env:
   NODE_VERSION: "24.14.0"
   HUSKY: "0"
-  # 自维护构建固定使用生产后端；默认 Preview 身份便于与官方 ZCode 并排安装。
+  # 自维护构建固定使用生产后端与正式身份，安装包会替换同机官方 ZCode。
   ZCODE_ENV: production
-  ZCODE_PREVIEW_IDENTITY: ${{ inputs.product_identity == 'production' && '0' || '1' }}
+  ZCODE_PREVIEW_IDENTITY: "0"
   ZCODE_SKIP_REMOTE_ASSETS: "1"
 
 jobs:
@@ -71,8 +56,8 @@ jobs:
       - name: Verify version identity
         shell: pwsh
         run: |
-          node -e "const root=require('./package.json').version; const cli=require('./apps/zcode-cli/package.json').version; if (root !== '3.15.1') throw new Error('root version=' + root); if (cli !== root) throw new Error('cli version=' + cli + ' != root ' + root); console.log('[version] root=' + root + ' cli=' + cli)"
-          node -e "const { getBuildMetadata } = require('./packages/desktop/scripts/build-metadata.mjs'); const version = getBuildMetadata().appVersion; if (version !== '3.15.1') throw new Error('desktop build version=' + version); console.log('[version] desktop=' + version)"
+          node -e "const root=require('./package.json').version; const cli=require('./apps/zcode-cli/package.json').version; if (!/^\d+\.\d+\.\d+\+\d+\.\d+\.\d+$/.test(root)) throw new Error('root version does not match private+official: ' + root); if (cli !== root) throw new Error('cli version=' + cli + ' != root ' + root); console.log('[version] root=' + root + ' cli=' + cli)"
+          node -e "const { getBuildMetadata } = require('./packages/desktop/scripts/build-metadata.mjs'); const root=require('./package.json').version; const version = getBuildMetadata().appVersion; if (version !== root) throw new Error('desktop build version=' + version + ' != root ' + root); console.log('[version] desktop=' + version)"
 
       - name: Normalize Gen UI vendor line endings
         shell: pwsh
@@ -91,6 +76,20 @@ jobs:
 
       - name: Build Windows x64 installer
         run: pnpm --filter @zcode/desktop bundle -- --os win --arch x64
+
+      - name: Verify production identity
+        shell: pwsh
+        run: |
+          $appDir = "packages/desktop/dist/win-unpacked"
+          $appExe = Join-Path $appDir "ZCode.exe"
+          $previewExe = Join-Path $appDir "ZCode Preview.exe"
+          if (-not (Test-Path $appExe)) {
+            throw "Missing packaged application: $appExe"
+          }
+          if (Test-Path $previewExe) {
+            throw "Preview identity leaked into production build: $previewExe"
+          }
+          node -e "const asar=require('@electron/asar'); const pkg=JSON.parse(asar.extractFile('packages/desktop/dist/win-unpacked/resources/app.asar','package.json').toString()); const root=require('./package.json').version; if (pkg.zcodeProductFlavor !== 'production') throw new Error('flavor=' + pkg.zcodeProductFlavor); if (pkg.version !== root) throw new Error('app version=' + pkg.version + ' != root ' + root); console.log('[identity] product=ZCode flavor=' + pkg.zcodeProductFlavor + ' version=' + pkg.version)"
 
       - name: Verify installer version and checksum
         shell: pwsh

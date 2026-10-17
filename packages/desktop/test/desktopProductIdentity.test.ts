@@ -88,6 +88,12 @@ describe("desktop product identity", () => {
     });
   });
 
+  it("自维护发布构建显式关闭 Preview 后保持正式身份", () => {
+    expect(
+      resolveDesktopProductIdentity({ ZCODE_ENV: "production", ZCODE_PREVIEW_IDENTITY: "0" }),
+    ).toBe(desktopProductIdentities.production);
+  });
+
   it("未注入或未知环境时不应误生成正式安装身份", () => {
     expect(resolveDesktopProductIdentity({}).flavor).toBe("preview");
     expect(resolveDesktopProductIdentity({ ZCODE_ENV: "staging" }).flavor).toBe("preview");

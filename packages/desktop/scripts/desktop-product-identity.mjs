@@ -2,6 +2,9 @@
  * 构建期开关：为真时安装包使用 Preview 身份，而后端环境仍由 `ZCODE_ENV` 单独决定。
  * 典型用法是 `ZCODE_ENV=production ZCODE_PREVIEW_IDENTITY=1`，得到一个连接生产后端、
  * 可与正式版并排安装的 `ZCode Preview`。
+ *
+ * 自维护发布与手动 Windows 构建固定使用 `ZCODE_ENV=production` 且不打开该开关，产出正式
+ * `ZCode` 身份；Preview 只保留给 `ZCODE_ENV=test` 的本地/e2e 构建做安装与数据隔离。
  */
 export const ZCODE_PREVIEW_IDENTITY_ENV = "ZCODE_PREVIEW_IDENTITY";
 
@@ -55,6 +58,7 @@ export function isPreviewIdentityRequested(env = process.env) {
  * - `ZCODE_ENV=test` 一律是 Preview，测试后端不能顶着正式 `ZCode` 身份覆盖用户的正式安装；
  * - `ZCODE_ENV=production` 默认是正式身份，显式 `ZCODE_PREVIEW_IDENTITY=1` 时改用 Preview 身份。
  * 未知 `ZCODE_ENV` 继续按 test 处理，和共享层 normalizeZCodeEnv 的 fail-safe 默认值一致。
+ * 自维护发布构建固定走 `ZCODE_ENV=production` + `ZCODE_PREVIEW_IDENTITY=0`。
  */
 export function resolveDesktopProductFlavor(env = process.env) {
   if (isPreviewIdentityRequested(env)) {
