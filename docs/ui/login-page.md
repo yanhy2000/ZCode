@@ -1,15 +1,15 @@
 # Login Page
 
-启动阶段如果没有恢复到 OAuth 用户，且没有可用模型供应商配置，Root 会展示 `WelcomeScreen`。
+启动阶段如果没有恢复到用户，且没有可用模型供应商配置，Root 会展示 `WelcomeScreen`。
 
-所有应用内登录入口都收敛到 `WelcomeScreen`，并复用 `LoginPanel` 的 OAuth 和 API Key 流程，避免手动登录、启动引导、模型供应商连接出现多套状态机：
+自维护构建移除官方 OAuth 登录后，`WelcomeScreen` 只保留 API Key 接入：
 
 - 启动自动引导：`WelcomeScreen`，由 provider 可用性守卫打开
-- 手动登录入口：`WelcomeScreen`，从设置页或 workspace shell 的登录操作打开
-- 模型供应商连接：`loginEntryRequest` 会打开 `WelcomeScreen` 并自动启动指定 provider 的 OAuth
+- 模型供应商接入：直接展示 `LoginApiKeyForm`，不再展示 Z.ai / BigModel 的 OAuth 按钮
+- 官方账号 OAuth 入口、Coding Plan 登录、套餐/Rewards 等官方商业入口不在本页范围内，后续统一清理
 - 登录内容容器：使用 `bg-background`、`border-popover-border`、`shadow-md`
 
-完成 OAuth 回调、保存 API Key 或点击 API Key 表单底部的“跳过”后，登录页关闭并回到正常 Root 路由。
+保存 API Key 或点击表单底部的“跳过”后，登录页关闭并回到正常 Root 路由。API Key 表单不再提供返回 OAuth 渠道列表的取消按钮。
 
 用户点击“跳过”或从其它入口进入没有可用模型的空草稿首页时，首页必须展示已有的 `modelConfigMissing` 错误横幅，提供升级和模型配置入口。该横幅只投影本地 provider readiness，不触发 Agent 启动、deferred draft session 创建、联网探测或预热失败重试；保存合法 provider/model 并完成草稿模型水合后自动清除。
 
@@ -24,8 +24,8 @@ API Key 登录表单在输入框为空时于右侧展示 `Get API Key` 外链入
 
 外链必须通过 `IPlatformService.openExternal()` 打开，保持桌面端 shell 和 Web 端 `window.open` 行为一致。输入框仍保留密码类型和回车提交能力，链接按钮只负责跳转获取密钥，不参与保存流程。
 
-API Key 登录表单的取消按钮底部展示“跳过”链接按钮。跳过只写入当前选择 provider 对应的 `providerFamilyDomain`、`providerFamilyDomainUpdatedAt` 和 `providerFamilyDomainMigrated`，用于确认 Z.ai / BigModel 运行域；它不保存 API Key、不触发 API Key 登录成功事件，也不修改 `modelProviderFamilyModes`。
+API Key 登录表单底部展示“跳过”链接按钮。跳过只写入当前选择 provider 对应的 `providerFamilyDomain`、`providerFamilyDomainUpdatedAt` 和 `providerFamilyDomainMigrated`，用于确认 Z.ai / BigModel 运行域；它不保存 API Key、不触发 API Key 登录成功事件，也不修改 `modelProviderFamilyModes`。
 
 启动自动引导完成后有一个新用户直达路径：如果当前没有已打开 workspace，Root 使用 Main 注入的 conversation descriptor，必要时通过 `fileService.ensureConversationWorkspace()` 幂等确保 `<dataBaseDir>/.zcode/workspace/default` 存在。该 workspace 提供真实 cwd，但 UI 保持“未选择项目”，用户无需经过项目选择页即可直接对话。若用户跳过登录且仍没有可用模型，该草稿首页按上一条规则显示 `modelConfigMissing` 横幅。
 
-手动登录和模型供应商连接完成后只关闭 `WelcomeScreen` 并回到原界面，不会创建默认 workspace。
+模型供应商接入完成后只关闭 `WelcomeScreen` 并回到原界面，不会创建默认 workspace。

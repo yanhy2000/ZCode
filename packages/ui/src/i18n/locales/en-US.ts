@@ -978,7 +978,7 @@ const enUS: Record<string, string> = {
   "welcome.loggingIn": "Logging in...",
   "welcome.loginFailed": "Login failed",
   "login.title": "Welcome to ZCode",
-  "login.description": "Connect your account to start using ZCode",
+  "login.description": "Connect a model provider with an API key",
   "login.oauth.activeProviderHint":
     "Current active provider: {provider}. Signing in again replaces the current identity.",
   "login.oauth.loadingProviders": "Loading account providers...",
@@ -1076,7 +1076,8 @@ const enUS: Record<string, string> = {
   "browser.permission.deviceBluetooth": "Bluetooth devices",
   "browser.permission.unknownCapability": "an unknown capability",
   "browser.permission.screenShareTitle": "{origin} wants to share your screen",
-  "browser.permission.screenShareDescription": "Choose the screen or window to share. This choice applies only to this session.",
+  "browser.permission.screenShareDescription":
+    "Choose the screen or window to share. This choice applies only to this session.",
   "browser.permission.deviceTitle": "{origin} wants to connect a device",
   "browser.permission.connect": "Connect",
   "browser.permission.screenGroup.screen": "Entire Screen",
