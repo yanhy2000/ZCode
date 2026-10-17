@@ -450,10 +450,6 @@ export const PlatformChannels = {
   CancelUpdateDownload: "zcode:cancel-update-download",
   /** Renderer → Main：打开独立自动更新窗口 */
   OpenUpdateStatusWindow: "zcode:open-update-status-window",
-  /** Renderer → Main：读取自动更新偏好 */
-  GetAutoUpdatePreferences: "zcode:get-auto-update-preferences",
-  /** Renderer → Main：写入“自动下载并安装更新”偏好 */
-  SetAutoDownloadAndInstallUpdates: "zcode:set-auto-download-and-install-updates",
   /** Renderer → Main：查询桌面端正在运行的会话数量 */
   GetDesktopSessionActivity: "zcode:get-desktop-session-activity",
   /** Renderer → Main：读取当前窗口页面缩放档位 */
@@ -1226,16 +1222,6 @@ export interface PlatformChannelMap {
   };
   [PlatformChannels.OpenUpdateStatusWindow]: {
     request: void;
-    response: void;
-  };
-  [PlatformChannels.GetAutoUpdatePreferences]: {
-    request: void;
-    response: {
-      autoDownloadAndInstallUpdates: boolean;
-    };
-  };
-  [PlatformChannels.SetAutoDownloadAndInstallUpdates]: {
-    request: boolean;
     response: void;
   };
   [PlatformChannels.SettingsChanged]: {

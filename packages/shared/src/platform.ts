@@ -1106,14 +1106,6 @@ export interface IPlatformService {
   /** 打开桌面端独立更新窗口；非桌面端可不实现并回退到内嵌弹窗 */
   openUpdateStatusWindow?(): Promise<void>;
 
-  /** 读取桌面端自动更新偏好；非桌面端可返回默认值 */
-  getAutoUpdatePreferences?(): Promise<{
-    autoDownloadAndInstallUpdates: boolean;
-  }>;
-
-  /** 写入“以后自动下载并安装更新”偏好；非桌面端可 no-op */
-  setAutoDownloadAndInstallUpdates?(enabled: boolean): Promise<void>;
-
   /** 用户跳过当前已发现版本；main 进程负责按当前通道持久化 */
   skipUpdateVersion(version: string): Promise<void>;
 

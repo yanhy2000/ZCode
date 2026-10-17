@@ -3,11 +3,11 @@ name: Release
 on:
   push:
     tags:
-      - "self-v*"
+      - "v*"
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing self-host tag, for example self-v3.15.1.1"
+        description: "Existing tag, for example v1.0.0+3.15.1"
         required: true
         type: string
 
@@ -58,13 +58,10 @@ jobs:
             echo "Missing release tag" >&2
             exit 1
           fi
-          case "$tag" in
-            "self-v${version}."*) ;;
-            *)
-              echo "Tag $tag does not match package version $version (expected self-v${version}.<build>)" >&2
-              exit 1
-              ;;
-          esac
+          if [ "$tag" != "v${version}" ]; then
+            echo "Tag $tag does not match package version $version (expected v${version})" >&2
+            exit 1
+          fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "[release] tag=$tag package=$version"
 
@@ -93,7 +90,7 @@ jobs:
             gh release upload "$TAG" "${assets[@]}" --clobber
           else
             gh release create "$TAG" "${assets[@]}" \
-              --title "ZCode self-hosted $TAG" \
+              --title "ZCode $TAG" \
               --generate-notes \
               --draft
           fi

@@ -26,10 +26,6 @@ const noopPlatform = {
   openExternal: () => undefined,
   downloadUpdate: async () => undefined,
   cancelUpdateDownload: async () => undefined,
-  getAutoUpdatePreferences: async () => ({
-    autoDownloadAndInstallUpdates: false,
-  }),
-  setAutoDownloadAndInstallUpdates: async () => undefined,
   skipUpdateVersion: async () => undefined,
   quitAndInstallUpdate: async () => undefined,
 } as unknown as IPlatformService;
@@ -223,7 +219,6 @@ function renderUpdateStatusDialogElement(
   edgeToEdge = false,
 ) {
   return UpdateStatusDialog({
-    autoDownloadAndInstallUpdates: false,
     displayVersion: "3.3.3",
     edgeToEdge,
     intl: testIntl,
@@ -490,13 +485,13 @@ describe("UpdateStatusButton release notes", () => {
     expect(enUS["updateDialog.downloadAndUpdate"]).toBe("Download update");
   });
 
-  it("shows the auto download checkbox before downloading", () => {
+  it("omits the removed auto download checkbox", () => {
     expect(
       updateStatusDialogElementContainsText(
         "before-download",
         "updateDialog.autoDownloadAndInstall",
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       updateStatusDialogElementContainsText(
         "downloading",
@@ -667,7 +662,7 @@ describe("UpdateStatusButton release notes", () => {
   it("disables visible update actions while a command is in flight", () => {
     expect(
       countUpdateStatusDialogBooleanProp("before-download", "disabled", true),
-    ).toBe(4);
+    ).toBe(3);
     expect(
       countUpdateStatusDialogBooleanProp("downloading", "disabled", true),
     ).toBe(1);

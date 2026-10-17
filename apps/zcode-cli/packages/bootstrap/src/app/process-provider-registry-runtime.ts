@@ -59,9 +59,12 @@ export async function startProcessProviderRegistryRuntime(
   const bundledFile = options.standalone
     ? env[ZCODE_BUILTIN_PROVIDER_BUNDLED_CONFIG_FILE_ENV]?.trim()
     : undefined;
+  // 自维护构建关闭内置 Provider 云刷新：保留下面的 zcodeBuiltinRemote 构造，供后续替换为
+  // 自有第三方 Provider 接入时参考；当前不访问官方 release，不写 refresh 控制文件。
+  const builtinCloudRefreshEnabled = false;
   const runtime = new NodeProviderRegistryRuntime({
     ...paths,
-    ...(bundledFile
+    ...(builtinCloudRefreshEnabled && bundledFile
       ? {
           zcodeBuiltinFilePath: bundledFile,
           zcodeBuiltinActiveFilePath: paths.zcodeBuiltinFilePath,

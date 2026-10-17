@@ -47,10 +47,6 @@ const noopPlatform = {
   openExternal: () => undefined,
   downloadUpdate: async () => undefined,
   cancelUpdateDownload: async () => undefined,
-  getAutoUpdatePreferences: async () => ({
-    autoDownloadAndInstallUpdates: false,
-  }),
-  setAutoDownloadAndInstallUpdates: async () => undefined,
   skipUpdateVersion: async () => undefined,
   quitAndInstallUpdate: async () => undefined,
 } as unknown as IPlatformService;
@@ -413,60 +409,6 @@ describe("UpdateStatusButton release notes cache", () => {
 
     expect(latestDialogProps().phase).toBe("downloaded");
     expect(latestDialogProps().displayVersion).toBe("3.3.3");
-
-    act(() => {
-      root.unmount();
-    });
-  });
-
-  it("persists auto download preference and starts downloading the current available update", async () => {
-    const { UpdateStatusButton } = await import("@/UpdateStatusButton.js");
-    const { ZCodeIntlProvider } = await import("@/i18n/IntlProvider.js");
-    const { PlatformProvider } = await import("@/hooks/usePlatform.js");
-    const { ServiceProvider } = await import("@/hooks/useServices.js");
-    const root: Root = createRoot(installMinimalDom());
-    const platform = {
-      ...noopPlatform,
-      downloadUpdate: vi.fn(async () => undefined),
-      setAutoDownloadAndInstallUpdates: vi.fn(async () => undefined),
-    } as unknown as IPlatformService;
-
-    await act(async () => {
-      root.render(
-        createElement(
-          ServiceProvider,
-          { services: noopServices },
-          createElement(
-            PlatformProvider,
-            { platform },
-            createElement(
-              ZCodeIntlProvider,
-              { initialLocale: "zh-CN" },
-              createElement(UpdateStatusButton, {
-                platform,
-                version: null,
-                updateState: {
-                  kind: "update-available",
-                  version: "3.3.4",
-                  channel: "stable",
-                } satisfies UpdateStatePayload,
-              }),
-            ),
-          ),
-        ),
-      );
-    });
-
-    await act(async () => {
-      await (
-        latestDialogProps().onAutoDownloadAndInstallUpdatesChange as (
-          enabled: boolean,
-        ) => Promise<void>
-      )(true);
-    });
-
-    expect(platform.setAutoDownloadAndInstallUpdates).toHaveBeenCalledWith(true);
-    expect(platform.downloadUpdate).toHaveBeenCalledTimes(1);
 
     act(() => {
       root.unmount();

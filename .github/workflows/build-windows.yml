@@ -30,14 +30,10 @@ permissions:
 env:
   NODE_VERSION: "24.14.0"
   HUSKY: "0"
-  # 自维护构建固定使用生产后端；在完成强更补丁前先用 Preview 身份并排安装，
-  # 这样不会触发官方强更闸门，也不会覆盖本机正式版 ZCode。
+  # 自维护构建固定使用生产后端；默认 Preview 身份便于与官方 ZCode 并排安装。
   ZCODE_ENV: production
   ZCODE_PREVIEW_IDENTITY: ${{ inputs.product_identity == 'production' && '0' || '1' }}
   ZCODE_SKIP_REMOTE_ASSETS: "1"
-  ZCODE_ARMS_RUM_ENDPOINT: ""
-  ZCODE_TELEMETRY_REPORT_ENDPOINT: ""
-  ZCODE_AUTO_UPDATE: ""
 
 jobs:
   build:
@@ -99,12 +95,14 @@ jobs:
       - name: Verify installer version and checksum
         shell: pwsh
         run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $expectedName = "ZCode-$version-win-x64.exe"
           $installer = Get-ChildItem -Path packages/desktop/dist -Filter *.exe | Select-Object -First 1
           if ($null -eq $installer) {
             throw "No Windows installer was produced under packages/desktop/dist"
           }
-          if ($installer.Name -notmatch '3\.15\.1') {
-            throw "Unexpected installer version: $($installer.Name)"
+          if ($installer.Name -ne $expectedName) {
+            throw "Unexpected installer name: $($installer.Name); expected $expectedName"
           }
           Write-Host "[artifact] $($installer.FullName)"
           Get-ChildItem -Path packages/desktop/dist -Filter *.exe | ForEach-Object {

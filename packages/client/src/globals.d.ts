@@ -350,12 +350,6 @@ declare global {
       cancelUpdateDownload?(): Promise<void>;
       /** 打开或聚焦独立更新窗口 */
       openUpdateStatusWindow?(): Promise<void>;
-      /** 读取自动更新偏好 */
-      getAutoUpdatePreferences?(): Promise<{
-        autoDownloadAndInstallUpdates: boolean;
-      }>;
-      /** 写入“自动下载并安装更新”偏好 */
-      setAutoDownloadAndInstallUpdates?(enabled: boolean): Promise<void>;
       /** 跳过当前已发现的更新版本 */
       skipUpdateVersion?(version: string): Promise<void>;
       /** 注册应用语言变化，返回 disposer */

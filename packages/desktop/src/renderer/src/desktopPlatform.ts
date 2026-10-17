@@ -162,11 +162,6 @@ export function createDesktopPlatform(options: {
     downloadUpdate: () => window.zcode.downloadUpdate?.() ?? Promise.resolve(),
     cancelUpdateDownload: () => window.zcode.cancelUpdateDownload?.() ?? Promise.resolve(),
     openUpdateStatusWindow: () => window.zcode.openUpdateStatusWindow?.() ?? Promise.resolve(),
-    getAutoUpdatePreferences: () =>
-      window.zcode.getAutoUpdatePreferences?.() ??
-      Promise.resolve({ autoDownloadAndInstallUpdates: false }),
-    setAutoDownloadAndInstallUpdates: (enabled) =>
-      window.zcode.setAutoDownloadAndInstallUpdates?.(enabled) ?? Promise.resolve(),
     getDesktopSessionActivity: () =>
       window.zcode.getDesktopSessionActivity?.() ??
       Promise.resolve({ runningAgentSessionCount: 0 }),
