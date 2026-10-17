@@ -84,6 +84,21 @@ jobs:
           node -e "const root=require('./package.json').version; const cli=require('./apps/zcode-cli/package.json').version; if (root !== '3.15.1') throw new Error('root version=' + root); if (cli !== root) throw new Error('cli version=' + cli + ' != root ' + root); console.log('[version] root=' + root + ' cli=' + cli)"
           node -e "const { getBuildMetadata } = require('./packages/desktop/scripts/build-metadata.mjs'); const version = getBuildMetadata().appVersion; if (version !== '3.15.1') throw new Error('desktop build version=' + version); console.log('[version] desktop=' + version)"
 
+      - name: Normalize Gen UI vendor line endings
+        shell: pwsh
+        run: |
+          $vendor = "apps/zcode-cli/packages/visualize-plugin/skills/visualize/assets/vendor"
+          Get-ChildItem -Path $vendor -File -Recurse | ForEach-Object {
+            $text = [System.IO.File]::ReadAllText($_.FullName)
+            if ($text.Contains("`r`n")) {
+              [System.IO.File]::WriteAllText(
+                $_.FullName,
+                $text.Replace("`r`n", "`n"),
+                [System.Text.UTF8Encoding]::new($false)
+              )
+            }
+          }
+
       - name: Build Windows x64 installer
         run: pnpm --filter @zcode/desktop bundle -- --os win --arch x64
 
