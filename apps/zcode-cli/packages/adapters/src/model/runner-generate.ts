@@ -159,7 +159,6 @@ export async function runGenerateText(input: {
     try {
       resolved = await resolveModelForAttempt({
         attempt,
-        reason: authRetry.takeReason(),
         request: authRetry.prepareRequest(attemptRequest),
         resolveModel: input.resolveModel,
       });
