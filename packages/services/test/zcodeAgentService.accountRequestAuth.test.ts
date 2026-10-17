@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { zcodeProtocolMethods, zcodeProtocolNotifications } from "@zcode/shared";
 import type { AccountRequestAuthMaterial } from "../src/model-provider/accountRequestAuthService.js";
-import { offPeakSelectionView } from "./fixtures/offPeakSelection.js";
+import { testSelectionView } from "./fixtures/modelSelectionView.js";
 
 // 账号套餐的 provider runtime headers 由 Host 自动应答，不依赖 Renderer。
 const target = {
@@ -56,7 +56,7 @@ async function setup(
   }));
   const { createZCodeAgentService } = await import("../src/zcode-agent/zcodeAgentService.js");
   const service = createZCodeAgentService({
-    modelSelectionReadinessSource: { getView: async () => offPeakSelectionView() },
+    modelSelectionReadinessSource: { getView: async () => testSelectionView() },
     accountRequestAuthService: {
       resolveCurrent,
       resolveAccessCurrent: async () => null,

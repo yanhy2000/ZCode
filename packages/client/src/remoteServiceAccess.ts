@@ -27,7 +27,6 @@ import {
   IClientScenesService,
   ICloudContentService,
   IMarketingTouchService,
-  IOffPeakTaskService,
   IHighspeedCardService,
   ISkillsService,
   ISkillSyncService,
@@ -86,7 +85,6 @@ export class RemoteServiceAccess implements IServiceAccessor {
   readonly clientScenesService: IClientScenesService;
   readonly cloudContentService: ICloudContentService;
   readonly marketingTouchService: IMarketingTouchService;
-  readonly offPeakTaskService: IOffPeakTaskService;
   readonly highspeedCardService: IHighspeedCardService;
   readonly skillsService: ISkillsService;
   readonly skillSyncService: ISkillSyncService;
@@ -193,9 +191,6 @@ export class RemoteServiceAccess implements IServiceAccessor {
     );
     this.marketingTouchService = ProxyChannel.toService<IMarketingTouchService>(
       channelClient.getChannel(IMarketingTouchService.channelName),
-    );
-    this.offPeakTaskService = ProxyChannel.toService<IOffPeakTaskService>(
-      channelClient.getChannel(IOffPeakTaskService.channelName),
     );
     this.highspeedCardService = ProxyChannel.toService<IHighspeedCardService>(
       channelClient.getChannel(IHighspeedCardService.channelName),

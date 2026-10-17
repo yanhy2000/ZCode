@@ -86,17 +86,6 @@ describe("settings model provider upgrade intent", () => {
     expect(v4ComposerToolbarSource).not.toContain("codingPlanUpgradeProviderId");
   });
 
-  it("routes both idle-time Upgrade entries through the shared purchase funnel context", () => {
-    const offPeakNewTaskEntrySource = readSource("packages/ui/src/v4/OffPeakNewTaskEntry.tsx");
-    const automationsSectionSource = readSource("packages/ui/src/settings/AutomationsSection.tsx");
-
-    for (const source of [offPeakNewTaskEntrySource, automationsSectionSource]) {
-      expect(source).toContain("createIdleTimeCodingPlanFunnelContext({");
-      expect(source).toContain('initialAudience: "personal"');
-      expect(source).toContain("funnelContext:");
-    }
-  });
-
   it("opens no-model Set action directly to model provider settings", () => {
     const composerToolbarSource = readSource("packages/ui/src/v4/composer/V4ComposerToolbar.tsx");
 

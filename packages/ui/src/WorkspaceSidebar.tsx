@@ -1645,7 +1645,6 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
                     onGroupedTaskGroupIdsChange={handleGroupedTaskGroupIdsChange}
                     onCollapsedGroupIdsChange={handleCollapsedGroupedTaskGroupIdsChange}
                     onStickyGroupHeaderChange={setGroupedStickyHeader}
-                    onOpenAutomations={handleOpenAutomationsMain}
                   />
                 ) : taskViewMode === "timeline" ? (
                   <WorkspaceTimelineTasksSection
