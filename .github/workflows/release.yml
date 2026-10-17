@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "self-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing self-host tag, for example self-v3.15.1.1"
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Windows x64
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      product_identity: preview
+
+  release:
+    name: Create draft GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Download installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: zcode-windows-x64
+          path: dist
+
+      - name: Resolve and verify tag
+        id: tag
+        shell: bash
+        env:
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag="$REQUESTED_TAG"
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
+          version="$(node -p "require('./package.json').version")"
+          if [ -z "$tag" ]; then
+            echo "Missing release tag" >&2
+            exit 1
+          fi
+          case "$tag" in
+            "self-v${version}."*) ;;
+            *)
+              echo "Tag $tag does not match package version $version (expected self-v${version}.<build>)" >&2
+              exit 1
+              ;;
+          esac
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "[release] tag=$tag package=$version"
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum *.exe > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create or update draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          assets=(dist/*.exe dist/*.blockmap dist/*.yml dist/SHA256SUMS.txt)
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "No release assets found under dist" >&2
+            exit 1
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${assets[@]}" --clobber
+          else
+            gh release create "$TAG" "${assets[@]}" \
+              --title "ZCode self-hosted $TAG" \
+              --generate-notes \
+              --draft
+          fi

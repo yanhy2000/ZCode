@@ -1,0 +1,113 @@
+name: Build Windows
+
+on:
+  workflow_call:
+    inputs:
+      product_identity:
+        description: "production or preview"
+        required: false
+        default: preview
+        type: string
+  workflow_dispatch:
+    inputs:
+      product_identity:
+        description: "production or preview"
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - production
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: build-windows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "24.14.0"
+  HUSKY: "0"
+  # 自维护构建固定使用生产后端；在完成强更补丁前先用 Preview 身份并排安装，
+  # 这样不会触发官方强更闸门，也不会覆盖本机正式版 ZCode。
+  ZCODE_ENV: production
+  ZCODE_PREVIEW_IDENTITY: ${{ inputs.product_identity == 'production' && '0' || '1' }}
+  ZCODE_SKIP_REMOTE_ASSETS: "1"
+  ZCODE_ARMS_RUM_ENDPOINT: ""
+  ZCODE_TELEMETRY_REPORT_ENDPOINT: ""
+  ZCODE_AUTO_UPDATE: ""
+
+jobs:
+  build:
+    name: Windows x64 installer
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            electron-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify version identity
+        shell: pwsh
+        run: |
+          node -e "const root=require('./package.json').version; const cli=require('./apps/zcode-cli/package.json').version; if (root !== '3.15.1') throw new Error('root version=' + root); if (cli !== root) throw new Error('cli version=' + cli + ' != root ' + root); console.log('[version] root=' + root + ' cli=' + cli)"
+          node -e "const { getBuildMetadata } = require('./packages/desktop/scripts/build-metadata.mjs'); const version = getBuildMetadata().appVersion; if (version !== '3.15.1') throw new Error('desktop build version=' + version); console.log('[version] desktop=' + version)"
+
+      - name: Build Windows x64 installer
+        run: pnpm --filter @zcode/desktop bundle -- --os win --arch x64
+
+      - name: Verify installer version and checksum
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Path packages/desktop/dist -Filter *.exe | Select-Object -First 1
+          if ($null -eq $installer) {
+            throw "No Windows installer was produced under packages/desktop/dist"
+          }
+          if ($installer.Name -notmatch '3\.15\.1') {
+            throw "Unexpected installer version: $($installer.Name)"
+          }
+          Write-Host "[artifact] $($installer.FullName)"
+          Get-ChildItem -Path packages/desktop/dist -Filter *.exe | ForEach-Object {
+            "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name
+          } | Set-Content -Path packages/desktop/dist/SHA256SUMS.txt -Encoding utf8
+          Get-Content packages/desktop/dist/SHA256SUMS.txt
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zcode-windows-x64
+          path: |
+            packages/desktop/dist/*.exe
+            packages/desktop/dist/*.blockmap
+            packages/desktop/dist/*.yml
+            packages/desktop/dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
