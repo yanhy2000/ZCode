@@ -14,10 +14,6 @@ vi.mock("@/i18n/IntlProvider.js", () => ({
   }),
 }));
 
-vi.mock("@/login/LoginApiKeyForm.js", () => ({
-  LoginApiKeyForm: () => createElement("div", { "data-testid": "login-api-key-form" }),
-}));
-
 // ThemeHeroVisual 依赖 StoreProvider 解析主题；静态渲染只需要它的布局类。
 vi.mock("@/openWorkspacePageThemeHero.js", () => ({
   ThemeHeroVisual: () =>
@@ -41,13 +37,15 @@ describe("WelcomeScreen", () => {
     expect(html).not.toContain("DialogTitle");
   });
 
-  it("只展示 API Key 接入，不再展示官方 OAuth 入口", async () => {
+  it("只展示“开始使用”，不再收集 API Key 或展示官方账号入口", async () => {
     const { WelcomeScreen } = await import("@/WelcomeScreen.js");
     const html = renderToStaticMarkup(createElement(WelcomeScreen, { onComplete: vi.fn() }));
 
-    expect(html).toContain('data-testid="login-api-key-form"');
+    expect(html).toContain('data-testid="welcome-start-button"');
     expect(html).toContain("login.title");
     expect(html).toContain("login.description");
+    expect(html).toContain("login.start");
+    expect(html).not.toContain("login-api-key");
     expect(html).not.toContain("login.oauth.button.zai");
     expect(html).not.toContain("login.oauth.button.bigmodel");
     expect(html).not.toContain("login.useApiKey");

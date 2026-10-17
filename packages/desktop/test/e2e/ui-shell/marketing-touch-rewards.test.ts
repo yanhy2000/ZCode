@@ -3,8 +3,7 @@ import {
   TID_LOGIN_TRIGGER,
   TID_LOGOUT_BUTTON,
   TID_CONFIRM_DIALOG_CONFIRM,
-  TID_LOGIN_USE_API_KEY_BUTTON,
-  TID_LOGIN_API_KEY_SKIP_BUTTON,
+  TID_WELCOME_START_BUTTON,
   marketingDeliverySchema,
 } from "@zcode/shared";
 import { waitForDefaultWorkspaceReady } from "../helpers/desktop-app.js";
@@ -378,12 +377,11 @@ describe("Rewards website embedded integration", () => {
     await browser.waitUntil(
       async () =>
         (await byId(TID_LOGIN_TRIGGER).isExisting()) ||
-        (await byId(TID_LOGIN_USE_API_KEY_BUTTON).isExisting()),
+        (await byId(TID_WELCOME_START_BUTTON).isExisting()),
       { timeout: 30000 },
     );
-    if (await byId(TID_LOGIN_USE_API_KEY_BUTTON).isExisting()) {
-      await byId(TID_LOGIN_USE_API_KEY_BUTTON).click();
-      await byId(TID_LOGIN_API_KEY_SKIP_BUTTON).click();
+    if (await byId(TID_WELCOME_START_BUTTON).isExisting()) {
+      await byId(TID_WELCOME_START_BUTTON).click();
     }
     await waitForDefaultWorkspaceReady();
     await assertAppReportHeaders(false);
@@ -415,7 +413,7 @@ describe("Rewards website embedded integration", () => {
     await browser.execute(() => window.dispatchEvent(new Event("online")));
     await byId("marketing-banner").waitForDisplayed({ timeout: 30000 });
     await byId("marketing-banner").$('button[aria-label="Open rewards"]').click();
-    await byId(TID_LOGIN_USE_API_KEY_BUTTON).waitForDisplayed();
+    await byId(TID_WELCOME_START_BUTTON).waitForDisplayed();
     await assertOverlayWindowControls("main");
     expect(await byId("rewards-webview").isExisting()).toBe(false);
     await browser.waitUntil(async () => {
@@ -434,8 +432,7 @@ describe("Rewards website embedded integration", () => {
         .filter((request) => request.path.endsWith("/touch/action"))
         .every((request) => !request.headers.authenticated),
     ).toBe(true);
-    await byId(TID_LOGIN_USE_API_KEY_BUTTON).click();
-    await byId(TID_LOGIN_API_KEY_SKIP_BUTTON).click();
+    await byId(TID_WELCOME_START_BUTTON).click();
     await waitForDefaultWorkspaceReady();
     expect(await byId("rewards-webview").isExisting()).toBe(false);
   });

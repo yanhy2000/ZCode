@@ -108,6 +108,15 @@
 - 手机远控继续使用现有 relay 与 attachment 链路。
 - 第三方模型、工具、MCP、Skill 行为不变。
 
+## 首次启动与偏好设置菜单
+
+- 首次启动不收集 API Key，也不创建 Provider：欢迎页只展示品牌、说明和“开始使用”按钮。
+- 点击“开始使用”后关闭欢迎页并进入既有职业/界面引导；模型与 Provider 在设置页配置。
+- 欢迎页不展示 API Key 输入框、Provider 选择器、登录或套餐入口，也不写入官方账号状态。
+- 左下角常驻入口显示“偏好设置”，不再显示头像、登录状态或“连接使用”。
+- 偏好设置菜单保留语言、主题、界面模式、桌面缩放和“使用统计”。
+- 偏好设置菜单不展示“升级/续费”、登录/连接账号、退出登录、Rewards 或 Coding Plan 套餐徽标。
+
 ## 官方云控与商业功能移除
 
 自维护构建只保留第三方 Provider 所需的本地配置、模型选择与执行链路。以下官方云控或商业功能不再提供：
@@ -152,3 +161,5 @@
 16. 渲染器动作追踪已物理删除：仓库中不存在 `userActionTelemetry`、`userActionTraceCatalog`、`rendererActionTrace`，UI 点击不再包一层 action span；点击行为与移除前一致。
 17. 请求验证已物理删除：仓库中不存在 verification-policy、claim、parity、3007 映射或 `getRequestVerificationConfig`；Provider runtime headers 只用于账号鉴权刷新，缺少账号鉴权时直接返回不可用，不再等待 Renderer 交互。
 18. 无可用模型横幅和错误归因不再引用请求验证业务码；`zcode.error.modelSuspiciousEmpty` 在 zh-CN / en-US 都有本地文案。
+19. 首次启动欢迎页只展示“开始使用”，仓库中不存在 `LoginApiKeyForm`、API Key 输入框或 Provider 选择器；点击后进入既有引导。
+20. 左下角入口文案为“偏好设置”；菜单包含语言、主题、界面模式、缩放和“使用统计”，不包含升级、登录、退出登录或套餐徽标。

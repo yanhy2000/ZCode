@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { NodePersonalProviderConfigRepository } from "@zcode/provider-node";
 import {
-  TID_LOGIN_USE_API_KEY_BUTTON,
+  TID_WELCOME_START_BUTTON,
   TID_TASK_SETTINGS_BUTTON,
   TID_CHAT_MODEL_SELECT_TRIGGER,
 } from "@zcode/shared";
@@ -51,12 +51,12 @@ describe("Composer provider 身份回归", () => {
                 `[data-testid="${login}"], [data-testid="${settings}"], [data-testid="onboarding-page"]`,
               ),
             ),
-          TID_LOGIN_USE_API_KEY_BUTTON,
+          TID_WELCOME_START_BUTTON,
           TID_TASK_SETTINGS_BUTTON,
         ),
       { timeout: 30000 },
     );
-    if (await $(`[data-testid="${TID_LOGIN_USE_API_KEY_BUTTON}"]`).isExisting())
+    if (await $(`[data-testid="${TID_WELCOME_START_BUTTON}"]`).isExisting())
       await loginWithApiKey();
     await skipOccupationOnboardingIfPresent();
   });

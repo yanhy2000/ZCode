@@ -14,9 +14,7 @@ import {
   TID_CHAT_THOUGHT_LEVEL_SELECT_TRIGGER,
   TID_PROMPT_SUGGESTION_OPTION,
   TID_PROMPT_SUGGESTION_PANEL,
-  TID_LOGIN_API_KEY_CONTINUE_BUTTON,
-  TID_LOGIN_API_KEY_INPUT,
-  TID_LOGIN_USE_API_KEY_BUTTON,
+  TID_WELCOME_START_BUTTON,
   TID_TASK_ITEM,
   TID_TASK_NEW_BUTTON,
   TID_V4_AUTODRAIN_TOGGLE,
@@ -79,7 +77,6 @@ import { getTaskStoreSnapshot as readTaskStoreSnapshotForDiagnostics } from "./c
 import { sel } from "./selectors.js";
 import { skipOccupationOnboardingIfPresent } from "./occupation-onboarding.js";
 
-export const LOGIN_API_KEY = "e2e-login-api-key";
 export const E2E_REPLY_TOKEN = "upstream-e2e-ok";
 
 interface PrepareV4ConversationE2EOptions {
@@ -155,7 +152,7 @@ async function ensureV4ShellReady() {
     await waitForDefaultWorkspaceReady(30000);
     return;
   } catch (error) {
-    if (!(await hasApiKeyLoginButton())) {
+    if (!(await hasWelcomeStartButton())) {
       throw error;
     }
     await loginWithApiKey();
@@ -164,41 +161,20 @@ async function ensureV4ShellReady() {
   }
 }
 
-async function hasApiKeyLoginButton() {
+async function hasWelcomeStartButton() {
   const exists = await browser
     .execute(
       (currentTestId) => Boolean(document.querySelector(`[data-testid="${currentTestId}"]`)),
-      TID_LOGIN_USE_API_KEY_BUTTON,
+      TID_WELCOME_START_BUTTON,
     )
     .catch(() => false);
   return Boolean(exists);
 }
 
 export async function loginWithApiKey() {
-  await clickTestIdByDom(TID_LOGIN_USE_API_KEY_BUTTON, {
+  await clickTestIdByDom(TID_WELCOME_START_BUTTON, {
     timeout: 30000,
-    timeoutMsg: "欢迎页没有出现 API Key 登录入口",
-  });
-  await setInputValueByTestIdDom(TID_LOGIN_API_KEY_INPUT, LOGIN_API_KEY, {
-    timeout: 15000,
-    timeoutMsg: "API Key 登录输入框没有出现",
-  });
-  await browser.waitUntil(
-    async () =>
-      browser.execute((continueButtonTestId) => {
-        const button = document.querySelector<HTMLElement>(
-          `[data-testid="${continueButtonTestId}"]`,
-        );
-        return button instanceof HTMLButtonElement && !button.disabled;
-      }, TID_LOGIN_API_KEY_CONTINUE_BUTTON),
-    {
-      timeout: 15000,
-      timeoutMsg: "API Key 登录继续按钮没有变为可用",
-    },
-  );
-  await clickTestIdByDom(TID_LOGIN_API_KEY_CONTINUE_BUTTON, {
-    timeout: 15000,
-    timeoutMsg: "API Key 登录继续按钮没有出现或不可点击",
+    timeoutMsg: "欢迎页没有出现“开始使用”入口",
   });
 }
 

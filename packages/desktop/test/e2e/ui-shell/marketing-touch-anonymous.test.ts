@@ -3,8 +3,7 @@ import {
   TID_CONFIRM_DIALOG_CONFIRM,
   TID_LOGIN_TRIGGER,
   TID_LOGOUT_BUTTON,
-  TID_LOGIN_USE_API_KEY_BUTTON,
-  TID_LOGIN_API_KEY_SKIP_BUTTON,
+  TID_WELCOME_START_BUTTON,
 } from "@zcode/shared";
 import {
   clearAppData,
@@ -71,12 +70,11 @@ describe("Marketing Touch anonymous boundaries", () => {
     await browser.waitUntil(
       async () =>
         (await byId(TID_LOGIN_TRIGGER).isExisting()) ||
-        (await byId(TID_LOGIN_USE_API_KEY_BUTTON).isExisting()),
+        (await byId(TID_WELCOME_START_BUTTON).isExisting()),
       { timeout: 30_000 },
     );
-    if (await byId(TID_LOGIN_USE_API_KEY_BUTTON).isExisting()) {
-      await byId(TID_LOGIN_USE_API_KEY_BUTTON).click();
-      await byId(TID_LOGIN_API_KEY_SKIP_BUTTON).click();
+    if (await byId(TID_WELCOME_START_BUTTON).isExisting()) {
+      await byId(TID_WELCOME_START_BUTTON).click();
     }
     await waitForDefaultWorkspaceReady();
     await expectAnonymous();
@@ -121,7 +119,7 @@ describe("Marketing Touch anonymous boundaries", () => {
     await browser.execute(() => window.dispatchEvent(new Event("online")));
     await banner.waitForDisplayed({ timeout: 15_000 });
     await banner.$('button[aria-label="Open"]').click();
-    await byId(TID_LOGIN_USE_API_KEY_BUTTON).waitForDisplayed({ timeout: 15_000 });
+    await byId(TID_WELCOME_START_BUTTON).waitForDisplayed({ timeout: 15_000 });
     const after = await state();
     expect(after.events).toEqual(closed.events);
     expect(

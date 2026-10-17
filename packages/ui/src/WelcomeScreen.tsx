@@ -1,20 +1,24 @@
 /**
- * WelcomeScreen —— 自维护构建的模型接入入口
+ * WelcomeScreen —— 自维护构建的首次启动入口
  *
- * 官方 OAuth 登录已移除；没有可用 Provider 时直接展示 API Key 表单。
+ * 不收集 API Key，也不创建 Provider；点击“开始使用”后直接进入既有引导，
+ * 模型 Provider 由用户在设置页配置。
  */
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { TID_WELCOME_START_BUTTON } from "@zcode/shared";
+import { Loader2Icon } from "lucide-react";
 import { ZCodeAboutLogo } from "@/components/ui/ZCodeAboutLogo.js";
+import { Button } from "@/components/ui/button.js";
 import { DesktopOverlayWindowControls } from "@/DesktopOverlayWindowControls.js";
 import { useZCodeIntl } from "./i18n/IntlProvider.js";
-import { LoginApiKeyForm } from "./login/LoginApiKeyForm.js";
+import { logger } from "./logger.js";
 import { ThemeHeroVisual } from "./openWorkspacePageThemeHero.js";
 
 interface WelcomeScreenProps {
-  onComplete: (reason: LoginCompleteReason) => void | Promise<void>;
+  onComplete: (reason: WelcomeCompleteReason) => void | Promise<void>;
 }
 
-export type LoginCompleteReason = "apiKey" | "skip";
+export type WelcomeCompleteReason = "start";
 
 export function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
   return (
@@ -24,31 +28,57 @@ export function WelcomeScreen({ onComplete }: WelcomeScreenProps) {
       <div className="pointer-events-none absolute left-0 top-0 right-0 z-10 flex h-12 items-center [app-region:drag] platform-windows-desktop:right-[134px] platform-linux-desktop:right-[134px]" />
       <DesktopOverlayWindowControls />
       <section className="relative z-10 w-full flex flex-col gap-10 max-w-sm rounded-2xl border border-popover-border bg-background p-8 text-ui-base/relaxed shadow-md sm:p-10">
-        <LoginPanel onComplete={onComplete} />
+        <WelcomePanel onComplete={onComplete} />
       </section>
     </main>
   );
 }
 
-interface LoginPanelProps {
-  onComplete: (reason: LoginCompleteReason) => void | Promise<void>;
+interface WelcomePanelProps {
+  onComplete: (reason: WelcomeCompleteReason) => void | Promise<void>;
 }
 
-export function LoginPanel({ onComplete }: LoginPanelProps) {
+export function WelcomePanel({ onComplete }: WelcomePanelProps) {
   const { intl } = useZCodeIntl();
+  const [starting, setStarting] = useState(false);
+
+  const start = async () => {
+    if (starting) {
+      return;
+    }
+
+    setStarting(true);
+    try {
+      await onComplete("start");
+    } catch (error) {
+      logger.error("[WelcomeScreen] 开始使用失败", { error });
+    } finally {
+      setStarting(false);
+    }
+  };
 
   return (
     <>
-      <LoginPanelHeader
+      <WelcomePanelHeader
         title={intl.formatMessage({ id: "login.title" })}
         description={intl.formatMessage({ id: "login.description" })}
       />
-      <LoginApiKeyForm onSaved={() => onComplete("apiKey")} onSkipped={() => onComplete("skip")} />
+      <Button
+        type="button"
+        className="h-10 w-full text-ui-base"
+        size="lg"
+        data-testid={TID_WELCOME_START_BUTTON}
+        disabled={starting}
+        onClick={() => void start()}
+      >
+        {starting ? <Loader2Icon className="size-4 animate-spin" /> : null}
+        {intl.formatMessage({ id: "login.start" })}
+      </Button>
     </>
   );
 }
 
-function LoginPanelHeader({
+function WelcomePanelHeader({
   title,
   description,
   children,
@@ -59,7 +89,7 @@ function LoginPanelHeader({
 }) {
   return (
     <header className="flex flex-col items-center gap-3 text-center">
-      <LoginPanelLogo />
+      <WelcomePanelLogo />
       <div className="flex flex-col items-center gap-1 text-center">
         <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
         <p className="text-ui-base/relaxed text-foreground-subtle">{description}</p>
@@ -69,9 +99,9 @@ function LoginPanelHeader({
   );
 }
 
-function LoginPanelLogo() {
+function WelcomePanelLogo() {
   return (
-    // 登录 logo 壳是固定深色底，边框不能跟随浅色主题 token，否则浅色主题下边框过重。
+    // 欢迎 logo 壳是固定深色底，边框不能跟随浅色主题 token，否则浅色主题下边框过重。
     <div
       className="relative mb-1 flex size-16 items-center justify-center rounded-2xl bg-[linear-gradient(180deg,#000000_0%,#151718_100%)] text-[#ffffff] shadow-lg/20 before:pointer-events-none before:absolute before:inset-0 before:rounded-2xl before:border before:border-[rgba(255,255,255,0.1)]"
       aria-label="ZCode"
