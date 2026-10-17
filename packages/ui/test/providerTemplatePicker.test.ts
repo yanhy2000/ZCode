@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  TID_MODEL_PROVIDER_TEMPLATE_BACK_BUTTON,
   TID_MODEL_PROVIDER_TEMPLATE_ITEM,
   TID_MODEL_PROVIDER_TEMPLATE_PICKER,
   testId,
@@ -52,6 +53,11 @@ describe("ProviderTemplatePicker", () => {
               config: { logo: { type: "builtin", key: "deepseek" } },
             },
             {
+              templateId: "zai-standard-api",
+              templateNameMap: { "zh-CN": "Z.ai API", "en-US": "Z.ai API" },
+              config: { logo: { type: "builtin", key: "zai" } },
+            },
+            {
               templateId: "long-name",
               templateNameMap: { "en-US": "Alibaba Model Studio (International)" },
               config: {},
@@ -72,15 +78,51 @@ describe("ProviderTemplatePicker", () => {
     expect(html).toContain("创建自定义供应商");
     expect(html).toContain("深度求索");
     expect(html).toContain("Alibaba Model Studio (International)");
+    expect(html).toContain("Z.ai API");
+    // 不再渲染“智谱 / 其他”分组：自定义入口首位，Z.ai 模板移到列表末尾。
+    expect(html).not.toContain("data-provider-template-group");
+    expect(html.indexOf("创建自定义供应商")).toBeLessThan(html.indexOf("深度求索"));
     expect(html.indexOf("深度求索")).toBeLessThan(
       html.indexOf("Alibaba Model Studio (International)"),
     );
+    expect(html.indexOf("Alibaba Model Studio (International)")).toBeLessThan(
+      html.indexOf("Z.ai API"),
+    );
+    expect(html).toContain(`data-testid="${TID_MODEL_PROVIDER_TEMPLATE_BACK_BUTTON}"`);
     expect(html).toContain("h-16");
     expect(html).toContain("break-words");
     expect(html).toContain("lucide-chevron-right");
     expect(html).not.toContain("h-20");
     expect(html).not.toContain("line-clamp-2");
     expect(html).not.toContain('type="search"');
+  });
+
+  it("showBackButton=false 时不渲染返回按钮，列表仍完整可用", () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        TooltipProvider,
+        null,
+        createElement(ProviderTemplatePicker, {
+          templates: [
+            {
+              templateId: "deepseek",
+              templateNameMap: { "zh-CN": "深度求索", "en-US": "DeepSeek" },
+              config: { logo: { type: "builtin", key: "deepseek" } },
+            },
+          ],
+          onBack: vi.fn(),
+          onCreateFromTemplate: vi.fn(),
+          onCreateCustom: vi.fn(),
+          creating: false,
+          showBackButton: false,
+        }),
+      ),
+    );
+
+    expect(html).not.toContain(TID_MODEL_PROVIDER_TEMPLATE_BACK_BUTTON);
+    expect(html).toContain("添加供应商");
+    expect(html).toContain(`data-testid="${testId(TID_MODEL_PROVIDER_TEMPLATE_ITEM, "custom")}"`);
+    expect(html).toContain("深度求索");
   });
 
   it("Template 创建失败时在详情底部显示错误并允许重试", async () => {

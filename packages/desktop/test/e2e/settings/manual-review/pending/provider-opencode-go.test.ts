@@ -53,9 +53,7 @@ describe("Todo149 OpenCode Go 模板创建", () => {
       ] as const) {
         const before = new Set((await repository.read()).providers.keys());
         await clickTestIdByDom(TID_MODEL_PROVIDER_ADD_PROVIDER_BUTTON);
-        const card = $(
-          `[data-provider-template-group="other"] [data-testid="${testId(TID_MODEL_PROVIDER_TEMPLATE_ITEM, templateId)}"]`,
-        );
+        const card = $(`[data-testid="${testId(TID_MODEL_PROVIDER_TEMPLATE_ITEM, templateId)}"]`);
         await card.waitForExist({ timeout: 15_000 });
         await card.scrollIntoView({ block: "center" });
         await card.click();

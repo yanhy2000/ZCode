@@ -31,7 +31,6 @@ describe("model provider navigation loading indicator", () => {
           { id: "custom", title: "Custom Providers", items: [] },
         ],
         selectedNodeKey: null,
-        presetLoading: false,
         customLoading: false,
         onSelectNavItem: vi.fn(),
       }),
@@ -66,7 +65,7 @@ describe("model provider navigation loading indicator", () => {
     };
 
     const formatMessage = vi.fn();
-    expect(resolveModelProviderSideNavLabel(item, formatMessage)).toBe("Official API");
+    expect(resolveModelProviderSideNavLabel(item)).toBe("Official API");
     expect(formatMessage).not.toHaveBeenCalled();
     expect(getSortableProviderId(item, new Set(["personal-api"]))).toBeNull();
     expect(getSortableProviderId(item, new Set(["official-api"]))).toBe("official-api");
@@ -75,16 +74,14 @@ describe("model provider navigation loading indicator", () => {
   it("按分组返回对应 loading 状态", () => {
     expect(
       shouldShowModelProviderGroupLoadingIndicator({
-        groupId: "preset",
-        presetLoading: true,
-        customLoading: false,
+        groupId: "custom",
+        customLoading: true,
       }),
     ).toBe(true);
 
     expect(
       shouldShowModelProviderGroupLoadingIndicator({
         groupId: "custom",
-        presetLoading: true,
         customLoading: false,
       }),
     ).toBe(false);
@@ -136,7 +133,6 @@ describe("model provider navigation loading indicator", () => {
           },
         ],
         selectedNodeKey: null,
-        presetLoading: false,
         customLoading: false,
         onSelectNavItem: vi.fn(),
         reorderableProviderIds: new Set(["provider-a"]),

@@ -35,6 +35,22 @@ export {
 } from "./model-provider-section/utils.js";
 
 /**
+ * 左列表没有任何供应商时，右栏固定停留在“添加供应商”模板页，直到创建出第一个供应商。
+ * 此时没有可返回的详情，返回按钮隐藏；手动刷新不参与空列表判定，避免刷新期间闪烁。
+ */
+export function resolveModelProviderTemplatePickerState(params: {
+  templatePickerOpen: boolean;
+  loading: boolean;
+  navigationItemCount: number;
+}): { visible: boolean; showBackButton: boolean } {
+  const emptyList = !params.loading && params.navigationItemCount === 0;
+  return {
+    visible: params.templatePickerOpen || emptyList,
+    showBackButton: !emptyList,
+  };
+}
+
+/**
  * 模型 Provider 设置只由 SettingsPage 注入 Local Host；这里不接收 workspaceIdentity，
  * 防止远程 workspace 误将 Provider Settings 的读写路由到远端 Environment。
  */
@@ -248,6 +264,11 @@ export function ModelProviderSection({
   // 已有的左侧分组 loading 和刷新按钮 loading 都没有机会渲染。
   // 这里改为始终先渲染布局壳子，再按分组展示 loading，避免用户误以为页面坏了。
   const customLoading = loading || modelProvidersRefreshing;
+  const templatePickerState = resolveModelProviderTemplatePickerState({
+    templatePickerOpen,
+    loading,
+    navigationItemCount: navigationItems.length,
+  });
 
   if (loadError) {
     return (
@@ -277,10 +298,11 @@ export function ModelProviderSection({
       onReorderProviderIds={handleReorderProviderIds}
       reorderableProviderIds={reorderableProviderIds}
     >
-      {templatePickerOpen ? (
+      {templatePickerState.visible ? (
         <ProviderTemplatePicker
           templates={providerTemplates}
           creating={creatingProvider}
+          showBackButton={templatePickerState.showBackButton}
           onBack={() => setTemplatePickerOpen(false)}
           onCreateFromTemplate={(templateId) => {
             return handleCreateProvider({ templateId });

@@ -72,6 +72,8 @@ vi.mock("@/hooks/useConfirmDialog.js", () => ({
 
 vi.mock("@/hooks/useModelProviders.js", () => ({
   useModelProviders: () => ({
+    // 空列表现在会固定展示“添加供应商”模板页；本文件验证详情栏回调，保留一个供应商场景。
+    providerTemplates: [],
     modelProviders: [
       {
         id: TEST_BIGMODEL_PROVIDER_ID,
@@ -164,7 +166,8 @@ vi.mock("@/store/StoreProvider.js", () => ({
 vi.mock("../src/settings/model-provider-section/useModelProviderNavigation.js", () => ({
   useModelProviderNavigation: () => ({
     navigationGroups: [],
-    navigationItems: [],
+    // 非空列表代表常规的“已有供应商”场景，详情栏继续渲染以实现回调断言。
+    navigationItems: [{ key: "custom:mock-provider" }],
     selectedNavItem: selectedNavItemMock,
   }),
 }));

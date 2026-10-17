@@ -287,20 +287,33 @@ describe("设置页 UI polish E2E", () => {
     expect(templateLayout.cardHeights.every((height) => height >= 64)).toBe(true);
     expect(templateLayout.columns).toBe(2);
     expect(templateLayout.hasChevron).toBe(true);
+    // 模板列表不再分组：首位是自定义入口，Z.ai / BigModel 模板固定在末尾。
     expect(
-      await browser.execute(() =>
-        Array.from(
-          document.querySelectorAll(
-            '[data-provider-template-group="zhipu"] [data-testid^="model-provider-template-item-"]',
-          ),
-        ).map((node) => node.getAttribute("data-testid")),
-      ),
-    ).toEqual([
-      "model-provider-template-item-bigmodel-api",
-      "model-provider-template-item-zai-api",
-      "model-provider-template-item-bigmodel-standard-api",
-      "model-provider-template-item-zai-standard-api",
-    ]);
+      await browser.execute(() => {
+        const picker = document.querySelector<HTMLElement>(
+          '[data-testid="model-provider-template-picker"]',
+        );
+        const itemIds = Array.from(
+          picker?.querySelectorAll<HTMLElement>(
+            '[data-testid^="model-provider-template-item-"]',
+          ) ?? [],
+        ).map((node) => node.getAttribute("data-testid"));
+        return {
+          groupSections: document.querySelectorAll("[data-provider-template-group]").length,
+          firstItemId: itemIds[0] ?? null,
+          lastTwoItemIds: itemIds.slice(-2),
+          hasGroupHeaderText: /智谱|Zhipu/.test(picker?.innerText ?? ""),
+        };
+      }),
+    ).toEqual({
+      groupSections: 0,
+      firstItemId: "model-provider-template-item-custom",
+      lastTwoItemIds: [
+        "model-provider-template-item-bigmodel-standard-api",
+        "model-provider-template-item-zai-standard-api",
+      ],
+      hasGroupHeaderText: false,
+    });
     await clickTestIdByDom(TID_MODEL_PROVIDER_TEMPLATE_BACK_BUTTON);
     await browser.waitUntil(
       async () =>
