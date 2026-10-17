@@ -216,6 +216,7 @@ export type {
   ApplicationIconRequest,
   BrowserGuestAttachRejectReason,
   BrowserGuestAttachResult,
+  DesktopZoomState,
   EmbeddedBrowserDataClearResult,
   EmbeddedBrowserOpenUrlRequest,
   EmbeddedBrowserPermissionDeviceOption,
@@ -237,6 +238,8 @@ export type {
   TaskNotificationPayload,
   UpdateCheckResultPayload,
   UpdateStatePayload,
+  WindowControlsOverlayMetrics,
+  WindowControlsOverlayReadyPayload,
   WSLDistro,
   ZCodeStdioTapDevState,
 } from "./platform.js";

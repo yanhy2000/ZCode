@@ -49,15 +49,15 @@
 
 入口对所有产品身份可见。点击后：
 
-| 结果 | 行为 |
-| --- | --- |
-| 发现新版本 | 原生对话框显示当前版本和目标版本，按钮为“打开下载页 / 稍后”；打开 `release.html_url` |
-| 已是最新 | 原生对话框提示当前已是最新版本 |
-| 网络不可达 / 超时 | 提示无法连接 GitHub，并建议检查网络或代理 |
-| HTTP 404 | 提示仓库尚无已发布 release |
-| HTTP 403 / 429 | 提示 GitHub API 请求受限或频率过高 |
-| 响应格式异常 | 提示无法解析 release 信息 |
-| 其他 HTTP 错误 | 提示状态码，保留重试入口 |
+| 结果              | 行为                                                                                 |
+| ----------------- | ------------------------------------------------------------------------------------ |
+| 发现新版本        | 原生对话框显示当前版本和目标版本，按钮为“打开下载页 / 稍后”；打开 `release.html_url` |
+| 已是最新          | 原生对话框提示当前已是最新版本                                                       |
+| 网络不可达 / 超时 | 提示无法连接 GitHub，并建议检查网络或代理                                            |
+| HTTP 404          | 提示仓库尚无已发布 release                                                           |
+| HTTP 403 / 429    | 提示 GitHub API 请求受限或频率过高                                                   |
+| 响应格式异常      | 提示无法解析 release 信息                                                            |
+| 其他 HTTP 错误    | 提示状态码，保留重试入口                                                             |
 
 手动检查进行中时菜单项禁用，避免并发请求。
 
@@ -145,3 +145,4 @@
 9. Desktop Host 固定使用 desktop presentation surface，不请求 `desktopContextPrompt` 灰度，也不读取 `ZCODE_DESKTOP_CONTEXT_PROMPT_ENABLED`。
 10. Windows 产物只包含正式身份：安装包名 `ZCode-<version>-win-x64.exe`，解包目录存在 `ZCode.exe`，不存在 `ZCode Preview.exe`，`app.asar` 内 `zcodeProductFlavor` 为 `production`。
 11. `pnpm typecheck`、`pnpm lint`、相关单测通过。
+12. desktop preload 纳入 `pnpm typecheck`；preload 不得引用未导入的符号，已移除能力（如 ARMS 补丁）残留调用不得阻断启动状态 IPC 注册。

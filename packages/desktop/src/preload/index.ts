@@ -971,9 +971,9 @@ ipcRenderer.on(
   },
 );
 
-// dom-ready autoInject 之后 Bridge 若被重置，再尝试一次包装
-scheduleArmsEventBridgePatch();
-
+// 自维护构建已移除 ARMS 遥测桥接，这里不能再调用 armsRumBridgeForward 的补丁函数。
+// 历史问题：残留的 scheduleArmsEventBridgePatch() 调用让整个 preload 抛 ReferenceError，
+// 启动状态 IPC 监听未注册，Renderer 30 秒后误报 startup_status_timeout。
 // 启动控制面先于普通 RPC；reload 从 Main 的通知镜像补齐，不触发新迁移。
 ipcRenderer.on(InternalChannels.DatabaseStartupState, (_event, raw: unknown) => {
   const parsed = databaseStartupStateSchema.safeParse(raw);
