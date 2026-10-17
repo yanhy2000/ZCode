@@ -91,6 +91,12 @@
 - 本地 Host 与 SSH/WSL/Docker 远程 Host 使用同一结论，不再依赖云端配置。
 - 用户可见名称统一为“工作流 / Workflows”；内部协议字段和代码标识仍使用 `dynamicWorkflow`。
 
+## 桌面呈现面
+
+- 自维护构建不读取官方 `desktopContextPrompt` 云端灰度，也不再传递 `ZCODE_DESKTOP_CONTEXT_PROMPT_ENABLED`。
+- 本地 Desktop Host 与 desktop-attached remote Host 固定使用 desktop presentation surface；普通 HTTP/manual app-server 没有 Desktop 宿主事实，仍为 terminal。
+- 因此 Desktop 的 system prompt、Gen UI 输出目录与内联评论能力不再受离线或未登录影响。
+
 ## 强制更新
 
 - 启动流程不请求官方 `minimalVersion`，不展示官方强更弹窗。
@@ -136,5 +142,6 @@
 6. 打包应用不初始化 ARMS，不发送产品事件。
 7. 内置 Provider 云刷新关闭，第三方 Provider 配置仍可正常加载。
 8. 工作流入口默认可见；读取该能力时不请求 `/api/v1/client/configs`，设置中的模式切换仍然生效。
-9. Windows 产物只包含正式身份：安装包名 `ZCode-<version>-win-x64.exe`，解包目录存在 `ZCode.exe`，不存在 `ZCode Preview.exe`，`app.asar` 内 `zcodeProductFlavor` 为 `production`。
-10. `pnpm typecheck`、`pnpm lint`、相关单测通过。
+9. Desktop Host 固定使用 desktop presentation surface，不请求 `desktopContextPrompt` 灰度，也不读取 `ZCODE_DESKTOP_CONTEXT_PROMPT_ENABLED`。
+10. Windows 产物只包含正式身份：安装包名 `ZCode-<version>-win-x64.exe`，解包目录存在 `ZCode.exe`，不存在 `ZCode Preview.exe`，`app.asar` 内 `zcodeProductFlavor` 为 `production`。
+11. `pnpm typecheck`、`pnpm lint`、相关单测通过。

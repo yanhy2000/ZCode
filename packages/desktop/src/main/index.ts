@@ -8,10 +8,6 @@ import {
   configureDatabaseStartupQuit,
 } from "./databaseStartupRelay.js";
 import { ensureDesktopDeviceMidSync } from "./desktopDeviceMid.js";
-import {
-  createDesktopContextPromptRollout,
-  createElectronDesktopContextPromptConfigFetcher,
-} from "./desktopContextPromptRollout.js";
 import { buildBrowserViewCloseTabNotification } from "./browserView/browserCloseTabNotification.js";
 import { BrowserGuestManager } from "./browserView/browserGuestManager.js";
 import { createElectronBrowserWebmRecorder } from "./browserView/electronBrowserWebmRecorder.js";
@@ -652,53 +648,6 @@ async function resolveCurrentZCodeEndpointOrigin() {
     overrideOrigin: (await mainSettingService.get()).zcodeEndpointOrigin,
   });
 }
-let desktopContextPromptRollout: ReturnType<typeof createDesktopContextPromptRollout> | undefined;
-function resolveDesktopContextPromptEnabledForHost(): boolean {
-  const rollout = desktopContextPromptRollout;
-  if (!rollout) {
-    return false;
-  }
-  // Host 创建时顺便触发过期刷新，但只读取当前快照；网络请求不能阻塞 Local/Remote Host。
-  void rollout.refresh();
-  return rollout.getSnapshot().enabled;
-}
-
-// 首个 Host 创建前的有界灰度裁决门。Host/Agent 的 presentation surface 在进程启动时
-// 冻结（services/node.ts 顶层 const + CLI --surface），而灰度请求是旁路、不阻塞 Host。若首个
-// Host fork 早于请求 resolve，成功结果（enabled:true）对已冻结的 Host/Agent 无可达生效路径。
-// 这里给"成功结果"一条有界的生效路径：首 Host fork 前 await 一次裁决（≤2s），失败/超时仍按当前
-// 快照继续（desktopContextPrompt fail-open）。first-only 永久
-// latch——后续 Host fork await 已 resolve 的 promise（近乎 0ms），且各 resolve*ForHost()
-// 同步读取已被刷新的 live 快照。
-const DESKTOP_FIRST_HOST_SPAWN_DECISION_TIMEOUT_MS = 2_000;
-let firstHostSpawnDecisionPromise: Promise<void> | null = null;
-function awaitFirstHostSpawnDecision(): Promise<void> {
-  if (firstHostSpawnDecisionPromise) {
-    return firstHostSpawnDecisionPromise;
-  }
-  firstHostSpawnDecisionPromise = (async () => {
-    const rollout = desktopContextPromptRollout;
-    if (!rollout) {
-      return;
-    }
-    try {
-      const decision = await rollout.awaitFirstDecision(
-        DESKTOP_FIRST_HOST_SPAWN_DECISION_TIMEOUT_MS,
-      );
-      logger.info("[desktop-context-prompt] first host spawn decision resolved", {
-        enabled: decision.enabled,
-        configVersion: decision.configVersion,
-      });
-    } catch (error) {
-      // awaitFirstDecision 永不 reject（refresh 内部已 catch + timeout 回退快照），此处仅兜底。
-      logger.warn("[desktop-context-prompt] first host spawn decision failed, fail-open", {
-        error,
-      });
-    }
-  })();
-  return firstHostSpawnDecisionPromise;
-}
-
 app.on("browser-window-focus", (_event, win) => {
   rebuildMenu();
   // 设置/更新等无 Host 的 ZCode 窗口也算前台：router 会先把旧 workspace Host 清成 null，
@@ -734,17 +683,6 @@ const readHelpConfig = createDesktopHelpConfigReader({
   appVersion: ZCODE_VERSION || app.getVersion(),
   deviceMid,
   resolveEndpointOrigin: resolveCurrentZCodeEndpointOrigin,
-});
-// 同一个 /api/v1/client/configs fetcher 供两个灰度 rollout 共用（请求参数与鉴权完全一致，
-// 各自独立缓存/去重，服务端按 data.configs.<key> 区分功能）。
-const electronClientConfigsFetcher = createElectronDesktopContextPromptConfigFetcher({
-  appVersion: ZCODE_VERSION || app.getVersion(),
-  deviceMid,
-  resolveEndpointOrigin: resolveCurrentZCodeEndpointOrigin,
-});
-desktopContextPromptRollout = createDesktopContextPromptRollout({
-  fetchConfig: electronClientConfigsFetcher,
-  logger,
 });
 const webRemoteControlAppVersion = ZCODE_VERSION || app.getVersion();
 const defaultZCodeEndpointUrls = buildZCodeEndpointUrls(DEFAULT_ZCODE_ENDPOINT_ORIGIN, {
@@ -1577,7 +1515,6 @@ function createWindowInstance(startupBootstrap: StartupWindowBootstrap = {}) {
       }),
     windowHostProcessMap,
     onHostProcessReady: (windowKey) => cuaPipFocusRouter.refreshWindow(windowKey),
-    awaitFirstHostSpawnDecision,
     spawnHostProcess: (win, label, initMessage) =>
       spawnHostProcess(
         win,
@@ -1588,7 +1525,6 @@ function createWindowInstance(startupBootstrap: StartupWindowBootstrap = {}) {
         },
         {
           hostProcessLocalEnv,
-          desktopContextPromptEnabled: resolveDesktopContextPromptEnabledForHost,
           logger,
           broadcastHub,
           taskRealtimeBus,
@@ -1815,8 +1751,6 @@ app.whenReady().then(async () => {
       ? { registryMaxEntries: Number(process.env.ZCODE_E2E_PLUGIN_SANDBOX_MAX_ENTRIES) }
       : {}),
   });
-  // Electron 的 net.request 只能在 app ready 后使用；灰度请求仍是旁路预热，不阻塞首个 Host。
-  void desktopContextPromptRollout?.refresh();
   installBrowserRestoreBootstrapProtocol(
     session.fromPartition(EMBEDDED_BROWSER_PARTITION).protocol,
   );

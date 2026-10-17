@@ -131,49 +131,12 @@ bridge Root 都显式开启灰度能力，Renderer 从同一原始 row text 确�
 该配置不进入 ZCode Protocol request，也不参与 workspace identity。远程 workspace 仍使用
 `workspaceIdentity?.trim() || workspacePath` 做隔离，`workspacePath` 只用于 Agent cwd。
 
-## Desktop SP 服务端灰度
+## Desktop presentation surface
 
-Desktop Main 在启动时旁路请求 `/api/v1/client/configs`，后续 Host 创建时按 1 小时 TTL 触发过期刷新，
-读取以下配置：
-
-```json
-{
-  "data": {
-    "configs": {
-      "desktopContextPrompt": {
-        "enabled": true,
-        "config_version": "desktop-sp-v1"
-      }
-    }
-  }
-}
-```
-
-只有 `code` 缺省或为 `0` 的成功响应才进入配置裁决：下发配置时要求 `enabled` 为 boolean；未下发
-`desktopContextPrompt` 时按 `{enabled:false}` 处理并覆盖旧的开启快照。Main 将本次裁决快照通过
-`ZCODE_DESKTOP_CONTEXT_PROMPT_ENABLED=1|0` 传给 Local Host，并沿现有 Remote runtime env 白名单
-传给 Desktop-attached 的远端 Host；Host 不请求服务端、不重新分桶。未提供该环境变量时，保留历史
-Host 装配语义，便于 CLI、普通 HTTP server 和已有测试继续运行。
-
-成功结果在 Desktop Main 进程内缓存 1 小时，并合并同一时刻的 in-flight 请求。单次请求最多等待 3 秒：
-
-```text
-Main ready
-   |
-   +-- request config (旁路，不阻塞首个 Host)
-   |       |
-   |       +-- success + valid --> cache {enabled, config_version}
-   |       |
-   |       +-- error/invalid/timeout (>3s)
-   |                    |
-   |                    +-- 有历史成功 --> 复用上一份快照
-   |                    +-- 无历史成功 --> {enabled:false}
-   |
-   +-- Host spawn --> 读取当时快照 --> 注入/不注入 Desktop Context
-```
-
-网络失败、响应异常或超时都不会阻塞客户端启动。成功快照仅在当前 Desktop Main 生命周期内复用；
-新启动的 Host 读取最新快照，已经启动的 Agent 不在运行中动态切换呈现面。
+自维护构建不读取 `desktopContextPrompt` 云端灰度，也不再传递 `ZCODE_DESKTOP_CONTEXT_PROMPT_ENABLED`。
+`resolveZCodeAgentPresentationSurface` 对本地 Desktop Host 与 desktop-attached remote Host 固定返回
+`desktop`；普通 HTTP/manual app-server 没有 Desktop 宿主事实，仍保持 terminal。
+上游的灰度链路已移除，历史实现见 git 历史。
 
 ## 验收用例
 

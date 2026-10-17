@@ -1,5 +1,9 @@
 # Desktop Context Prompt 灰度裁决链路与首 Host 门禁
 
+> 自维护构建（2026-10-17）已移除该云端灰度：Desktop Host 固定使用 desktop surface，
+> `desktopContextPromptRollout` 与首 Host 等待门禁均已删除。
+> 本文保留为上游机制的历史说明，不再描述当前构建行为。
+
 > spec / 轨迹文档：服务端灰度（Desktop Context Prompt，简称 Desktop SP / DSP）如何决定 Agent
 > 是否输出 `::code-comment` 指令；以及 CR-01 修复的"首个 Host 创建时灰度裁决无生效路径"问题。
 
