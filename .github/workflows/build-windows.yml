@@ -19,6 +19,9 @@ env:
   ZCODE_ENV: production
   ZCODE_PREVIEW_IDENTITY: "0"
   ZCODE_SKIP_REMOTE_ASSETS: "1"
+  # 自建 runner 默认走国内镜像；需要官方源时在仓库 Variables 里覆盖。
+  ELECTRON_MIRROR: ${{ vars.ELECTRON_MIRROR || 'https://npmmirror.com/mirrors/electron/' }}
+  ELECTRON_BUILDER_BINARIES_MIRROR: ${{ vars.ELECTRON_BUILDER_BINARIES_MIRROR || 'https://npmmirror.com/mirrors/electron-builder-binaries/' }}
 
 jobs:
   build:
@@ -44,7 +47,7 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Configure package mirrors
-        shell: pwsh
+        shell: powershell
         env:
           # 自建 runner 默认走国内镜像；需要官方源或代理时在仓库 Variables 里覆盖。
           NPM_REGISTRY: ${{ vars.NPM_REGISTRY || 'https://registry.npmmirror.com' }}
@@ -58,7 +61,7 @@ jobs:
           Write-Host "[registry] $env:NPM_REGISTRY"
 
       - name: Print toolchain
-        shell: pwsh
+        shell: powershell
         run: |
           node -v
           pnpm -v
@@ -84,11 +87,25 @@ jobs:
         # --reporter=append-only 让 runner 控制台逐行输出，便于确认卡在下载还是链接。
         run: pnpm install --frozen-lockfile --prefer-offline --network-concurrency=8 --reporter=append-only
 
+      - name: Verify Electron runtime
+        shell: powershell
+        run: |
+          $pathFile = "node_modules\electron\path.txt"
+          if (-not (Test-Path $pathFile)) {
+            throw "electron postinstall did not complete: $pathFile is missing"
+          }
+          $electronExe = (Get-Content $pathFile -Raw).Trim()
+          $electronPath = Join-Path "node_modules\electron\dist" $electronExe
+          if (-not (Test-Path $electronPath)) {
+            throw "electron binary is missing: $electronPath"
+          }
+          Write-Host "[electron] $electronPath"
+
       # self-hosted 本地构建缓存：同一 commit 在 3 小时内重复触发时直接复用 dist，
       # 避免反复跑 tsup/vite/electron-builder。目录放在 workspace 外，checkout 不会清掉。
       - name: Restore 3-hour build cache
         id: build-cache
-        shell: pwsh
+        shell: powershell
         run: |
           $cacheRoot = Join-Path "${{ runner.workspace }}" "..\zcode-build-cache"
           $cacheDir = Join-Path $cacheRoot "${{ github.sha }}"
@@ -118,13 +135,13 @@ jobs:
           }
 
       - name: Verify version identity
-        shell: pwsh
+        shell: powershell
         run: |
           node -e "const root=require('./package.json').version; const cli=require('./apps/zcode-cli/package.json').version; if (!/^\d+\.\d+\.\d+\+\d+\.\d+\.\d+$/.test(root)) throw new Error('root version does not match private+official: ' + root); if (cli !== root) throw new Error('cli version=' + cli + ' != root ' + root); console.log('[version] root=' + root + ' cli=' + cli)"
           node -e "const { getBuildMetadata } = require('./packages/desktop/scripts/build-metadata.mjs'); const root=require('./package.json').version; const version = getBuildMetadata().appVersion; if (version !== root) throw new Error('desktop build version=' + version + ' != root ' + root); console.log('[version] desktop=' + version)"
 
       - name: Normalize Gen UI vendor line endings
-        shell: pwsh
+        shell: powershell
         run: |
           $vendor = "apps/zcode-cli/packages/visualize-plugin/skills/visualize/assets/vendor"
           Get-ChildItem -Path $vendor -File -Recurse | ForEach-Object {
@@ -143,7 +160,7 @@ jobs:
         run: pnpm --filter @zcode/desktop bundle -- --os win --arch x64
 
       - name: Verify production identity
-        shell: pwsh
+        shell: powershell
         run: |
           $appDir = "packages/desktop/dist/win-unpacked"
           $appExe = Join-Path $appDir "ZCode.exe"
@@ -157,7 +174,7 @@ jobs:
           node -e "const asar=require('@electron/asar'); const pkg=JSON.parse(asar.extractFile('packages/desktop/dist/win-unpacked/resources/app.asar','package.json').toString()); const root=require('./package.json').version; if (pkg.zcodeProductFlavor !== 'production') throw new Error('flavor=' + pkg.zcodeProductFlavor); if (pkg.version !== root) throw new Error('app version=' + pkg.version + ' != root ' + root); console.log('[identity] product=ZCode flavor=' + pkg.zcodeProductFlavor + ' version=' + pkg.version)"
 
       - name: Verify installer version and checksum
-        shell: pwsh
+        shell: powershell
         run: |
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $expectedName = "ZCode-$version-win-x64.exe"
@@ -169,14 +186,19 @@ jobs:
             throw "Unexpected installer name: $($installer.Name); expected $expectedName"
           }
           Write-Host "[artifact] $($installer.FullName)"
-          Get-ChildItem -Path packages/desktop/dist -Filter *.exe | ForEach-Object {
+          $lines = @(Get-ChildItem -Path packages/desktop/dist -Filter *.exe | ForEach-Object {
             "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name
-          } | Set-Content -Path packages/desktop/dist/SHA256SUMS.txt -Encoding utf8
+          })
+          [System.IO.File]::WriteAllLines(
+            "packages/desktop/dist/SHA256SUMS.txt",
+            $lines,
+            [System.Text.UTF8Encoding]::new($false)
+          )
           Get-Content packages/desktop/dist/SHA256SUMS.txt
 
       - name: Save 3-hour build cache
         if: success() && steps.build-cache.outputs.hit != 'true'
-        shell: pwsh
+        shell: powershell
         run: |
           $cacheDir = Join-Path (Join-Path "${{ runner.workspace }}" "..\zcode-build-cache") "${{ github.sha }}"
           $dist = Join-Path $cacheDir "dist"
