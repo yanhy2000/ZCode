@@ -102,6 +102,30 @@
 - 手机远控继续使用现有 relay 与 attachment 链路。
 - 第三方模型、工具、MCP、Skill 行为不变。
 
+## 官方云控与商业功能移除
+
+自维护构建只保留第三方 Provider 所需的本地配置、模型选择与执行链路。以下官方云控或商业功能不再提供：
+
+- 渲染器动作追踪与本地 TTFT 采样：不再读取 `rendererActionTrace` 配置，不注册相关 IPC，不上报渲染器动作或 TTFT 数据。
+- 闲时任务（Off-Peak task）：移除 UI 入口、任务调度、Host 协议、服务端取号与模型选择分支。
+- 请求验证（Request Verification）：移除开源版空壳实现、UI 提示与相关网关分支；Provider runtime headers 的线协议字段保留，避免破坏第三方 Provider 兼容性。
+- 强制更新（forceUpdate / minimalVersion）：移除残留类型、Provider 方法、Main 标志与文案。
+- Coding Plan 商品目录、团队静态商品、体验套餐预览与账单折扣：移除解析、服务方法与展示组件；不读取对应 client/configs 字段。
+- 漏洞上报（zsrc）：移除公开配置字段、帮助菜单入口与文案。
+- 官方账号、登录、套餐、余额、权益、Rewards、营销触达与官方模型准入：移除客户端入口与服务调用。
+
+保留：
+
+- 第三方 Provider 的 registry、API key / baseURL、模型配置、模型选择、对话与工具链路。
+- 插件市场排序 `pluginStoreOrder`。
+- 手机远控 relay 与本地配对凭据。
+- 模型上下文预算的本地默认值。
+
+数据兼容：
+
+- 既有 SQLite 历史迁移保持原样，不修改已记录的迁移 checksum。
+- 旧数据中的闲时任务、官方账号 provider 等字段按未知/空数据忽略；不因删除功能阻断启动。
+
 ## 验收
 
 1. `package.json`、CLI 包、桌面构建元数据都是 `1.0.0+3.15.1`。

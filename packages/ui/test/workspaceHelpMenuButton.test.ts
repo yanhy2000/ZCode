@@ -14,8 +14,6 @@ vi.mock("@/i18n/IntlProvider.js", () => ({
 }));
 
 const captured = vi.hoisted(() => ({
-  zsrcUrl: null as string | null,
-  loading: false,
   openExternal: vi.fn(),
   exportLogs: vi.fn(async () => ({ success: true })),
   toast: vi.fn(() => 7),
@@ -100,10 +98,6 @@ vi.mock("@/hooks/usePlatform.js", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useVulnerabilityReportUrl.js", () => ({
-  useVulnerabilityReportUrl: () => ({ url: captured.zsrcUrl, loading: captured.loading }),
-}));
-
 describe("WorkspaceHelpMenuButton", () => {
   async function render(isDesktop: boolean | undefined) {
     captured.menuItems = [];
@@ -114,51 +108,6 @@ describe("WorkspaceHelpMenuButton", () => {
     const { WorkspaceHelpMenuButton } = await import("@/WorkspaceHelpMenuButton.js");
     return renderToStaticMarkup(createElement(WorkspaceHelpMenuButton, { isDesktop }));
   }
-
-  it("桌面和 Web 的漏洞入口紧跟问题上报，打开配置地址；缺失时隐藏", async () => {
-    for (const desktop of [true, false]) {
-      captured.zsrcUrl = "https://security.example.test/report";
-      captured.openExternal.mockClear();
-      try {
-        await render(desktop);
-        const index = captured.menuItems.findIndex(
-          (item) => item.label === "workspaceHeader.help.reportVulnerability",
-        );
-        expect(index).toBeGreaterThan(0);
-        expect(captured.menuItems[index - 1]?.label).toBe("workspaceHeader.help.issueReport");
-        await captured.menuItems[index]?.onSelect?.();
-        expect(captured.openExternal).toHaveBeenCalledExactlyOnceWith(captured.zsrcUrl);
-      } finally {
-        captured.zsrcUrl = null;
-      }
-      expect(await render(desktop)).not.toContain("workspaceHeader.help.reportVulnerability");
-    }
-  });
-
-  it("冷缓存加载项不可触发外链，有效配置到达时保留原位置与文案", async () => {
-    captured.loading = true;
-    captured.openExternal.mockClear();
-    try {
-      await render(true);
-      const before = captured.menuItems.map((item) => item.label);
-      const item = captured.menuItems.find(
-        (item) => item.label === "workspaceHeader.help.reportVulnerability",
-      );
-      expect(item).toMatchObject({ disabled: true, onSelect: undefined });
-      captured.loading = false;
-      captured.zsrcUrl = "https://security.example.test/report";
-      await render(true);
-      expect(captured.menuItems.map((item) => item.label)).toEqual(before);
-      expect(
-        captured.menuItems.find((item) => item.label === "workspaceHeader.help.reportVulnerability")
-          ?.disabled,
-      ).toBe(false);
-      expect(captured.openExternal).not.toHaveBeenCalled();
-    } finally {
-      captured.loading = false;
-      captured.zsrcUrl = null;
-    }
-  });
 
   it("桌面端渲染资源管理器项，点击走 OpenResourceManager 命令", async () => {
     // 原因：Windows/Linux 没有原生菜单栏，自绘箭头菜单也已下线，问号菜单是资源管理器唯一入口。

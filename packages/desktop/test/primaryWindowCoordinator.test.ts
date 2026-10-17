@@ -120,35 +120,4 @@ describe("primaryWindowCoordinator", () => {
       initialWorkspacePath: "/Users/dev/test/my-react-app",
     });
   });
-
-  it("强制升级 gate 阻断时不会复用或创建主窗口", async () => {
-    const hiddenWindow = {
-      isDestroyed: () => false,
-      isVisible: () => false,
-      isMinimized: () => false,
-      restore: vi.fn(),
-      show: vi.fn(),
-      focus: vi.fn(),
-    };
-    windows.push(hiddenWindow);
-
-    const createWindow = vi.fn();
-    const resolveStartupWindowBootstrap = vi.fn(async () => ({
-      initialWorkspacePath: "/Users/dev/test/my-react-app",
-    }));
-    const coordinator = createPrimaryWindowCoordinator({
-      listWindows: () => windows,
-      resolveStartupWindowBootstrap,
-      createWindow,
-      canCreateWindow: () => false,
-      logger: { info: vi.fn() },
-    });
-
-    await coordinator.ensurePrimaryWindow("app-activate");
-
-    expect(hiddenWindow.show).not.toHaveBeenCalled();
-    expect(hiddenWindow.focus).not.toHaveBeenCalled();
-    expect(resolveStartupWindowBootstrap).not.toHaveBeenCalled();
-    expect(createWindow).not.toHaveBeenCalled();
-  });
 });
