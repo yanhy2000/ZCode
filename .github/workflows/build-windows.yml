@@ -134,6 +134,54 @@ jobs:
               Remove-Item -Recurse -Force
           }
 
+      # winCodeSign 压缩包里的 macOS dylib 是符号链接；NetworkService 没有创建符号链接权限，
+      # app-builder 解压会失败并重试。这里预解压并排除 darwin，Windows 签名只需要 windows-10/rcedit。
+      # app-builder 只检查 <cache>\winCodeSign\winCodeSign 目录是否存在，因此该步骤是幂等的。
+      - name: Prepare winCodeSign cache
+        if: steps.build-cache.outputs.hit != 'true'
+        shell: powershell
+        run: |
+          $cacheRoot = Join-Path $env:LOCALAPPDATA "electron-builder\Cache\winCodeSign"
+          $final = Join-Path $cacheRoot "winCodeSign"
+          if (Test-Path (Join-Path $final "windows-10\x64\signtool.exe")) {
+            Write-Host "[winCodeSign] cache already prepared"
+            exit 0
+          }
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          $mirror = if ($env:ELECTRON_BUILDER_BINARIES_MIRROR) {
+            $env:ELECTRON_BUILDER_BINARIES_MIRROR.TrimEnd("/")
+          } else {
+            "https://npmmirror.com/mirrors/electron-builder-binaries"
+          }
+          $url = "$mirror/winCodeSign-2.6.0/winCodeSign-2.6.0.7z"
+          $archive = Join-Path $cacheRoot "winCodeSign-2.6.0.7z"
+          New-Item -ItemType Directory -Force $cacheRoot | Out-Null
+          if (-not (Test-Path $archive)) {
+            Write-Host "[winCodeSign] downloading $url"
+            Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing
+          }
+          $sevenZip = Join-Path (Get-Location) "node_modules\7zip-bin\win\x64\7za.exe"
+          if (-not (Test-Path $sevenZip)) {
+            throw "7za not found: $sevenZip"
+          }
+          $temp = Join-Path $cacheRoot "extract-temp"
+          if (Test-Path $temp) {
+            Remove-Item $temp -Recurse -Force
+          }
+          & $sevenZip x $archive "-o$temp" -y "-xr!darwin"
+          if ($LASTEXITCODE -ne 0) {
+            throw "7za extraction failed: $LASTEXITCODE"
+          }
+          if (Test-Path $final) {
+            Remove-Item $final -Recurse -Force
+          }
+          Move-Item $temp $final
+          Remove-Item $archive -Force
+          if (-not (Test-Path (Join-Path $final "windows-10\x64\signtool.exe"))) {
+            throw "winCodeSign cache is incomplete: $final"
+          }
+          Write-Host "[winCodeSign] prepared $final"
+
       - name: Verify version identity
         shell: powershell
         run: |
