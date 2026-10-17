@@ -1,5 +1,3 @@
-import { resolveSelectionSideInheritedModel } from "@/lib/selectionSideInheritedModel.js";
-import { useStartPlanRecommendation } from "@/hooks/useStartPlanRecommendation.js";
 import type { SessionCreateSource } from "@zcode/shared";
 import { reportSessionCreate } from "@/lib/sessionCreateTelemetry.js";
 import { getLocalTtftObserver } from "@/v4/telemetry/localTtftObserver.js";
@@ -60,7 +58,6 @@ import type {
   ConversationShareTurnPreflightResult,
   ImportedConversationShare,
 } from "@zcode/services";
-import { useCodingPlanBillingDiscountFromService } from "@/CodingPlanBillingDiscount.js";
 import { toast } from "@/components/ui/toast.js";
 import { cn } from "@/components/lib/utils.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -81,10 +78,7 @@ import {
   type HighspeedSendContext,
   type HighspeedTurnPreparer,
 } from "@/highspeed/highspeedSend.js";
-import {
-  calculateHighspeedSavedDurationFromMetrics,
-  readHighspeedRegularTpsFromHealth,
-} from "@/highspeed/highspeedSavedTime.js";
+import { calculateHighspeedSavedDurationFromMetrics } from "@/highspeed/highspeedSavedTime.js";
 import { buildHighspeedShareNotice } from "@/highspeed/highspeedShare.js";
 import {
   claimHighspeedCardAutoShare,
@@ -118,21 +112,14 @@ import {
   type WorkflowRunSettingsChange,
 } from "@/components/workflow-timeline/workflowRunSettings.js";
 import { useWorkflowRunJournalSummaries } from "@/hooks/useWorkflowRunJournalSummaries.js";
-import { usePlanIdentitySnapshot } from "@/hooks/usePlanIdentitySnapshot.js";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { buildGenUiModelContext } from "@zcode/shared/gen-ui";
 import { useWorkspaceHomePath } from "@/hooks/useWorkspaceHomePath.js";
 import { prepareWorkspaceWithZCodeSessionService } from "@/hooks/useWorkspacePrepare.js";
-import {
-  createCodingPlanFunnelContext,
-  resolveCodingPlanEntryPlanState,
-} from "@/lib/codingPlanFunnelTelemetry.js";
 import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
 import { parseModelPickerValue } from "@/lib/zcodeSessionProjection.js";
 import { captureComposerRecentSubmission } from "@/lib/composerRecent.js";
 import { resolveProviderLabel } from "@/lib/registryProviderView.js";
-import { resolveEntitledAccountProviderAccess } from "@/lib/accountProviderAccess.js";
-import { getProviderSettingsSnapshot } from "@/lib/providerSettingsSnapshot.js";
 import {
   buildDraftCreateConfigPayload,
   useDraftConfigControl,
@@ -174,7 +161,6 @@ import { ConversationDraftSuggestedPromptsContainer } from "@/v4/ConversationDra
 import { ConversationHeader, type PaneWorkspaceBadge } from "@/v4/ConversationHeader.js";
 import { ConversationQueuePanel } from "@/v4/ConversationQueuePanel.js";
 import { projectPendingGuideQueue } from "@/v4/pendingGuideProjection.js";
-import { ConversationQuotaBanner } from "@/v4/ConversationQuotaBanner.js";
 import { PendingCommandRecoveryBanner } from "@/v4/PendingCommandRecoveryBanner.js";
 import { WorkspaceHookPendingBanner } from "@/v4/WorkspaceHookPendingBanner.js";
 import { ConversationStatusPanel } from "@/v4/ConversationStatusPanel.js";
@@ -281,8 +267,6 @@ import { useSlashCommands } from "@/hooks/useSlashCommands.js";
 import { useV4Conversation } from "@/v4/V4ConversationContext.js";
 import { useConversationProjection } from "@/v4/useConversationProjection.js";
 import { usePendingCommandRecovery } from "@/v4/usePendingCommandRecovery.js";
-import { useV4SessionQuotaBanner } from "@/v4/useV4SessionQuotaBanner.js";
-import { resolveMcpUnavailableNotice } from "@/v4/mcpUnavailableBannerNotice.js";
 import { shouldFocusTimelineAfterComposerSend } from "@/v4/promptScrollFocusPolicy.js";
 import {
   hasChatLoadingBlockingActiveWork,
@@ -290,7 +274,6 @@ import {
 } from "@/v4/chatLoadingVisibility.js";
 import type { ZCodeUiError } from "@/lib/zcodeUiError.js";
 import { isProviderNotReadyError } from "@/lib/chatPrepareError.js";
-import { useOptionalCodingPlanUpgradeDialog } from "@/settings/CodingPlanUpgradeDialogProvider.js";
 import { setPendingSettingsSectionIntent } from "@/lib/settingsNavigation.js";
 import { useOptionalTabStore } from "@/store/TabStoreProvider.js";
 import { useIsMobileTextInputViewport } from "@/lib/mobileTextInput.js";
@@ -1750,7 +1733,6 @@ export function SessionPane({
     // 回收并按最新选择事实重建，已显式选择和正式会话仍保持冻结。
     useZCodeSessionStore.getState().invalidateDraftRuntime(workspacePath, workspaceIdentity);
   }, [draftConfigRef, modelSelectionView?.revision, sessionId, workspaceIdentity, workspacePath]);
-  const recommendStartPlan = useStartPlanRecommendation(modelSelectionView);
   const createSubmissionFromComposer = useCallback(
     () => createComposerSubmissionConfig(draftConfigRef.current, modelSelectionView),
     [draftConfigRef, modelSelectionView],
@@ -1759,11 +1741,7 @@ export function SessionPane({
     () => createComposerSubmissionConfig(draftConfig, modelSelectionView) !== null,
     [draftConfig, modelSelectionView],
   );
-  const codingPlanUpgradeDialog = useOptionalCodingPlanUpgradeDialog();
   const openSettingsTab = useOptionalTabStore((state) => state.openSettingsTab);
-  const billingDiscount = useCodingPlanBillingDiscountFromService(
-    baseWorkspaceServices.codingPlanSubscriptionService,
-  );
   const promoteGroupedDraftTask = useZCodeSessionStore((state) => state.promoteGroupedDraftTask);
   // 首发 commandId 在 accepted 时已存在，也是 completion 的 message_id；不必等回复完成。
   const reportDraftCreated = useCallback(
@@ -1833,13 +1811,6 @@ export function SessionPane({
     ],
   );
   const { settings: sharedSettings } = useSettings();
-  const readPlanIdentitySnapshot = usePlanIdentitySnapshot(
-    sharedSettings?.providerFamilyDomain,
-    sharedSettings?.providerFamilyDomain
-      ? sharedSettings.providerFamilyConnectionSelections?.[sharedSettings.providerFamilyDomain]
-      : undefined,
-    baseWorkspaceServices.usageStatsService,
-  );
   const appFollowupMode = resolveAppFollowupMode(sharedSettings);
   const messageStreamShowReasoning = sharedSettings?.messageStreamShowReasoning ?? true;
   const messageStreamShowTodos = sharedSettings?.messageStreamShowTodos ?? false;
@@ -2482,20 +2453,13 @@ export function SessionPane({
       if (!sessionId || !selectionSideChatKey || !onOpenSelectionSideChat) {
         throw new Error("selection side chat is unavailable");
       }
-      const inherited = resolveSelectionSideInheritedModel(
-        snapshotRef.current?.config,
-        modelSelectionView,
-      );
-      const chosen = inherited ? await recommendStartPlan(inherited) : undefined;
-      if (chosen === null) return false;
-      const modelSelection = chosen && chosen !== inherited ? chosen : undefined;
       // 参数命令每次都是新 child；同一条文本在 ACK 未回时重试仍复用 pending，
       // 不同文本则不能与 bare `/side` 或另一条 prompt 合并。
       const pendingKey = `${selectionSideChatKey}\u0000prompt\u0000${text}`;
       const childSessionId = await createSelectionSideChat(pendingKey, async () => {
         const ack = await dispatchCommand(
           "createSelectionSideSession",
-          { firstInput: { text, ...(modelSelection ? { modelSelection } : {}) } },
+          { firstInput: { text } },
           sessionId,
           undefined,
           undefined,
@@ -2521,7 +2485,6 @@ export function SessionPane({
     [
       dispatchCommand,
       modelSelectionView,
-      recommendStartPlan,
       onOpenSelectionSideChat,
       remoteSessionId,
       selectionSideChatKey,
@@ -3119,23 +3082,7 @@ export function SessionPane({
             // 现在只在剩余发送预算内 best-effort 等待，超时/失败本轮不附加 regularTps，
             // 请求由 Service 层继续完成并缓存供下一轮（spec §3 规则 12、§9.4）。
             const regularTps = await readRegularTpsWithinSendBudget({
-              read: async () => {
-                // 节省时间的基准 TPS 来自 Coding Plan 用量健康接口，请求期鉴权只能由账号访问
-                // 上下文解析。这里按当前选中的 Coding Plan Provider 现取快照，不订阅配置面
-                // （SessionPane 不需要为此重渲染）；未连接或无权益时直接不展示节省时间。
-                const providerSettingsState = getProviderSettingsSnapshot();
-                const accountAccess =
-                  providerSettingsState.status === "ready"
-                    ? resolveEntitledAccountProviderAccess(providerSettingsState.view, provider)
-                    : null;
-                if (!accountAccess) return undefined;
-                return readHighspeedRegularTpsFromHealth({
-                  usageStatsService,
-                  preferredProviderId: provider,
-                  accountAccess: accountAccess.access,
-                  timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                });
-              },
+              read: async () => undefined,
               elapsedMs: Date.now() - sendStartedAt,
               onError: (error) =>
                 logger.warn("[highspeed] 读取普通 Decode TPS 失败，本轮不展示节省时间", {
@@ -3325,15 +3272,6 @@ export function SessionPane({
         // UI choice 只对普通输入和 /goal <新目标> 生效；/compact 直接追加暂停队列，
         // resumeGoal 等控制命令也不应被发送消息确认框截获。
         return "confirmationRequired" as const;
-      }
-      if (slashCommand === null || slashCommand.kind === "sendGoalCommand") {
-        const original = submission.modelSelection;
-        const chosen = await recommendStartPlan(original);
-        if (!chosen) return "blocked" as const;
-        if (chosen !== original) {
-          onAcceptedSelection = captureAcceptedModelSelection(chosen, original);
-          submission = { ...submission, modelSelection: chosen };
-        }
       }
       const prewarmTargetBeforeSend =
         sessionId === null ? prewarmBindingRef.current?.sessionId : null;
@@ -3616,7 +3554,6 @@ export function SessionPane({
     },
     [
       dispatchCommand,
-      recommendStartPlan,
       baseWorkspaceServices,
       captureAcceptedModelSelection,
       dispatchSlashCommand,
@@ -4739,26 +4676,8 @@ export function SessionPane({
     controlLastError && controlLastErrorKey && !dismissedErrorKeys.includes(controlLastErrorKey)
       ? toComposerUiError(snapshot?.sessionId ?? sessionId, controlLastError)
       : null;
-  // 官方 Server MCP 不可用（额度耗尽 / 无 Coding Plan）：事实来自 tool row 上的结构化标识，
-  // 与模型额度是两条独立信息通道，这里只做投影。
-  const mcpUnavailableNotice = useMemo(
-    () => resolveMcpUnavailableNotice(snapshot?.rows.window),
-    [snapshot?.rows.window],
-  );
-  const quotaBanner = useV4SessionQuotaBanner({
-    sessionId: snapshot?.sessionId ?? sessionId,
-    error: controlLastError,
-    errorKey: controlLastErrorKey,
-    phase: snapshot?.control.phase ?? null,
-    providerId: snapshot?.config.provider ?? null,
-    modelId: snapshot?.config.model ?? null,
-    usageStatsService: baseWorkspaceServices.usageStatsService,
-    mcpUnavailableNotice,
-  });
   const composerError =
-    draftModelReadinessError ??
-    sendSubmissionError ??
-    (quotaBanner.takesOverError ? null : projectedComposerError);
+    draftModelReadinessError ?? sendSubmissionError ?? projectedComposerError;
   useEffect(() => {
     setSendSubmissionError(null);
   }, [sessionId]);
@@ -4787,33 +4706,6 @@ export function SessionPane({
     setPendingSettingsSectionIntent("modelProvider");
     openSettingsTab();
   }, [openSettingsTab]);
-  const handleOpenQuotaUpgrade = useCallback(() => {
-    const providerId = quotaBanner.upgradeProviderId;
-    if (!providerId || !codingPlanUpgradeDialog) return;
-    const eventText = intl.formatMessage({
-      id: quotaBanner.upgradeActionLabelId,
-    });
-    // 横幅只建立漏斗上下文；coding_plan_upgrade_ck 仍由真实购买面板打开后统一上报。
-    codingPlanUpgradeDialog.openCodingPlanUpgrade({
-      providerId,
-      funnelContext: createCodingPlanFunnelContext({
-        providerId,
-        upgradeSource: "session_quota_alert",
-        eventRegion: "app.session",
-        eventText,
-        entryPlanState: resolveCodingPlanEntryPlanState({
-          providerId,
-          displayStatus: "purchased",
-          planLevel: "start",
-        }),
-      }),
-    });
-  }, [
-    codingPlanUpgradeDialog,
-    intl,
-    quotaBanner.upgradeActionLabelId,
-    quotaBanner.upgradeProviderId,
-  ]);
 
   const handleConfirmShareDisclosure = useCallback(async () => {
     if (!sessionId || !shareDraft || sharePublishing) return;
@@ -5191,8 +5083,7 @@ export function SessionPane({
       disabled={
         connecting ||
         draftRuntimeRebuilding ||
-        queueEditActiveForCurrentComposer ||
-        quotaBanner.state.blocksSubmit
+        queueEditActiveForCurrentComposer
       }
       isWebRemoteControl={compactForRemoteControl}
       workspacePath={workspacePath}
@@ -5207,7 +5098,6 @@ export function SessionPane({
       onRuntimeLifecycle={onRuntimeLifecycle}
       provider={provider}
       telemetryVisible={telemetryVisible && conversationTelemetryForegroundEnabled}
-      readPlanIdentitySnapshot={readPlanIdentitySnapshot}
       onSendText={handleSendText}
       highspeedCard={activeHighspeedCard}
       highspeedActivationCardId={highspeedActivationCardId}
@@ -5296,23 +5186,6 @@ export function SessionPane({
     )
   ) : (
     <>
-      {quotaBanner.state.visible &&
-      !quotaBanner.dismissed &&
-      (!projectedComposerError || quotaBanner.takesOverError || quotaBanner.state.blocksSubmit) ? (
-        <ConversationQuotaBanner
-          state={quotaBanner.state}
-          onShown={quotaBanner.markShown}
-          billingDiscountActive={billingDiscount.active}
-          billingDiscountConfig={billingDiscount.config}
-          upgradeActionLabelId={quotaBanner.upgradeActionLabelId}
-          onUpgrade={
-            quotaBanner.upgradeProviderId && codingPlanUpgradeDialog
-              ? handleOpenQuotaUpgrade
-              : undefined
-          }
-          onDismiss={quotaBanner.dismiss}
-        />
-      ) : null}
       {recoverableCommand ? (
         <PendingCommandRecoveryBanner
           entry={recoverableCommand}

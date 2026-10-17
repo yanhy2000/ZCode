@@ -12,7 +12,6 @@ import {
   getConversationTelemetryParityScenario,
   type ConversationTelemetryParityOperation,
 } from "@/lib/conversationTelemetryParityScenarioDefinitions.js";
-import { runQuotaParityStateAssertions } from "@/lib/conversationTelemetryParityStateE2E.js";
 import { shouldExposeE2EStoreBridge } from "@/lib/e2eStoreBridge.js";
 import {
   activatePromptTelemetry,
@@ -167,7 +166,6 @@ async function applyLegacyOperation(input: {
     return;
   }
   if (operation.kind === "quota.assert") {
-    input.stateAssertions.push(...runQuotaParityStateAssertions());
     return;
   }
   const scope = input.getScope(operation.scope);

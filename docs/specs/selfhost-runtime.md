@@ -122,10 +122,13 @@
 自维护构建只保留第三方 Provider 所需的本地配置、模型选择与执行链路。以下官方云控或商业功能不再提供：
 
 - 渲染器动作追踪：物理删除 UI `userActionTelemetry` 辅助函数、shared `rendererActionTrace` schema、platform/channels 类型与全部调用点；点击操作直接执行，不产生 renderer action span 或本地 TTFT 上报。
-- 闲时任务（Off-Peak task）：移除 UI 入口、任务调度、Host 协议、服务端取号与模型选择分支。
+- 闲时任务（Off-Peak task）：入口保持关闭；本阶段保留其代码与协议，后续单独清理，避免与 Coding Plan 删除混在同一次变更。
 - 请求验证（Request Verification）：物理删除 shared `verification-policy`、UI claim/error/parity/messages、CLI recovery 空壳、Coding Plan claim 头与 3007 错误映射；Provider runtime headers 的账号鉴权刷新链路保留，但不再携带 verification reason/proof。
 - 强制更新（forceUpdate / minimalVersion）：移除残留类型、Provider 方法、Main 标志与文案。
-- Coding Plan 商品目录、团队静态商品、体验套餐预览与账单折扣：移除解析、服务方法与展示组件；不读取对应 client/configs 字段。
+- Coding Plan 商业面：物理删除商品目录、团队静态商品、体验套餐、账单折扣、购买/升级弹窗、额度重置、套餐卡、套餐徽标、营销触达与 Rewards 组件；模型设置只展示自定义 Provider。
+- 官方账号派生层：删除 `account:*` 内置 Provider、账号项目 Key/Team Key 解析、账号 Provider 热同步、usage entitlement/额度查询与官方 MCP 额度。
+- CLI 与 Host 的 Coding Plan 登录、账号鉴权、Start Plan 繁忙重试、官方购买 webview/preload 与分区清理不再作为可用路径保留；已存在的 CLI/shared 协议定义在后续闲时任务清理时一并收敛。
+- 内置 Provider 配置删除全部 `account:*` 规则与 Coding Plan 模板，revision 提升以覆盖旧 active/LKG 缓存；`zai-standard-api` / `bigmodel-standard-api` 等第三方模板保留。
 - 漏洞上报（zsrc）：移除公开配置字段、帮助菜单入口与文案。
 - 官方账号、登录、套餐、余额、权益、Rewards、营销触达与官方模型准入：移除客户端入口与服务调用。
 
@@ -163,3 +166,6 @@
 18. 无可用模型横幅和错误归因不再引用请求验证业务码；`zcode.error.modelSuspiciousEmpty` 在 zh-CN / en-US 都有本地文案。
 19. 首次启动欢迎页只展示“开始使用”，仓库中不存在 `LoginApiKeyForm`、API Key 输入框或 Provider 选择器；点击后进入既有引导。
 20. 左下角入口文案为“偏好设置”；菜单包含语言、主题、界面模式、缩放和“使用统计”，不包含升级、登录、退出登录或套餐徽标。
+21. 设置 → 模型设置不显示 Z.ai / BigModel 固定套餐项、Start Plan 入口或“编程套餐 / 未连接 / 连接 Z.ai”卡片；只显示自定义 Provider 列表和“添加供应商”。
+22. 内置 Provider 配置中不存在 `account:*` 规则，`config/provider/*.json` 的 revision 高于 31；第三方 Provider 模板与模型规则保持可加载。
+23. 仓库中不存在 Coding Plan 购买/升级弹窗、额度重置、套餐卡、营销触达、Rewards 或官方账号 Provider 热同步的可用入口；闲时任务入口仍保持关闭。

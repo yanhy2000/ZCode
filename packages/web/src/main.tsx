@@ -1260,9 +1260,6 @@ export function createHomeOnlyWebRemoteControlServices(): RootServices {
     }),
     usageStatsService:
       createUnsupportedHomeOnlyService<RootServices["usageStatsService"]>("usageStatsService"),
-    codingPlanSubscriptionService: createUnsupportedHomeOnlyService<
-      RootServices["codingPlanSubscriptionService"]
-    >("codingPlanSubscriptionService"),
     clientConfigService: createEmptyHomeOnlyService<RootServices["clientConfigService"]>({
       getSnapshot: async () => ({ pluginStoreOrder: null }),
     }),

@@ -3882,6 +3882,7 @@ const enUS: Record<string, string> = {
   "sidebar.usage.plan.total": "Total",
   "sidebar.usage.plan.resetAt": "Resets {time}",
   "sidebar.usage.plan.modelUsage": "Model usage",
+  "sidebar.usage.openStats": "Usage stats",
   "sidebar.usage.plan.openStats": "Usage stats",
   "sidebar.usage.plan.refresh": "Refresh quota",
   "sidebar.usage.plan.refreshing": "Updating quota",

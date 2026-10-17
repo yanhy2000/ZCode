@@ -22,7 +22,6 @@ import {
   IModelSelectionService,
   IProviderSettingsService,
   IUsageStatsService,
-  ICodingPlanSubscriptionService,
   IClientConfigService,
   IClientScenesService,
   ISkillsService,
@@ -51,19 +50,10 @@ import {
   registerHostApiNetworkTransportForDispose,
   createOAuthService,
   createOAuthProviderLogoutHandler,
-  createAccountProviderCredentialStore,
-  createAccountProviderCredentialService,
-  createAccountProjectTokenClient,
-  getAccountRequestAuthService,
-  createAccountProviderRequestAuthService,
-  createAccountRequestAuthService,
-  resolveCurrentAccountAccess,
-  resolveAccountTeamPlanRuntimeMaterial,
   createSettingsSyncService,
   createBotsService,
   createUsageStatsService,
   createMediaPreviewService,
-  createCodingPlanSubscriptionService,
   createClientScenesService,
   createServiceLogger,
   createSubagentsService,
@@ -121,15 +111,7 @@ export function createRemoteWorkspaceServiceCollection(params: {
 }): ServiceCollection {
   assertLegacyRemoteWorkspaceRpcContract(params.connectionServices);
   const localSettingService = createSettingService();
-  let fallbackTokenClient: ReturnType<typeof createAccountProjectTokenClient> | undefined;
-  const localCredentialService = createCredentialService({
-    onDidMutate: ({ key }) => {
-      if (key.startsWith("oauth:") || key === ZCODE_JWT_TOKEN_KEY) fallbackTokenClient?.clear();
-    },
-  });
-  const localAccountProviderCredentialStore = createAccountProviderCredentialStore({
-    credentialService: localCredentialService,
-  });
+  const localCredentialService = createCredentialService();
   const hostApiNetworkTransport = createHostApiNetworkTransport(async () => {
     const settings = await localSettingService.get();
     return {
@@ -152,92 +134,7 @@ export function createRemoteWorkspaceServiceCollection(params: {
       );
     },
   });
-  const readLocalAccountProviderSettings = async () => {
-    const settings = await localSettingService.get();
-    return {
-      providerFamilyDomain: settings.providerFamilyDomain ?? null,
-      selections: settings.providerFamilyConnectionSelections ?? {},
-    };
-  };
-  const loadLocalAccountIdentity = async (family: ProviderFamilyDomain) => {
-    const providerId = family === "zai" ? ZAI_PROVIDER_ID : BIGMODEL_PROVIDER_ID;
-    return (await localOAuthCredentialRepo.loadUserProfile(providerId))?.id ?? null;
-  };
-  const localAccountRequestAuthService =
-    (params.sourceServices ? getAccountRequestAuthService(params.sourceServices) : undefined) ??
-    (() => {
-      // 旧实现仅取磁盘 Key 且 resolve 恒为空；迁移后须复用正式 owner 或在此边界换证。
-      const tokenClient = createAccountProjectTokenClient(localApiClient, localCredentialService);
-      fallbackTokenClient = tokenClient;
-      // 401 恢复必须把失败 PAT 指纹贯穿个人/团队回调，否则缓存会再次返回被拒绝的凭据。
-      const credentialResolver = createAccountProviderCredentialService({
-        async loadOAuthAccessToken(family) {
-          const providerId = family === "zai" ? ZAI_PROVIDER_ID : BIGMODEL_PROVIDER_ID;
-          return (await localOAuthCredentialRepo.loadTokenSet(providerId))?.accessToken ?? null;
-        },
-        async resolveProviderMaterial(
-          family,
-          loginToken,
-          accountIdentity,
-          rejectedProjectTokenFingerprint,
-        ) {
-          const result = await tokenClient.resolve({
-            origin:
-              family === "zai"
-                ? resolveZaiBusinessBaseUrl(process.env)
-                : resolveBigModelApiOrigin(process.env),
-            family,
-            loginToken,
-            accountId: accountIdentity,
-            rejectedProjectTokenFingerprint,
-          });
-          return result;
-        },
-      });
-      return createAccountRequestAuthService(
-        createAccountProviderRequestAuthService({
-          resolveCurrentAccountAccess: (access) =>
-            resolveCurrentAccountAccess({
-              access,
-              readSettings: readLocalAccountProviderSettings,
-              loadAccountIdentity: loadLocalAccountIdentity,
-            }),
-          loadOAuthTokenSet: (providerId) => localOAuthCredentialRepo.loadTokenSet(providerId),
-          async loadIndividualPlanMaterial(providerId, family, rejectedProjectTokenFingerprint) {
-            const oauthProviderId = family === "zai" ? ZAI_PROVIDER_ID : BIGMODEL_PROVIDER_ID;
-            const accountIdentity = (
-              await localOAuthCredentialRepo.loadUserProfile(oauthProviderId)
-            )?.id;
-            if (!accountIdentity) return null;
-            return credentialResolver.loadCodingPlanMaterial({
-              providerId,
-              family,
-              accountIdentity,
-              rejectedProjectTokenFingerprint,
-            });
-          },
-          resolveTeamPlanMaterial: async (access, rejectedProjectTokenFingerprint) => {
-            const accountIdentity = await loadLocalAccountIdentity(access.family);
-            if (!accountIdentity) return null;
-            return resolveAccountTeamPlanRuntimeMaterial({
-              apiClient: localApiClient,
-              credentialService: localCredentialService,
-              accountIdentity,
-              tokenClient,
-              access,
-              rejectedProjectTokenFingerprint,
-            });
-          },
-        }),
-      );
-    })();
-  const localCodingPlanSubscriptionService = createCodingPlanSubscriptionService({
-    apiClient: localApiClient,
-    credentialService: localCredentialService,
-  });
-  handleOAuthProviderLogout = createOAuthProviderLogoutHandler({
-    accountProviderCredentialStore: localAccountProviderCredentialStore,
-  });
+  handleOAuthProviderLogout = createOAuthProviderLogoutHandler();
   const conversationShareClient = new ConversationShareHttpClient({
     // 远端 workspace 的分享也必须使用真实 API；本地 Mock 仅用于单测，不生成无法跨进程访问的链接。
     apiClient: localApiClient,
@@ -413,13 +310,9 @@ export function createRemoteWorkspaceServiceCollection(params: {
     .register(
       IUsageStatsService,
       createUsageStatsService({
-        apiClient: localApiClient,
-        accountRequestAuthService: localAccountRequestAuthService,
-        credentialService: localCredentialService,
         zcodeAgentService: params.connectionServices.zcodeAgentService,
       }),
     )
-    .register(ICodingPlanSubscriptionService, localCodingPlanSubscriptionService)
     .register(IClientConfigService, params.clientConfigService)
     .register(IClientScenesService, createClientScenesService({ apiClient: localApiClient }))
     // 远端 workspace 的项目级 skills/plugins/commands 位于 SSH/Docker 文件系统。
@@ -480,10 +373,6 @@ export function createServerRemoteWorkspaceServiceCollection(params: {
     .register(IModelSelectionService, params.connectionServices.modelSelectionService)
     .register(IProviderSettingsService, params.connectionServices.providerSettingsService)
     .register(IUsageStatsService, params.connectionServices.usageStatsService)
-    .register(
-      ICodingPlanSubscriptionService,
-      params.connectionServices.codingPlanSubscriptionService,
-    )
     .register(IClientConfigService, params.clientConfigService)
     .register(IClientScenesService, params.connectionServices.clientScenesService)
     .register(ISkillsService, params.connectionServices.skillsService)

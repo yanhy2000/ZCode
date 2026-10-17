@@ -426,8 +426,8 @@ export const TID_SUBAGENT_BUILT_IN_MODEL_TRIGGER = "subagent-built-in-model-trig
 export const TID_SETTINGS_USAGE_TAB = "settings-usage-tab";
 /** 侧边栏头像菜单剩余额度子菜单入口 */
 export const TID_SIDEBAR_USAGE_REMAINING_TRIGGER = "sidebar-usage-remaining-trigger";
-/** 侧边栏头像菜单使用统计入口 */
-export const TID_SIDEBAR_CODING_PLAN_USAGE_BUTTON = "sidebar-coding-plan-usage-button";
+/** 侧边栏偏好菜单使用统计入口 */
+export const TID_SIDEBAR_USAGE_BUTTON = "sidebar-usage-button";
 
 // Model Provider Settings
 /** 模型供应商顶部添加按钮 */

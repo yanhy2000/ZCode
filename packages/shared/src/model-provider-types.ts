@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- 模型供应商 schema、迁移和运行时投影 helper 需要共享同一套类型边界，暂时集中在单文件避免契约分散。 */
 export const BUILTIN_PROVIDER_TEMPLATE_IDS = {
-  zai: "zai-api",
-  bigmodel: "bigmodel-api",
+  zai: "zai-standard-api",
+  bigmodel: "bigmodel-standard-api",
 } as const;
 
 export const BUILTIN_MODEL_PROVIDER_IDS = {

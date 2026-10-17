@@ -8,12 +8,19 @@ import {
   type ZCodeOffPeakTask,
   type ModelSelection,
 } from "@zcode/shared";
-import type {
-  ICodingPlanSubscriptionService,
-  IOffPeakTaskService,
-  OffPeakClientConfig,
-} from "@zcode/services";
+import type { IOffPeakTaskService } from "@zcode/services";
 import { logger } from "@/logger.js";
+
+interface OffPeakClientConfig {
+  enabled?: boolean;
+  codingPlanActive?: boolean;
+  modelSelectionView: {
+    providers: Array<{
+      providerId: string;
+      models: Array<{ modelId: string }>;
+    }>;
+  };
+}
 
 // 闲时任务管理 store（与 automationManagementStore 独立）：走 IOffPeakTaskService RPC。
 // 位次/状态靠列表轮询刷新（host offPeakTaskSync 写 sqlite，renderer 只读快照）。
@@ -65,10 +72,7 @@ interface OffPeakTaskState {
   newTaskBannerDismissed: boolean;
   /** 模板卡→创建表单的预填草稿（跨视图导航一次性携带）。 */
   pendingCreateDraft: OffPeakCreateDraft | null;
-  initialize(deps: {
-    offPeakTaskService: IOffPeakTaskService;
-    codingPlanSubscriptionService: ICodingPlanSubscriptionService;
-  }): Promise<void>;
+  initialize(deps: { offPeakTaskService: IOffPeakTaskService }): Promise<void>;
   refresh(service: IOffPeakTaskService): Promise<void>;
   refreshCodingPlanSupport(service: IOffPeakTaskService, freshnessKey?: string): Promise<void>;
   refreshTakeNumberAvailability(service: IOffPeakTaskService): Promise<void>;
@@ -164,27 +168,23 @@ export const useOffPeakTaskStore = create<OffPeakTaskState>((set, get) => ({
   newTaskBannerDismissed: false,
   pendingCreateDraft: null,
 
-  async initialize({ offPeakTaskService, codingPlanSubscriptionService }) {
+  async initialize({ offPeakTaskService }) {
     // Bug 原因：New Task 与 Automations 在页面切换时可能短暂重叠挂载，两个 initialize
     // 会并发请求同一个 Team Plan availability，后到的全局 429 可能覆盖先到的成功结果。
     // Store 级 single-flight 保证所有入口共用一次完整准入检查。
     if (initializeInFlight) return initializeInFlight;
     set({ loading: true, error: null });
     // 初始化和后续通知共用资格检查；灰度先就绪，资格与额度不能由两条异步链分别写入。
-    initializationReady = Promise.all([
-      codingPlanSubscriptionService
-        .getOffPeakClientConfig({ forceRefresh: true })
-        .catch((error) => {
-          logger.warn("[off-peak] gray config load failed", toErrorMessage(error));
-          return null;
-        }),
-      offPeakTaskService.list().catch((error) => {
+    initializationReady = offPeakTaskService
+      .list()
+      .catch((error) => {
         logger.warn("[off-peak] list failed", toErrorMessage(error));
         return [] as ZCodeOffPeakTask[];
-      }),
-    ]).then(([grayConfig, tasks]) => {
-      set({ grayConfig, tasks });
-    });
+      })
+      .then((tasks) => {
+        // 自维护版不再读取官方闲时灰度配置。
+        set({ grayConfig: null, tasks });
+      });
     const run = get().refreshCodingPlanSupport(offPeakTaskService);
     initializeInFlight = run;
     try {

@@ -17,7 +17,6 @@ import {
 import type { ICredentialService } from "../credential/credential.js";
 import type { ISettingService } from "../setting/setting.js";
 import type { ProviderRuntime } from "./providerRuntime.js";
-import type { AccountProviderService } from "@zcode/provider";
 import type { IProviderProvisioningTargetService } from "./providerProvisioning.js";
 import {
   PROVIDER_PROVISIONING_OAUTH_CREDENTIAL_KEYS,
@@ -31,7 +30,6 @@ const OAUTH_CREDENTIAL_KEYS = new Set<string>(PROVIDER_PROVISIONING_OAUTH_CREDEN
 export interface ProviderProvisioningTargetOptions {
   readonly providerRuntime: ProviderRuntime;
   readonly personalRepository: PersonalProviderConfigRepository;
-  readonly accountProviderSource: AccountProviderService;
   readonly credentialService: ICredentialService;
   readonly settingService: ISettingService;
   readonly personalConfigFilePath: string;
@@ -78,8 +76,6 @@ export function createProviderProvisioningTarget(
         const before = await captureBeforeState(envelope, options);
         const personalUpdate = parsePersonalConfig(envelope);
         const applied: AppliedProvisioningState = {
-          settings: false,
-          settingsExpected: envelope.accountSettings,
           credentials: [],
           personalConfig: false,
           personalConfigExpected: personalUpdate,
@@ -87,14 +83,6 @@ export function createProviderProvisioningTarget(
 
         let errorCode: ProviderProvisioningErrorCode = "target-write-failed";
         try {
-          // 先登记再写入：底层原子写即使在替换完成后才抛错，也必须进入回滚集合。
-          applied.settings = true;
-          await options.settingService.update({
-            providerFamilyDomain: envelope.accountSettings.providerFamilyDomain ?? undefined,
-            providerFamilyConnectionSelections:
-              envelope.accountSettings.providerFamilyConnectionSelections,
-          });
-
           const incomingCredentials = new Map(
             oauthCredentials.map((credential) => [credential.key, credential.value]),
           );
@@ -115,7 +103,6 @@ export function createProviderProvisioningTarget(
           });
 
           errorCode = "target-refresh-failed";
-          await options.accountProviderSource.refresh("provider-provisioning");
           const snapshot =
             await options.providerRuntime.registryService.refresh("provider-provisioning");
           // 失效默认只是新会话偏好；把它当同步硬条件会让正常 SSH 被旧模型/档位阻断。
@@ -164,13 +151,10 @@ export function createProviderProvisioningTarget(
 
 interface BeforeState {
   readonly personal: ProviderConfigLayerUpdate;
-  readonly settings: Awaited<ReturnType<ISettingService["get"]>>;
   readonly credentials: ReadonlyMap<string, string | null>;
 }
 
 interface AppliedProvisioningState {
-  settings: boolean;
-  settingsExpected: ProviderProvisioningEnvelope["accountSettings"];
   credentials: Array<{ key: string; value: string | null }>;
   personalConfig: boolean;
   personalConfigExpected: ProviderConfigLayerUpdate;
@@ -185,10 +169,10 @@ async function captureBeforeState(
   envelope: ProviderProvisioningEnvelope,
   options: ProviderProvisioningTargetOptions,
 ): Promise<BeforeState> {
-  const [personal, settings] = await Promise.all([
-    readProvisionablePersonalConfig(options.personalRepository, options.personalConfigFilePath),
-    options.settingService.get(),
-  ]);
+  const personal = await readProvisionablePersonalConfig(
+    options.personalRepository,
+    options.personalConfigFilePath,
+  );
   const credentials = new Map<string, string | null>();
   const credentialKeys = new Set<string>([
     ...OAUTH_CREDENTIAL_KEYS,
@@ -203,7 +187,6 @@ async function captureBeforeState(
   }
   return {
     personal,
-    settings,
     credentials,
   };
 }
@@ -248,29 +231,10 @@ async function rollback(
       errors.push(error);
     }
   }
-  if (applied.settings) {
-    try {
-      const current = await options.settingService.get();
-      const previousSettings = toProvisioningAccountSettings(before.settings);
-      if (sameAccountSettings(current, previousSettings)) {
-        // 写入失败发生在落盘前，目标已经处于回滚前的状态。
-      } else if (!sameAccountSettings(current, applied.settingsExpected)) {
-        errors.push(new Error("Account Settings 在同步期间被其它操作修改，跳过回滚"));
-      } else {
-        await options.settingService.update({
-          providerFamilyDomain: before.settings.providerFamilyDomain,
-          providerFamilyConnectionSelections: before.settings.providerFamilyConnectionSelections,
-        });
-      }
-    } catch (error) {
-      errors.push(error);
-    }
-  }
   if (errors.length > 0) {
     return new Error(errors.map(formatError).join("；"));
   }
   try {
-    await options.accountProviderSource.refresh("provider-provisioning-rollback");
     await options.providerRuntime.registryService.refresh("provider-provisioning-rollback");
   } catch (error) {
     return error instanceof Error ? error : new Error(String(error));
@@ -286,22 +250,6 @@ function samePersonalConfig(
     JSON.stringify(encodeProviderConfigFile(left)) ===
     JSON.stringify(encodeProviderConfigFile(right))
   );
-}
-
-function toProvisioningAccountSettings(
-  settings: Awaited<ReturnType<ISettingService["get"]>>,
-): ProviderProvisioningEnvelope["accountSettings"] {
-  return {
-    providerFamilyDomain: settings.providerFamilyDomain ?? null,
-    providerFamilyConnectionSelections: settings.providerFamilyConnectionSelections ?? {},
-  };
-}
-
-function sameAccountSettings(
-  current: Awaited<ReturnType<ISettingService["get"]>>,
-  expected: ProviderProvisioningEnvelope["accountSettings"],
-): boolean {
-  return JSON.stringify(toProvisioningAccountSettings(current)) === JSON.stringify(expected);
 }
 
 function validateCredentialEntries(envelope: ProviderProvisioningEnvelope): void {

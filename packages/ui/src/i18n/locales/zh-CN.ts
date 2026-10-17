@@ -3659,6 +3659,7 @@ const zhCN: Record<string, string> = {
   "sidebar.usage.plan.total": "总量",
   "sidebar.usage.plan.resetAt": "{time} 重置",
   "sidebar.usage.plan.modelUsage": "模型用量",
+  "sidebar.usage.openStats": "使用统计",
   "sidebar.usage.plan.openStats": "使用统计",
   "sidebar.usage.plan.refresh": "刷新额度",
   "sidebar.usage.plan.refreshing": "正在更新额度",

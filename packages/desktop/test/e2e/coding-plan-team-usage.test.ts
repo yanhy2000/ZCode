@@ -8,7 +8,7 @@ import {
   TID_LOGIN_TRIGGER,
   TID_CHAT_CONTEXT_USAGE_TRIGGER,
   TID_SETTINGS_USAGE_TAB,
-  TID_SIDEBAR_CODING_PLAN_USAGE_BUTTON,
+  TID_SIDEBAR_USAGE_BUTTON,
   TID_SETTINGS_PAGE,
   TID_SETTINGS_SECTION_NAV,
   TID_TASK_SETTINGS_BUTTON,
@@ -894,7 +894,7 @@ async function openSidebarUsageStats() {
     timeout: 10000,
     timeoutMsg: "没有找到头像菜单入口",
   });
-  await clickVisibleTestIdByDom(TID_SIDEBAR_CODING_PLAN_USAGE_BUTTON, {
+  await clickVisibleTestIdByDom(TID_SIDEBAR_USAGE_BUTTON, {
     timeout: 10000,
     timeoutMsg: "没有找到头像菜单里的使用统计入口",
   });

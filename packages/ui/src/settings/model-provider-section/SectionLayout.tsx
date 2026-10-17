@@ -9,7 +9,7 @@ interface ModelProviderSectionLayoutProps {
   description: string;
   refreshLabel: string;
   loadingLabel: string;
-  presetLoading: boolean;
+  presetLoading?: boolean;
   customLoading: boolean;
   onRefresh: () => void;
   addProviderLabel: string;
@@ -23,10 +23,10 @@ interface ModelProviderSectionLayoutProps {
 }
 
 export function shouldShowModelProviderRefreshLoading(params: {
-  presetLoading: boolean;
+  presetLoading?: boolean;
   customLoading: boolean;
 }): boolean {
-  return params.presetLoading || params.customLoading;
+  return Boolean(params.presetLoading) || params.customLoading;
 }
 
 export function ModelProviderSectionLayout({
@@ -76,7 +76,6 @@ export function ModelProviderSectionLayout({
             <ModelProviderSectionNavigation
               navigationGroups={navigationGroups}
               selectedNodeKey={selectedNodeKey}
-              presetLoading={presetLoading}
               customLoading={customLoading}
               onSelectNavItem={onSelectNavItem}
               onReorderProviderIds={onReorderProviderIds}
