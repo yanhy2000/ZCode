@@ -18,10 +18,13 @@ on:
         options:
           - preview
           - production
-  pull_request:
-    branches: [main]
+  # 仓库已关闭 Pull Requests；只在 main 的代码变更和手动触发时打包。
   push:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - ".github/**"
 
 concurrency:
   group: build-windows-${{ github.workflow }}-${{ github.ref }}

@@ -8,7 +8,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
   check:
@@ -45,51 +44,46 @@ jobs:
             echo "new=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Open or update sync issue
+      - name: Notify Feishu (optional)
         if: steps.upstream.outputs.new == 'true'
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
           LATEST: ${{ steps.upstream.outputs.latest }}
           BASE: ${{ steps.upstream.outputs.base }}
         run: |
-          set -euo pipefail
-          title="[upstream-sync] new upstream tag $LATEST"
-          gh label create upstream-sync \
-            --color 0E8A16 \
-            --description "Upstream release tracking" 2>/dev/null || true
-          existing="$(gh issue list --label upstream-sync --state open --json number,title \
-            | jq -r --arg t "$title" '.[] | select(.title == $t) | .number' \
-            | head -n1)"
-          body="$(cat <<EOF
-          上游出现新版本：$LATEST（当前基线 v$BASE）。
-
-          检查命令：
-            git fetch upstream --tags
-            git log --oneline v$BASE..$LATEST
-            git diff --stat v$BASE..$LATEST
-
-          处理步骤：
-          1. 创建 sync/upstream-$LATEST 分支。
-          2. 合并 $LATEST，解决冲突。
-          3. 重跑 CI 和 Windows 打包。
-          4. PR 到 dev，验证后合并到 main。
-
-          注意：不要使用 GitHub 的 “Sync fork” 覆盖自维护提交。
-          EOF
-          )"
-          if [ -n "$existing" ]; then
-            gh issue comment "$existing" --body "$body"
-          else
-            gh issue create --title "$title" --label upstream-sync --body "$body"
+          if [ -z "${FEISHU_WEBHOOK:-}" ]; then
+            echo "FEISHU_WEBHOOK not configured; skipping Feishu notification"
+            exit 0
           fi
+          curl -fsS -X POST -H "Content-Type: application/json" \
+            -d "{\"msg_type\":\"text\",\"content\":{\"text\":\"ZCode 上游出现新 tag $LATEST（当前基线 v$BASE），请同步。\"}}" \
+            "$FEISHU_WEBHOOK" || echo "Feishu notification failed"
+
+      - name: Report new upstream tag
+        if: steps.upstream.outputs.new == 'true'
+        shell: bash
+        env:
+          LATEST: ${{ steps.upstream.outputs.latest }}
+          BASE: ${{ steps.upstream.outputs.base }}
+        run: |
           {
-            echo "### Upstream sync"
+            echo "### Upstream sync required"
             echo ""
             echo "- Current base: v$BASE"
             echo "- Latest upstream tag: $LATEST"
-            echo "- Action: review the sync issue"
+            echo ""
+            echo "Commands:"
+            echo '```bash'
+            echo "git fetch upstream --tags"
+            echo "git log --oneline v$BASE..$LATEST"
+            echo "git diff --stat v$BASE..$LATEST"
+            echo '```'
+            echo ""
+            echo "Do not use GitHub's Sync fork; it would overwrite self-host commits."
           } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::Upstream tag $LATEST is newer than base v$BASE. Sync manually."
+          exit 1
 
       - name: Report up-to-date
         if: steps.upstream.outputs.new == 'false'
