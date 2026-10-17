@@ -6,12 +6,12 @@ export interface DraftSuggestedPromptLocalizedText {
 }
 
 export const DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS = "NAVIGATE:AUTOMATIONS" as const;
-export const DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS_OFFPEAK =
-  "NAVIGATE:AUTOMATIONS:OFFPEAK" as const;
 
-export type DraftSuggestedPromptAction =
-  | typeof DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS
-  | typeof DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS_OFFPEAK;
+// 自维护构建已移除闲时任务，但云端 draft-suggestion 仍可能下发旧动作。
+// 这类推荐项必须在映射前丢弃：如果只移除 action 解析，点击后会退化成把“创建闲时任务”预填进输入框。
+const LEGACY_OFFPEAK_NAVIGATION_ACTION = "NAVIGATE:AUTOMATIONS:OFFPEAK";
+
+export type DraftSuggestedPromptAction = typeof DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS;
 
 export interface DraftSuggestedPromptItem {
   id: string;
@@ -37,22 +37,19 @@ export function parseDraftSuggestedPromptActions(
 
   const actions: DraftSuggestedPromptAction[] = [];
   for (const token of onFinish.split(",")) {
-    switch (token.trim()) {
-      case DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS:
-        if (!actions.includes(DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS)) {
-          actions.push(DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS);
-        }
-        break;
-      case DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS_OFFPEAK:
-        if (!actions.includes(DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS_OFFPEAK)) {
-          actions.push(DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS_OFFPEAK);
-        }
-        break;
-      default:
-        break;
+    if (token.trim() === DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS) {
+      if (!actions.includes(DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS)) {
+        actions.push(DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS);
+      }
     }
   }
   return actions;
+}
+
+function hasLegacyOffPeakNavigation(promptItem: ClientSceneItem): boolean {
+  return (promptItem.on_finish ?? "")
+    .split(",")
+    .some((token) => token.trim() === LEGACY_OFFPEAK_NAVIGATION_ACTION);
 }
 
 function findDefaultItem(
@@ -77,26 +74,28 @@ export function mapClientScenesToDraftSuggestedPromptItems(
   const promptItems = scene?.options.prompts?.items;
   if (!scene || !promptItems) return [];
 
-  return promptItems.map((item) => {
-    const defaultItem = findDefaultItem(scene, item);
-    const actions = parseDraftSuggestedPromptActions(item.on_finish);
-    const stableId = defaultItem?.contents.en?.trim() || defaultItem?.contents.cn?.trim();
-    return {
-      id: item.id,
-      ...(item.img?.trim() ? { iconName: item.img.trim() } : {}),
-      label: item.labels,
-      prompt: item.contents,
-      ...(actions.length > 0 ? { actions } : {}),
-      ...(defaultItem && stableId
-        ? {
-            plugin: {
-              stableId,
-              label: defaultItem.labels,
-            },
-          }
-        : {}),
-    };
-  });
+  return promptItems
+    .filter((item) => !hasLegacyOffPeakNavigation(item))
+    .map((item) => {
+      const defaultItem = findDefaultItem(scene, item);
+      const actions = parseDraftSuggestedPromptActions(item.on_finish);
+      const stableId = defaultItem?.contents.en?.trim() || defaultItem?.contents.cn?.trim();
+      return {
+        id: item.id,
+        ...(item.img?.trim() ? { iconName: item.img.trim() } : {}),
+        label: item.labels,
+        prompt: item.contents,
+        ...(actions.length > 0 ? { actions } : {}),
+        ...(defaultItem && stableId
+          ? {
+              plugin: {
+                stableId,
+                label: defaultItem.labels,
+              },
+            }
+          : {}),
+      };
+    });
 }
 
 export function resolveDraftSuggestedPromptText(

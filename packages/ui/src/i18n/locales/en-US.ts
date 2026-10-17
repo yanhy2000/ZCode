@@ -6228,7 +6228,7 @@ const enUS: Record<string, string> = {
   "chat.error.collapseDetails": "Hide details",
   "chat.error.feedback": "Report issue",
   "chat.error.feedbackOpened": "Feedback opened with the error context attached",
-  "chat.error.noAvailableModel": "No model available. Upgrade or set a custom model.",
+  "chat.error.noAvailableModel": "No model available. Set a custom model.",
   "chat.error.sendFailed": "Failed to send. Try again later.",
   "chat.error.modelSettings": "Model settings",
   "chat.error.setModels": "Set",
@@ -6873,8 +6873,7 @@ const enUS: Record<string, string> = {
   "settings.automations.betaBadge": "Beta",
   "automations.noWorkspace": "Open a workspace to manage its scheduled tasks.",
   "automations.workspace.label": "Project",
-  "automations.description":
-    "Schedule recurring tasks or queue background work that runs during idle time.",
+  "automations.description": "Create scheduled tasks that run automatically on your schedule.",
   "automations.description.populated": "Run tasks on a schedule or whenever you need them.",
   "automations.refresh": "Refresh",
   "automations.refreshing": "Refreshing…",

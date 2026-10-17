@@ -122,7 +122,7 @@ describe("draft suggested prompt Client Scenes mapping", () => {
     const navigationPrompt = createItem({
       id: "open-automations",
       on_finish:
-        " UNKNOWN:ACTION, NAVIGATE:AUTOMATIONS, NAVIGATE:AUTOMATIONS:OFFPEAK, NAVIGATE:AUTOMATIONS , NAVIGATE:AUTOMATIONS:OFFPEAK ",
+        " UNKNOWN:ACTION, NAVIGATE:AUTOMATIONS, NAVIGATE:AUTOMATIONS , NAVIGATE:AUTOMATIONS ",
     });
 
     expect(mapClientScenesToDraftSuggestedPromptItems([createScene([navigationPrompt])])).toEqual([
@@ -130,9 +130,18 @@ describe("draft suggested prompt Client Scenes mapping", () => {
         id: "open-automations",
         label: navigationPrompt.labels,
         prompt: navigationPrompt.contents,
-        actions: ["NAVIGATE:AUTOMATIONS", "NAVIGATE:AUTOMATIONS:OFFPEAK"],
+        actions: ["NAVIGATE:AUTOMATIONS"],
       },
     ]);
+  });
+
+  it("drops legacy off-peak suggestions even when they also declare Automations", () => {
+    const offPeakPrompt = createItem({
+      id: "open-offpeak",
+      on_finish: "NAVIGATE:AUTOMATIONS, NAVIGATE:AUTOMATIONS:OFFPEAK",
+    });
+
+    expect(mapClientScenesToDraftSuggestedPromptItems([createScene([offPeakPrompt])])).toEqual([]);
   });
 
   it("keeps a prompt without Plugin when defaults cannot be resolved", () => {

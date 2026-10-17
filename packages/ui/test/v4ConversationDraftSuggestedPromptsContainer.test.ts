@@ -408,6 +408,8 @@ describe("ConversationDraftSuggestedPromptsContainer", () => {
     fireEvent.click(await screen.findByRole("button", { name: automationsLabel }));
 
     expect(onOpenAutomations).toHaveBeenCalledOnce();
+    // 闲时任务已移除：即使云端仍下发 OFFPEAK 动作，也不能渲染该快捷建议。
+    expect(screen.queryByRole("button", { name: offPeakLabel })).toBeNull();
     expect(
       useZCodeSessionStore.getState().getWorkspaceState(workspacePath).composerTextInsertRequest,
     ).toBeNull();
@@ -458,26 +460,6 @@ describe("ConversationDraftSuggestedPromptsContainer", () => {
           ?.text,
       ).toBe(plainPrompt),
     );
-  });
-
-  it("opens the Idle-time Automations tab without prefilling or navigating twice", async () => {
-    const workspacePath = "/tmp/suggested-prompt-offpeak";
-    const onOpenAutomations = vi.fn();
-    render(
-      createElement(ConversationDraftSuggestedPromptsContainer, {
-        workspacePath,
-        onOpenAutomations,
-      }),
-    );
-
-    fireEvent.click(await screen.findByRole("button", { name: offPeakLabel }));
-
-    expect(onOpenAutomations).toHaveBeenCalledOnce();
-    expect(onOpenAutomations).toHaveBeenCalledWith("idle");
-    expect(
-      useZCodeSessionStore.getState().getWorkspaceState(workspacePath).composerTextInsertRequest,
-    ).toBeNull();
-    expect(getPluginReferenceCatalog).not.toHaveBeenCalled();
   });
 
   it("replaces the workspace draft with the plain commit prompt without sending", async () => {

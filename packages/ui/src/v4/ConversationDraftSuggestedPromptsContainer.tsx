@@ -10,7 +10,15 @@ import {
   unregisterRecommendedPromptPane,
 } from "@/v4/featureSuggestedPromptRotation.js";
 /* oxlint-disable eslint(max-lines) -- 推荐 Prompt 同时收口 latest-wins、取消、可信解析、操作反馈和 Composer 收尾，拆分会打散这条状态机。 */
-import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID } from "@zcode/shared";
 import { cn } from "@/components/lib/utils.js";
 import { toast } from "@/components/ui/toast.js";
@@ -18,7 +26,6 @@ import { usePlatform } from "@/hooks/usePlatform.js";
 import { useWorkspaceServicesResolution } from "@/hooks/useWorkspaceServices.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
-import type { AutomationsNavigationTab } from "@/lib/taskNavigationHistory.js";
 import { reportPromptTemplateClick } from "@/lib/promptTemplateTelemetry.js";
 import { invalidateDeferredDraftSessionForSkillChange } from "@/lib/zcodeDraftSkillInvalidation.js";
 import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
@@ -28,10 +35,7 @@ import {
 } from "@/v4/ConversationDraftSuggestedPrompts.js";
 import { buildDraftSuggestedPluginMention } from "@/v4/draftSuggestedPromptPrefill.js";
 import { resolveDraftSuggestedPromptText } from "@/v4/draftSuggestedPromptItems.js";
-import {
-  DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS,
-  DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS_OFFPEAK,
-} from "@/v4/draftSuggestedPromptItems.js";
+import { DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS } from "@/v4/draftSuggestedPromptItems.js";
 import {
   resolveDraftSuggestedPluginFlowStage,
   resolveSuggestedPluginClientBoundary,
@@ -51,7 +55,7 @@ const INSTALL_OPERATION_TIMEOUT_MS = 10_000;
 
 type Props = ConversationDraftSuggestedPromptsContainerProps & {
   proactive?: boolean;
-  onOpenAutomations?: (automationTab?: AutomationsNavigationTab) => void;
+  onOpenAutomations?: () => void;
 };
 
 let draftSuggestedPluginOperationSequence = 0;
@@ -139,11 +143,8 @@ export function ConversationDraftSuggestedPromptsContainer({
     () =>
       (proactive ? recommendedItems : allItems).filter(
         (item) =>
-          !item.actions?.some(
-            (action) =>
-              action === DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS ||
-              action === DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS_OFFPEAK,
-          ) || Boolean(onOpenAutomations),
+          !item.actions?.includes(DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS) ||
+          Boolean(onOpenAutomations),
       ),
     [allItems, onOpenAutomations, proactive, recommendedItems],
   );
@@ -533,13 +534,6 @@ export function ConversationDraftSuggestedPromptsContainer({
           templateName,
           templatePrompt: prompt,
         });
-      }
-      if (
-        onOpenAutomations &&
-        item.actions?.includes(DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS_OFFPEAK)
-      ) {
-        onOpenAutomations("idle");
-        return;
       }
       if (
         onOpenAutomations &&

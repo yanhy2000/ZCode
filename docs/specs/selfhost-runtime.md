@@ -146,3 +146,6 @@
 10. Windows 产物只包含正式身份：安装包名 `ZCode-<version>-win-x64.exe`，解包目录存在 `ZCode.exe`，不存在 `ZCode Preview.exe`，`app.asar` 内 `zcodeProductFlavor` 为 `production`。
 11. `pnpm typecheck`、`pnpm lint`、相关单测通过。
 12. desktop preload 纳入 `pnpm typecheck`；preload 不得引用未导入的符号，已移除能力（如 ARMS 补丁）残留调用不得阻断启动状态 IPC 注册。
+13. 无可用模型横幅只保留“配置”入口，不展示 Coding Plan“升级”按钮；提示文案不再要求开通编程套餐。
+14. 草稿页推荐项包含 `NAVIGATE:AUTOMATIONS:OFFPEAK` 时直接丢弃，不展示“闲时任务”快捷建议；本地主动推荐池不包含闲时任务推荐语。
+15. 自动化页空态描述只说明定时任务，不再提“排队在闲时算力空闲时后台执行”。

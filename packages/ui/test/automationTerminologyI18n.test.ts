@@ -22,9 +22,9 @@ describe("Automations terminology", () => {
 
   it("keeps the empty-state description focused on task creation modes", () => {
     expect(enUS["automations.description"]).toBe(
-      "Schedule recurring tasks or queue background work that runs during idle time.",
+      "Create scheduled tasks that run automatically on your schedule.",
     );
-    expect(zhCN["automations.description"]).toBe("创建定时任务，或排队在闲时算力空闲时后台执行。");
+    expect(zhCN["automations.description"]).toBe("创建定时任务，按计划自动运行。");
   });
 
   it("keeps idle-time permissions on the main conversation vocabulary", () => {
