@@ -43,6 +43,27 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
+      - name: Configure package mirrors
+        shell: pwsh
+        env:
+          # 自建 runner 默认走国内镜像；需要官方源或代理时在仓库 Variables 里覆盖。
+          NPM_REGISTRY: ${{ vars.NPM_REGISTRY || 'https://registry.npmmirror.com' }}
+          RUNNER_HTTP_PROXY: ${{ vars.HTTP_PROXY }}
+        run: |
+          "NPM_CONFIG_REGISTRY=$env:NPM_REGISTRY" >> $env:GITHUB_ENV
+          if ($env:RUNNER_HTTP_PROXY -and $env:RUNNER_HTTP_PROXY.Trim()) {
+            "HTTP_PROXY=$env:RUNNER_HTTP_PROXY" >> $env:GITHUB_ENV
+            "HTTPS_PROXY=$env:RUNNER_HTTP_PROXY" >> $env:GITHUB_ENV
+          }
+          Write-Host "[registry] $env:NPM_REGISTRY"
+
+      - name: Print toolchain
+        shell: pwsh
+        run: |
+          node -v
+          pnpm -v
+          pnpm config get registry
+
       # GitHub Actions 缓存没有可配置的 TTL：条目按 key 命中，未被访问约 7 天后由 GitHub 回收。
       # self-hosted runner 上的 pnpm store 和 Electron 下载缓存本身会留在本机，连续编译会直接复用；
       # 因此这里不做「3 小时过期」的伪 TTL，避免每 3 小时重建缓存反而增加磁盘写入。
@@ -57,8 +78,11 @@ jobs:
             electron-${{ runner.os }}-
 
       - name: Install dependencies
-        # --prefer-offline 优先使用 self-hosted 机器上已有的 pnpm store，缺包才联网。
-        run: pnpm install --frozen-lockfile --prefer-offline
+        # 冷启动的 hoisted 安装可能较慢；超时失败比无限挂起更容易定位。
+        timeout-minutes: 30
+        # --prefer-offline 优先使用 self-hosted 机器上已有的 pnpm store；
+        # --reporter=append-only 让 runner 控制台逐行输出，便于确认卡在下载还是链接。
+        run: pnpm install --frozen-lockfile --prefer-offline --network-concurrency=8 --reporter=append-only
 
       # self-hosted 本地构建缓存：同一 commit 在 3 小时内重复触发时直接复用 dist，
       # 避免反复跑 tsup/vite/electron-builder。目录放在 workspace 外，checkout 不会清掉。
