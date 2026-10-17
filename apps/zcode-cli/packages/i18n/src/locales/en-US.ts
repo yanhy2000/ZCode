@@ -45,7 +45,7 @@ Options:
   --resume <sessionId>  Resume a persisted session by sessionId (sess_...)
   --target <text>  Run or set the session goal in headless mode
   --target-replace Replace any existing session goal set by --target
-  --workflow-mode <mode>  Dynamic workflows for prompts/TUI: disabled, onDemand, or alwaysOn (default: disabled)
+  --workflow-mode <mode>  Workflows for prompts/TUI: disabled, onDemand, or alwaysOn (default: disabled)
   -c, --continue        Resume the latest session for the current directory
   --json           Print machine-readable JSON where supported
   --no-browser     Print the OAuth URL without opening a browser
@@ -58,7 +58,7 @@ Slash Commands:
   /logout               Remove the shared Z.AI login credentials
   /compact [instructions]  Compact the current conversation
   /expert [status|resume|stop|<task>]  Run or manage the expert workflow
-  /dwf [list|cancel|resume]  List, cancel, or resume dynamic workflow runs
+  /dwf [list|cancel|resume]  List, cancel, or resume workflow runs
   /fork [latest|checkpointId]  Fork a new session from a workspace checkpoint
   /mcp [list|status|connect|disconnect]  Show or manage MCP servers
   /mode [mode]          Show or switch permission mode: build, edit, plan, yolo, or guarded

@@ -2435,12 +2435,12 @@ const zhCN: Record<string, string> = {
   "settings.askUserQuestionAutoResolution": "提问自动继续",
   "settings.askUserQuestionAutoResolutionDescription":
     "开启后，Agent 提问 5 分钟未回答会自动继续；关闭后，当前和后续提问会一直等待你的回答。",
-  "settings.dynamicWorkflow": "动态工作流",
+  "settings.dynamicWorkflow": "工作流",
   "settings.dynamicWorkflowDescription":
     "让模型用脚本编排大量子代理并行工作，处理复杂任务、交付专业结果。",
   "settings.dynamicWorkflow.option.disabled": "关闭",
   "settings.dynamicWorkflow.option.disabled.description":
-    "禁用动态工作流。不能创建新的工作流，自动化页也不再显示「工作流」；对话历史中已有的工作流仍可正常查看。",
+    "禁用工作流。不能创建新的工作流，自动化页也不再显示「工作流」；对话历史中已有的工作流仍可正常查看。",
   "settings.dynamicWorkflow.option.onDemand": "通过命令启用",
   "settings.dynamicWorkflow.option.onDemand.description":
     "只有输入 /workflow 命令才会运行新的工作流。",
@@ -2448,7 +2448,7 @@ const zhCN: Record<string, string> = {
   "settings.dynamicWorkflow.option.alwaysOn.description":
     "除了 /workflow 命令，模型也会根据你的意图主动运行工作流。",
   "settings.dynamicWorkflow.defaultTag": "默认",
-  "settings.dynamicWorkflow.saveError": "保存动态工作流设置失败",
+  "settings.dynamicWorkflow.saveError": "保存工作流设置失败",
   "settings.modelIoFullRetention": "完整保留模型 I/O",
   "settings.modelIoFullRetentionDescription":
     "保留完整的模型请求和响应，不自动压缩、限制大小或删除旧记录。",

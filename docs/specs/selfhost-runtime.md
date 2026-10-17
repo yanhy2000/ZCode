@@ -83,6 +83,14 @@
 - 自维护构建固定关闭：不创建 `zcodeBuiltinRemote`，不访问官方 release 拉取内置 Provider 配置。
 - 通过显式开关控制，后续替换为自有第三方 Provider 逻辑时再删除。
 
+## 工作流
+
+- 自维护构建固定提供 `alwaysOn`，不再请求官方 `/api/v1/client/configs` 的 `dynamicWorkflow` 灰度。
+- 服务端无法远程关闭或降级该功能；设置里的“关闭 / 通过命令启用 / 始终开启”选择仍然生效，默认跟随 `alwaysOn`。
+- 未打包 dev 的合法 `ZCODE_DYNAMIC_WORKFLOW_MODE` 覆盖保留，仅供本地调试；打包态不接受外部环境改写。
+- 本地 Host 与 SSH/WSL/Docker 远程 Host 使用同一结论，不再依赖云端配置。
+- 用户可见名称统一为“工作流 / Workflows”；内部协议字段和代码标识仍使用 `dynamicWorkflow`。
+
 ## 强制更新
 
 - 启动流程不请求官方 `minimalVersion`，不展示官方强更弹窗。
@@ -103,5 +111,6 @@
 5. 设置页不再出现预览版更新、自动下载安装两个开关。
 6. 打包应用不初始化 ARMS，不发送产品事件。
 7. 内置 Provider 云刷新关闭，第三方 Provider 配置仍可正常加载。
-8. Windows 产物只包含正式身份：安装包名 `ZCode-<version>-win-x64.exe`，解包目录存在 `ZCode.exe`，不存在 `ZCode Preview.exe`，`app.asar` 内 `zcodeProductFlavor` 为 `production`。
-9. `pnpm typecheck`、`pnpm lint`、相关单测通过。
+8. 工作流入口默认可见；读取该能力时不请求 `/api/v1/client/configs`，设置中的模式切换仍然生效。
+9. Windows 产物只包含正式身份：安装包名 `ZCode-<version>-win-x64.exe`，解包目录存在 `ZCode.exe`，不存在 `ZCode Preview.exe`，`app.asar` 内 `zcodeProductFlavor` 为 `production`。
+10. `pnpm typecheck`、`pnpm lint`、相关单测通过。

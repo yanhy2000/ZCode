@@ -45,7 +45,7 @@ export const zhCN: ZCodeCopy = {
   --resume <sessionId>  按 sessionId 恢复持久化 session（sess_...）
   --target <text>  在 headless 模式运行或设置 session goal
   --target-replace 替换 --target 已存在的 goal
-  --workflow-mode <mode>  prompt/TUI 的动态工作流：disabled、onDemand 或 alwaysOn（默认 disabled）
+  --workflow-mode <mode>  prompt/TUI 的工作流：disabled、onDemand 或 alwaysOn（默认 disabled）
   -c, --continue        恢复当前目录最近的 session
   --json           在支持的命令中输出机器可读 JSON
   --no-browser     不打开浏览器，只打印 OAuth URL
@@ -58,7 +58,7 @@ Slash Commands:
   /logout               删除共享的 Z.AI 登录凭据
   /compact [instructions]  压缩当前对话
   /expert [status|resume|stop|<task>]  运行或管理 expert workflow
-  /dwf [list|cancel|resume]  列出、取消或恢复 dynamic workflow run
+  /dwf [list|cancel|resume]  列出、取消或恢复工作流运行
   /fork [latest|checkpointId]  从 workspace checkpoint 派生新 session
   /mcp [list|status|connect|disconnect]  查看或管理 MCP servers
   /mode [mode]          查看或切换权限模式：build、edit、plan、yolo 或 guarded

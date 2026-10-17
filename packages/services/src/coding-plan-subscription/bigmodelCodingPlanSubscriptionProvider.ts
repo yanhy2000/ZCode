@@ -79,7 +79,6 @@ import {
   createDynamicWorkflowClientConfig,
   normalizeDynamicWorkflowMode,
   resolveDynamicWorkflowClientConfig,
-  DEFAULT_DYNAMIC_WORKFLOW_MODE,
   ZCODE_DYNAMIC_WORKFLOW_MODE_ENV,
 } from "@zcode/shared";
 import type { ICredentialService } from "../credential/credential.js";
@@ -428,37 +427,19 @@ export class BigModelCodingPlanSubscriptionProvider {
   }
 
   /**
-   * 动态工作流灰度快照：与闲时任务同走
-   * client/configs，零新增请求。三条边界：
-   *   1. 本地覆盖（ZCODE_DYNAMIC_WORKFLOW_MODE）在任何网络动作之前裁决，命中即返回——
-   *      preview 构建和开发者手测因此不受 1h 快照与首次 Host 竞态影响；
-   *   2. forceRefresh 与 Off-Peak 同义，清掉快照后重拉（灰度翻转最长 1h 不可见）；
-   *   3. 请求失败 fail-closed：返回 default（disabled）并 warn，绝不把异常抛给调用方——
-   *      调用方在 session create/client 就绪路径上，灰度读失败不能阻断普通聊天。
+   * 动态工作流：自维护构建固定提供 alwaysOn，不再读取云端灰度。
+   *   1. 不访问 `/client/configs`，服务端无法关闭或降级该功能；
+   *   2. 未打包 dev 的合法 `ZCODE_DYNAMIC_WORKFLOW_MODE` 覆盖仍然生效，便于本地调试；
+   *   3. 用户设置（关闭 / 通过命令启用 / 始终开启）由 service 层的
+   *      applyDynamicWorkflowUserMode 套在「提供」上，这里只决定是否提供。
    */
-  async getDynamicWorkflowClientConfig(options?: {
+  async getDynamicWorkflowClientConfig(_options?: {
     forceRefresh?: boolean;
   }): Promise<DynamicWorkflowClientConfig> {
-    // 覆盖合法即短路：判据（normalize）与快照构造（resolve）都留在 shared，这里不复述取值域。
     if (normalizeDynamicWorkflowMode(process.env[ZCODE_DYNAMIC_WORKFLOW_MODE_ENV])) {
       return resolveDynamicWorkflowClientConfig({ remote: undefined, env: process.env });
     }
-    if (options?.forceRefresh) {
-      this.clientConfigSnapshot = null;
-      this.clientConfigSnapshotExpiresAt = 0;
-    }
-    try {
-      const payload = await this.getClientConfigs();
-      return resolveDynamicWorkflowClientConfig({
-        remote: payload.data?.configs?.dynamicWorkflow,
-        env: process.env,
-      });
-    } catch (error) {
-      log.warn(undefined, "动态工作流灰度配置读取失败，按关闭处理", {
-        errorMessage: error instanceof Error ? error.message : String(error),
-      });
-      return createDynamicWorkflowClientConfig(DEFAULT_DYNAMIC_WORKFLOW_MODE, "default");
-    }
+    return createDynamicWorkflowClientConfig("alwaysOn", "default");
   }
 
   async getModelContextBudgetStrategy(): Promise<ZCodeModelContextBudgetStrategy> {
