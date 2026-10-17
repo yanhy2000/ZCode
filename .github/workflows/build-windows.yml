@@ -19,16 +19,11 @@ env:
   ZCODE_ENV: production
   ZCODE_PREVIEW_IDENTITY: "0"
   ZCODE_SKIP_REMOTE_ASSETS: "1"
-  # 自建 runner 默认走国内镜像；需要官方源时在仓库 Variables 里覆盖。
-  ELECTRON_MIRROR: ${{ vars.ELECTRON_MIRROR || 'https://npmmirror.com/mirrors/electron/' }}
-  ELECTRON_BUILDER_BINARIES_MIRROR: ${{ vars.ELECTRON_BUILDER_BINARIES_MIRROR || 'https://npmmirror.com/mirrors/electron-builder-binaries/' }}
 
 jobs:
   build:
     name: Windows x64 installer
-    # 家里物理机上的自建 runner；必须是 Windows x64（本流程使用 pwsh 和 Windows 打包链）。
-    # 如果以后注册了多个 self-hosted runner，改成 runs-on: [self-hosted, Windows, X64] 以免调度到 Linux。
-    runs-on: self-hosted
+    runs-on: windows-latest
     timeout-minutes: 120
     steps:
       - name: Checkout
@@ -44,32 +39,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
 
-      - name: Configure package mirrors
-        shell: powershell
-        env:
-          # 自建 runner 默认走国内镜像；需要官方源或代理时在仓库 Variables 里覆盖。
-          NPM_REGISTRY: ${{ vars.NPM_REGISTRY || 'https://registry.npmmirror.com' }}
-          RUNNER_HTTP_PROXY: ${{ vars.HTTP_PROXY }}
-        run: |
-          "NPM_CONFIG_REGISTRY=$env:NPM_REGISTRY" >> $env:GITHUB_ENV
-          if ($env:RUNNER_HTTP_PROXY -and $env:RUNNER_HTTP_PROXY.Trim()) {
-            "HTTP_PROXY=$env:RUNNER_HTTP_PROXY" >> $env:GITHUB_ENV
-            "HTTPS_PROXY=$env:RUNNER_HTTP_PROXY" >> $env:GITHUB_ENV
-          }
-          Write-Host "[registry] $env:NPM_REGISTRY"
-
-      - name: Print toolchain
-        shell: powershell
-        run: |
-          node -v
-          pnpm -v
-          pnpm config get registry
-
-      # GitHub Actions 缓存没有可配置的 TTL：条目按 key 命中，未被访问约 7 天后由 GitHub 回收。
-      # self-hosted runner 上的 pnpm store 和 Electron 下载缓存本身会留在本机，连续编译会直接复用；
-      # 因此这里不做「3 小时过期」的伪 TTL，避免每 3 小时重建缓存反而增加磁盘写入。
       - name: Cache Electron binaries
         uses: actions/cache@v4
         with:
@@ -81,115 +51,16 @@ jobs:
             electron-${{ runner.os }}-
 
       - name: Install dependencies
-        # 冷启动的 hoisted 安装可能较慢；超时失败比无限挂起更容易定位。
-        timeout-minutes: 30
-        # --prefer-offline 优先使用 self-hosted 机器上已有的 pnpm store；
-        # --reporter=append-only 让 runner 控制台逐行输出，便于确认卡在下载还是链接。
-        run: pnpm install --frozen-lockfile --prefer-offline --network-concurrency=8 --reporter=append-only
-
-      - name: Verify Electron runtime
-        shell: powershell
-        run: |
-          $pathFile = "node_modules\electron\path.txt"
-          if (-not (Test-Path $pathFile)) {
-            throw "electron postinstall did not complete: $pathFile is missing"
-          }
-          $electronExe = (Get-Content $pathFile -Raw).Trim()
-          $electronPath = Join-Path "node_modules\electron\dist" $electronExe
-          if (-not (Test-Path $electronPath)) {
-            throw "electron binary is missing: $electronPath"
-          }
-          Write-Host "[electron] $electronPath"
-
-      # self-hosted 本地构建缓存：同一 commit 在 3 小时内重复触发时直接复用 dist，
-      # 避免反复跑 tsup/vite/electron-builder。目录放在 workspace 外，checkout 不会清掉。
-      - name: Restore 3-hour build cache
-        id: build-cache
-        shell: powershell
-        run: |
-          $cacheRoot = Join-Path "${{ runner.workspace }}" "..\zcode-build-cache"
-          $cacheDir = Join-Path $cacheRoot "${{ github.sha }}"
-          $stamp = Join-Path $cacheDir ".built-at"
-          $dist = Join-Path $cacheDir "dist"
-          $hit = $false
-          if (Test-Path $stamp -PathType Leaf) {
-            $ageHours = ((Get-Date) - (Get-Item $stamp).LastWriteTime).TotalHours
-            if ($ageHours -lt 3 -and (Test-Path (Join-Path $dist "win-unpacked\ZCode.exe"))) {
-              if (Test-Path "packages\desktop\dist") {
-                Remove-Item "packages\desktop\dist" -Recurse -Force
-              }
-              Copy-Item $dist "packages\desktop\dist" -Recurse -Force
-              $hit = $true
-              Write-Host "[build-cache] hit sha=${{ github.sha }} ageHours=$([math]::Round($ageHours, 2))"
-            }
-          }
-          if (-not $hit) {
-            Write-Host "[build-cache] miss sha=${{ github.sha }}"
-          }
-          "hit=$($hit.ToString().ToLower())" >> $env:GITHUB_OUTPUT
-          # 只保留最近 3 天的本地缓存，避免自建 runner 磁盘无限增长。
-          if (Test-Path $cacheRoot) {
-            Get-ChildItem $cacheRoot -Directory |
-              Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-3) } |
-              Remove-Item -Recurse -Force
-          }
-
-      # winCodeSign 压缩包里的 macOS dylib 是符号链接；NetworkService 没有创建符号链接权限，
-      # app-builder 解压会失败并重试。这里预解压并排除 darwin，Windows 签名只需要 windows-10/rcedit。
-      # app-builder 只检查 <cache>\winCodeSign\winCodeSign 目录是否存在，因此该步骤是幂等的。
-      - name: Prepare winCodeSign cache
-        if: steps.build-cache.outputs.hit != 'true'
-        shell: powershell
-        run: |
-          $cacheRoot = Join-Path $env:LOCALAPPDATA "electron-builder\Cache\winCodeSign"
-          $final = Join-Path $cacheRoot "winCodeSign"
-          if (Test-Path (Join-Path $final "windows-10\x64\signtool.exe")) {
-            Write-Host "[winCodeSign] cache already prepared"
-            exit 0
-          }
-          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          $mirror = if ($env:ELECTRON_BUILDER_BINARIES_MIRROR) {
-            $env:ELECTRON_BUILDER_BINARIES_MIRROR.TrimEnd("/")
-          } else {
-            "https://npmmirror.com/mirrors/electron-builder-binaries"
-          }
-          $url = "$mirror/winCodeSign-2.6.0/winCodeSign-2.6.0.7z"
-          $archive = Join-Path $cacheRoot "winCodeSign-2.6.0.7z"
-          New-Item -ItemType Directory -Force $cacheRoot | Out-Null
-          if (-not (Test-Path $archive)) {
-            Write-Host "[winCodeSign] downloading $url"
-            Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing
-          }
-          $sevenZip = Join-Path (Get-Location) "node_modules\7zip-bin\win\x64\7za.exe"
-          if (-not (Test-Path $sevenZip)) {
-            throw "7za not found: $sevenZip"
-          }
-          $temp = Join-Path $cacheRoot "extract-temp"
-          if (Test-Path $temp) {
-            Remove-Item $temp -Recurse -Force
-          }
-          & $sevenZip x $archive "-o$temp" -y "-xr!darwin"
-          if ($LASTEXITCODE -ne 0) {
-            throw "7za extraction failed: $LASTEXITCODE"
-          }
-          if (Test-Path $final) {
-            Remove-Item $final -Recurse -Force
-          }
-          Move-Item $temp $final
-          Remove-Item $archive -Force
-          if (-not (Test-Path (Join-Path $final "windows-10\x64\signtool.exe"))) {
-            throw "winCodeSign cache is incomplete: $final"
-          }
-          Write-Host "[winCodeSign] prepared $final"
+        run: pnpm install --frozen-lockfile
 
       - name: Verify version identity
-        shell: powershell
+        shell: pwsh
         run: |
           node -e "const root=require('./package.json').version; const cli=require('./apps/zcode-cli/package.json').version; if (!/^\d+\.\d+\.\d+\+\d+\.\d+\.\d+$/.test(root)) throw new Error('root version does not match private+official: ' + root); if (cli !== root) throw new Error('cli version=' + cli + ' != root ' + root); console.log('[version] root=' + root + ' cli=' + cli)"
           node -e "const { getBuildMetadata } = require('./packages/desktop/scripts/build-metadata.mjs'); const root=require('./package.json').version; const version = getBuildMetadata().appVersion; if (version !== root) throw new Error('desktop build version=' + version + ' != root ' + root); console.log('[version] desktop=' + version)"
 
       - name: Normalize Gen UI vendor line endings
-        shell: powershell
+        shell: pwsh
         run: |
           $vendor = "apps/zcode-cli/packages/visualize-plugin/skills/visualize/assets/vendor"
           Get-ChildItem -Path $vendor -File -Recurse | ForEach-Object {
@@ -204,11 +75,10 @@ jobs:
           }
 
       - name: Build Windows x64 installer
-        if: steps.build-cache.outputs.hit != 'true'
         run: pnpm --filter @zcode/desktop bundle -- --os win --arch x64
 
       - name: Verify production identity
-        shell: powershell
+        shell: pwsh
         run: |
           $appDir = "packages/desktop/dist/win-unpacked"
           $appExe = Join-Path $appDir "ZCode.exe"
@@ -222,7 +92,7 @@ jobs:
           node -e "const asar=require('@electron/asar'); const pkg=JSON.parse(asar.extractFile('packages/desktop/dist/win-unpacked/resources/app.asar','package.json').toString()); const root=require('./package.json').version; if (pkg.zcodeProductFlavor !== 'production') throw new Error('flavor=' + pkg.zcodeProductFlavor); if (pkg.version !== root) throw new Error('app version=' + pkg.version + ' != root ' + root); console.log('[identity] product=ZCode flavor=' + pkg.zcodeProductFlavor + ' version=' + pkg.version)"
 
       - name: Verify installer version and checksum
-        shell: powershell
+        shell: pwsh
         run: |
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $expectedName = "ZCode-$version-win-x64.exe"
@@ -234,29 +104,10 @@ jobs:
             throw "Unexpected installer name: $($installer.Name); expected $expectedName"
           }
           Write-Host "[artifact] $($installer.FullName)"
-          $lines = @(Get-ChildItem -Path packages/desktop/dist -Filter *.exe | ForEach-Object {
+          Get-ChildItem -Path packages/desktop/dist -Filter *.exe | ForEach-Object {
             "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name
-          })
-          [System.IO.File]::WriteAllLines(
-            "packages/desktop/dist/SHA256SUMS.txt",
-            $lines,
-            [System.Text.UTF8Encoding]::new($false)
-          )
+          } | Set-Content -Path packages/desktop/dist/SHA256SUMS.txt -Encoding utf8
           Get-Content packages/desktop/dist/SHA256SUMS.txt
-
-      - name: Save 3-hour build cache
-        if: success() && steps.build-cache.outputs.hit != 'true'
-        shell: powershell
-        run: |
-          $cacheDir = Join-Path (Join-Path "${{ runner.workspace }}" "..\zcode-build-cache") "${{ github.sha }}"
-          $dist = Join-Path $cacheDir "dist"
-          if (Test-Path $dist) {
-            Remove-Item $dist -Recurse -Force
-          }
-          New-Item -ItemType Directory -Force $cacheDir | Out-Null
-          Copy-Item "packages\desktop\dist" $dist -Recurse -Force
-          Set-Content (Join-Path $cacheDir ".built-at") (Get-Date -Format o)
-          Write-Host "[build-cache] saved sha=${{ github.sha }}"
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4

@@ -18,9 +18,7 @@ supportedArchitectures:
     - current
     - glibc
 allowBuilds:
-  # ssh2 的可选 CPU 探测依赖；没有 C++ 工具链时会 node-gyp 失败并让安装停在交互提示。
-  # 关掉后 ssh2 使用纯 JS fallback，不影响 SSH 功能。
-  cpu-features: false
+  cpu-features: true
   edgedriver: true
   electron: true
   electron-winstaller: true
