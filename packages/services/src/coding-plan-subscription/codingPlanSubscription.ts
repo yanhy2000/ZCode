@@ -61,6 +61,7 @@ export interface OffPeakClientConfig {
 
 export interface ICodingPlanSubscriptionService {
   batchPreview(request?: CodingPlanBatchPreviewRequest): Promise<CodingPlanBatchPreviewResponse>;
+  /** 兼容接口：自维护构建固定返回空目录，不读取官方商品配置。 */
   getStaticProducts(): Promise<CodingPlanStaticProductsConfig>;
   getStaticTeamProducts(): Promise<CodingPlanStaticTeamProductsConfig>;
   getStartPlanPreview(): Promise<StartPlanPreviewConfig | null>;
@@ -77,6 +78,7 @@ export interface ICodingPlanSubscriptionService {
   }): Promise<DynamicWorkflowClientConfig>;
   /** 兼容接口：固定返回 preflight-v1，不读取远端配置或缓存。 */
   getModelContextBudgetStrategy(): Promise<ZCodeModelContextBudgetStrategy>;
+  /** 兼容接口：自维护构建不展示官方账单折扣。 */
   getBillingDiscount(): Promise<CodingPlanBillingDiscountConfig | undefined>;
   getRequestVerificationConfig(): Promise<RequestVerificationConfig | null>;
   productInfo(request: CodingPlanProductInfoRequest): Promise<CodingPlanProductInfo>;

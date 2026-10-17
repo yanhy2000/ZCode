@@ -634,8 +634,8 @@ export function AutomationsSection({
     (offPeakGrayConfig?.codingPlanActive === undefined &&
       !offPeakStoreLoading &&
       !isCurrentOffPeakCodingPlanSupported(offPeakCodingPlanSupport, sharedSettings));
-  const offPeakVisible =
-    !currentWorkspaceIsRemote && (offPeakGrayEnabled || offPeakTasks.length > 0);
+  // 自维护构建移除闲时任务入口；存量任务不再展示，也不影响普通自动化。
+  const offPeakVisible = false;
   const hasAnyTasks = automations.length > 0 || offPeakTasks.length > 0;
   const visibleTabs = resolveVisibleAutomationTabs({
     hasAnyTasks,

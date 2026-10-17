@@ -1,5 +1,4 @@
 import {
-  readRequestVerificationConfig,
   requestVerificationClaimHeaders,
   isRequestVerificationMessage,
   type RequestVerificationClientConfig,
@@ -25,7 +24,6 @@ import type {
   CodingPlanProductInfo,
   CodingPlanProductInfoRequest,
   CodingPlanBillingDiscountConfig,
-  CodingPlanStaticTeamProduct,
   CodingPlanStaticProductsConfig,
   CodingPlanStaticTeamProductsConfig,
   CodingPlanSubscriptionProviderId,
@@ -93,7 +91,6 @@ const BIGMODEL_CODING_PLAN_API_PREFIX = "/api/biz";
 const ZAI_CODING_PLAN_PAY_API_PREFIX = "/api/pay";
 const ZCODE_CLIENT_CONFIG_API_PREFIX = "/api/v1/client/configs";
 const REQUEST_TIMEOUT_MS = 15_000;
-const CLIENT_CONFIG_CACHE_TTL_MS = 60 * 60 * 1000;
 const CODING_PLAN_ZAI_OVERSEAS_PAYMENT_REQUIRED = "coding_plan_zai_overseas_payment_required";
 const ZCODE_JWT_TOKEN_KEY = "zcodejwttoken";
 const log = createServiceLogger("codingPlanSubscription");
@@ -157,10 +154,6 @@ interface ZCodeClientConfigEnvelope {
   data?: {
     configs?:
       | (RequestVerificationClientConfig & {
-          codingPlanBillingDiscount?: CodingPlanBillingDiscountConfig;
-          codingPlanStaticProducts?: CodingPlanStaticProductsConfig;
-          codingPlanStaticTeamProducts?: CodingPlanStaticTeamProductsConfig;
-          startPlanPreview?: StartPlanPreviewConfig | null;
           // 闲时任务灰度（服务端）：内层字段服务端为 snake_case，与外层 camelCase 混排。
           offPeak?: {
             enable_offpeak_task?: boolean;
@@ -212,9 +205,6 @@ export class BigModelCodingPlanSubscriptionProvider {
   protected readonly apiClient: ApiClient;
   protected readonly credentialService: Pick<ICredentialService, "load">;
   private readonly resolveOffPeakModelSelectionView?: () => Promise<ModelSelectionView>;
-  private clientConfigSnapshot: ZCodeClientConfigEnvelope | null = null;
-  private clientConfigSnapshotExpiresAt = 0;
-  private clientConfigRequest: Promise<ZCodeClientConfigEnvelope> | null = null;
 
   constructor(options: BigModelCodingPlanSubscriptionProviderOptions) {
     this.apiClient = options.apiClient;
@@ -257,18 +247,16 @@ export class BigModelCodingPlanSubscriptionProvider {
   }
 
   async getStaticProducts(): Promise<CodingPlanStaticProductsConfig> {
-    const payload = await this.getClientConfigs();
-    return unwrapClientConfigProducts(payload);
+    // 自维护构建不再读取官方商品目录；空目录让 UI 回退到本地实时 pricing。
+    return {};
   }
 
   async getStaticTeamProducts(): Promise<CodingPlanStaticTeamProductsConfig> {
-    const payload = await this.getClientConfigs();
-    return unwrapClientConfigTeamProducts(payload);
+    return {};
   }
 
   async getStartPlanPreview(): Promise<StartPlanPreviewConfig | null> {
-    const payload = await this.getClientConfigs();
-    return unwrapClientConfigStartPlanPreview(payload);
+    return null;
   }
 
   async getManualClaimPlanPreviews(): Promise<ManualClaimPlanPreviewSnapshot> {
@@ -405,23 +393,14 @@ export class BigModelCodingPlanSubscriptionProvider {
   }
 
   /**
-   * 闲时任务灰度配置：复用 client/configs 通道零新增请求。
-   * forceRefresh 供"打开 Automations 入口补拉"（1h 快照否则灰度翻转最长 1h 不可见）。
+   * 闲时任务：自维护构建不提供，不读取 `/client/configs`。
    */
-  async getOffPeakClientConfig(options?: { forceRefresh?: boolean }): Promise<OffPeakClientConfig> {
-    if (process.env["ZCODE_OFFPEAK_MOCK"] === "1") {
-      // mock 已经明确替代远端曝光配置，不能再先等待 /client/configs：
-      // 离线 Desktop E2E 会一直停在 Loading，根本无法进入闲时执行链。
-      const modelSelectionView = await this.resolveOffPeakModelSelectionView?.();
-      return resolveOffPeakClientConfig({}, process.env, modelSelectionView);
-    }
-    if (options?.forceRefresh) {
-      this.clientConfigSnapshot = null;
-      this.clientConfigSnapshotExpiresAt = 0;
-    }
-    const payload = await this.getClientConfigs();
+  async getOffPeakClientConfig(_options?: { forceRefresh?: boolean }): Promise<OffPeakClientConfig> {
     const modelSelectionView = await this.resolveOffPeakModelSelectionView?.();
-    return resolveOffPeakClientConfig(payload, process.env, modelSelectionView);
+    return {
+      enabled: false,
+      modelSelectionView: modelSelectionView ?? EMPTY_OFF_PEAK_MODEL_SELECTION_VIEW,
+    };
   }
 
   /**
@@ -446,12 +425,13 @@ export class BigModelCodingPlanSubscriptionProvider {
   }
 
   async getBillingDiscount(): Promise<CodingPlanBillingDiscountConfig | undefined> {
-    const payload = await this.getClientConfigs();
-    return unwrapClientConfigBillingDiscount(payload);
+    // 自维护构建不展示官方账单折扣。
+    return undefined;
   }
 
   async getRequestVerificationConfig(): Promise<RequestVerificationConfig | null> {
-    return readRequestVerificationConfig((await this.getClientConfigs()).data?.configs);
+    // 自维护构建不启用官方请求验证。
+    return null;
   }
 
   async preview(request: CodingPlanPreviewRequest): Promise<CodingPlanPreviewResponse> {
@@ -770,39 +750,6 @@ export class BigModelCodingPlanSubscriptionProvider {
       },
     );
     return unwrapEnvelope(payload, endpoint.providerId);
-  }
-
-  private async getClientConfigs(): Promise<ZCodeClientConfigEnvelope> {
-    if (this.clientConfigSnapshot && this.clientConfigSnapshotExpiresAt > Date.now()) {
-      return this.clientConfigSnapshot;
-    }
-    if (this.clientConfigRequest) {
-      return await this.clientConfigRequest;
-    }
-
-    // client/configs 和其他 ZCode 平台接口必须共享运行时 endpoint；
-    // E2E/测试环境会通过 ZCODE_BASE_URL 指向本地 mock，硬编码线上域名会让套餐状态不可控。
-    const url = resolveCodingPlanClientConfigUrl(process.env);
-    url.searchParams.set("app_version", ZCODE_VERSION);
-    url.searchParams.set("platform", resolveClientPlatformKey());
-    // StartPlanCard 和套餐列表都来自同一个 client/configs。
-    // 同屏分别读取 preview/products 时必须合并请求，避免未登录设置页重复打远端配置。
-    this.clientConfigRequest = readCodingPlanApiJson<ZCodeClientConfigEnvelope>(
-      this.apiClient,
-      url,
-      {
-        method: "GET",
-        timeoutMs: REQUEST_TIMEOUT_MS,
-      },
-    );
-    try {
-      const payload = await this.clientConfigRequest;
-      this.clientConfigSnapshot = payload;
-      this.clientConfigSnapshotExpiresAt = Date.now() + CLIENT_CONFIG_CACHE_TTL_MS;
-      return payload;
-    } finally {
-      this.clientConfigRequest = null;
-    }
   }
 
   private async resolveEndpointConfig(
@@ -1272,150 +1219,6 @@ function unwrapEnvelope<T>(
     throw new Error(payload.msg?.trim() || `${providerName} response missing data`);
   }
   return payload.data;
-}
-
-/** 旧服务端目录仍使用 builtin 键；只在配置边界转换，不能扩散成运行时身份别名。 */
-function normalizeStaticProductProviderIds<T>(
-  products: Partial<Record<CodingPlanSubscriptionProviderId, T[]>>,
-): Partial<Record<CodingPlanSubscriptionProviderId, T[]>> {
-  const normalized = { ...products };
-  const raw = products as Record<string, T[]>;
-  for (const [legacyId, currentId] of [
-    ["builtin:bigmodel-coding-plan", BUILTIN_MODEL_PROVIDER_IDS.bigmodelIndividualCodingPlan],
-    ["builtin:zai-coding-plan", BUILTIN_MODEL_PROVIDER_IDS.zaiIndividualCodingPlan],
-  ] as const) {
-    // 显式空数组表示关闭该目录；只有旧键不存在时才使用新键，不能用长度判断回退。
-    if (Object.hasOwn(raw, legacyId)) normalized[currentId] = raw[legacyId];
-    delete (normalized as Record<string, T[]>)[legacyId];
-  }
-  return normalized;
-}
-
-function unwrapClientConfigProducts(
-  payload: ZCodeClientConfigEnvelope,
-): CodingPlanStaticProductsConfig {
-  if (payload.code !== undefined && payload.code !== 0) {
-    throw new Error(payload.msg?.trim() || "ZCode client config request failed");
-  }
-  const products = payload.data?.configs?.codingPlanStaticProducts;
-  if (!products || typeof products !== "object") {
-    throw new Error("ZCode client config missing Coding Plan products");
-  }
-  return normalizeStaticProductProviderIds(products);
-}
-
-function unwrapClientConfigTeamProducts(
-  payload: ZCodeClientConfigEnvelope,
-): CodingPlanStaticTeamProductsConfig {
-  if (payload.code !== undefined && payload.code !== 0) {
-    throw new Error(payload.msg?.trim() || "ZCode client config request failed");
-  }
-  const products: unknown = payload.data?.configs?.codingPlanStaticTeamProducts;
-  if (!products || typeof products !== "object") {
-    throw new Error("ZCode client config missing Coding Plan team products");
-  }
-  for (const providerProducts of Object.values(products)) {
-    if (
-      !Array.isArray(providerProducts) ||
-      !providerProducts.every(isCodingPlanStaticTeamProduct)
-    ) {
-      // 远端配置没有运行时类型保障；无效静态目录必须整体降级为读取失败，
-      // 让 UI 继续使用实时 pricing 恢复团队订阅身份，不能在合并阶段抛错。
-      throw new Error("ZCode client config has invalid Coding Plan team products");
-    }
-  }
-  return normalizeStaticProductProviderIds(products as CodingPlanStaticTeamProductsConfig);
-}
-
-function isCodingPlanStaticTeamProduct(value: unknown): value is CodingPlanStaticTeamProduct {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const product = value as Record<string, unknown>;
-  return (
-    isNonEmptyString(product.productId) &&
-    isNonEmptyString(product.productName) &&
-    (product.tier === "LITE" || product.tier === "PRO" || product.tier === "MAX") &&
-    (product.subscribeMode === "CONTINUOUS" || product.subscribeMode === "ONE_TIME") &&
-    (product.subscribePeriod === "MONTHLY" ||
-      product.subscribePeriod === "QUARTERLY" ||
-      product.subscribePeriod === "YEARLY") &&
-    isNonEmptyString(product.purchaseMethodName) &&
-    product.priceCurrency === "CNY" &&
-    isValidCardCopyConfig(product.equity) &&
-    isValidCardCopyConfig(product.description)
-  );
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
-
-function isValidCardCopyConfig(value: unknown): boolean {
-  return value === undefined || (Array.isArray(value) && value.every(isValidCardCopyConfigItem));
-}
-
-function isValidCardCopyConfigItem(value: unknown): boolean {
-  if (typeof value === "string") {
-    return value.trim().length > 0;
-  }
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const item = value as Record<string, unknown>;
-  return (
-    isNonEmptyString(item.text) && (item.tooltip === undefined || typeof item.tooltip === "string")
-  );
-}
-
-function unwrapClientConfigBillingDiscount(
-  payload: ZCodeClientConfigEnvelope,
-): CodingPlanBillingDiscountConfig | undefined {
-  if (payload.code !== undefined && payload.code !== 0) {
-    throw new Error(payload.msg?.trim() || "ZCode client config request failed");
-  }
-  const configs = payload.data?.configs;
-  if (!configs || !("codingPlanBillingDiscount" in configs)) {
-    return undefined;
-  }
-  return configs.codingPlanBillingDiscount;
-}
-
-function unwrapClientConfigStartPlanPreview(
-  payload: ZCodeClientConfigEnvelope,
-): StartPlanPreviewConfig | null {
-  if (payload.code !== undefined && payload.code !== 0) {
-    throw new Error(payload.msg?.trim() || "ZCode client config request failed");
-  }
-  const preview = payload.data?.configs?.startPlanPreview;
-  if (!preview) {
-    return null;
-  }
-  if (
-    typeof preview.planId !== "string" ||
-    typeof preview.name !== "string" ||
-    !Array.isArray(preview.entitlements)
-  ) {
-    throw new Error("ZCode client config invalid Start Plan preview");
-  }
-  return {
-    planId: preview.planId,
-    name: preview.name,
-    entitlements: preview.entitlements.filter(isValidStartPlanPreviewEntitlement),
-  };
-}
-
-
-function isValidStartPlanPreviewEntitlement(
-  entitlement: StartPlanPreviewConfig["entitlements"][number],
-): boolean {
-  return (
-    typeof entitlement?.grantUnits === "number" &&
-    typeof entitlement.meter === "string" &&
-    typeof entitlement.period === "string" &&
-    typeof entitlement.showName === "string" &&
-    typeof entitlement.unitType === "string"
-  );
 }
 
 function resolveClientPlatformKey(): string {
