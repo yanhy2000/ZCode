@@ -23,7 +23,9 @@ env:
 jobs:
   build:
     name: Windows x64 installer
-    runs-on: windows-latest
+    # 家里物理机上的自建 runner；必须是 Windows x64（本流程使用 pwsh 和 Windows 打包链）。
+    # 如果以后注册了多个 self-hosted runner，改成 runs-on: [self-hosted, Windows, X64] 以免调度到 Linux。
+    runs-on: self-hosted
     timeout-minutes: 120
     steps:
       - name: Checkout
@@ -39,7 +41,11 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
+      # GitHub Actions 缓存没有可配置的 TTL：条目按 key 命中，未被访问约 7 天后由 GitHub 回收。
+      # self-hosted runner 上的 pnpm store 和 Electron 下载缓存本身会留在本机，连续编译会直接复用；
+      # 因此这里不做「3 小时过期」的伪 TTL，避免每 3 小时重建缓存反而增加磁盘写入。
       - name: Cache Electron binaries
         uses: actions/cache@v4
         with:
@@ -51,7 +57,41 @@ jobs:
             electron-${{ runner.os }}-
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        # --prefer-offline 优先使用 self-hosted 机器上已有的 pnpm store，缺包才联网。
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      # self-hosted 本地构建缓存：同一 commit 在 3 小时内重复触发时直接复用 dist，
+      # 避免反复跑 tsup/vite/electron-builder。目录放在 workspace 外，checkout 不会清掉。
+      - name: Restore 3-hour build cache
+        id: build-cache
+        shell: pwsh
+        run: |
+          $cacheRoot = Join-Path "${{ runner.workspace }}" "..\zcode-build-cache"
+          $cacheDir = Join-Path $cacheRoot "${{ github.sha }}"
+          $stamp = Join-Path $cacheDir ".built-at"
+          $dist = Join-Path $cacheDir "dist"
+          $hit = $false
+          if (Test-Path $stamp -PathType Leaf) {
+            $ageHours = ((Get-Date) - (Get-Item $stamp).LastWriteTime).TotalHours
+            if ($ageHours -lt 3 -and (Test-Path (Join-Path $dist "win-unpacked\ZCode.exe"))) {
+              if (Test-Path "packages\desktop\dist") {
+                Remove-Item "packages\desktop\dist" -Recurse -Force
+              }
+              Copy-Item $dist "packages\desktop\dist" -Recurse -Force
+              $hit = $true
+              Write-Host "[build-cache] hit sha=${{ github.sha }} ageHours=$([math]::Round($ageHours, 2))"
+            }
+          }
+          if (-not $hit) {
+            Write-Host "[build-cache] miss sha=${{ github.sha }}"
+          }
+          "hit=$($hit.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          # 只保留最近 3 天的本地缓存，避免自建 runner 磁盘无限增长。
+          if (Test-Path $cacheRoot) {
+            Get-ChildItem $cacheRoot -Directory |
+              Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-3) } |
+              Remove-Item -Recurse -Force
+          }
 
       - name: Verify version identity
         shell: pwsh
@@ -75,6 +115,7 @@ jobs:
           }
 
       - name: Build Windows x64 installer
+        if: steps.build-cache.outputs.hit != 'true'
         run: pnpm --filter @zcode/desktop bundle -- --os win --arch x64
 
       - name: Verify production identity
@@ -108,6 +149,20 @@ jobs:
             "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name
           } | Set-Content -Path packages/desktop/dist/SHA256SUMS.txt -Encoding utf8
           Get-Content packages/desktop/dist/SHA256SUMS.txt
+
+      - name: Save 3-hour build cache
+        if: success() && steps.build-cache.outputs.hit != 'true'
+        shell: pwsh
+        run: |
+          $cacheDir = Join-Path (Join-Path "${{ runner.workspace }}" "..\zcode-build-cache") "${{ github.sha }}"
+          $dist = Join-Path $cacheDir "dist"
+          if (Test-Path $dist) {
+            Remove-Item $dist -Recurse -Force
+          }
+          New-Item -ItemType Directory -Force $cacheDir | Out-Null
+          Copy-Item "packages\desktop\dist" $dist -Recurse -Force
+          Set-Content (Join-Path $cacheDir ".built-at") (Get-Date -Format o)
+          Write-Host "[build-cache] saved sha=${{ github.sha }}"
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
