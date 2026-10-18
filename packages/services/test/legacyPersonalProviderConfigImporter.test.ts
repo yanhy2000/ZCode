@@ -58,7 +58,7 @@ function zcodeBuiltinSnapshot(): ProviderConfigLayerSnapshot {
         }),
       ],
       [
-        "zai-api",
+        "zai-standard-api",
         new ProviderConfig({
           label: "Z.ai",
           enabled: false,
@@ -79,7 +79,7 @@ function zcodeBuiltinSnapshot(): ProviderConfigLayerSnapshot {
         config: completeModelConfig(),
       },
       {
-        providerMatch: "zai-api",
+        providerMatch: "zai-standard-api",
         type: "match",
         modelMatch: "glm-.*",
         config: completeModelConfig(1_000_000),
@@ -128,9 +128,9 @@ describe("Legacy Personal Provider Config Importer", () => {
     const before = structuredClone(legacyProviders);
     const imported = importLegacyPersonalProviderConfig({ legacyProviders });
     expect(imported.providers.getRule("custom-id")?.providerName).toBe("My API");
-    expect(imported.providers.getRule("bigmodel-api")?.templateId).toBe("bigmodel-api");
+    expect(imported.providers.getRule("bigmodel-standard-api")?.templateId).toBe("bigmodel-standard-api");
     expect(imported.providers.get("custom-id")?.toJSON()).not.toHaveProperty("label");
-    expect(imported.providers.get("bigmodel-api")?.toJSON()).not.toHaveProperty("templateId");
+    expect(imported.providers.get("bigmodel-standard-api")?.toJSON()).not.toHaveProperty("templateId");
     expect(imported.models.toPersonalJSON().manualProviderModelRules).toEqual([]);
     expect(imported.models.toPersonalJSON().providerModelRules[0]).toMatchObject({
       providerId: "custom-id",
@@ -155,15 +155,19 @@ describe("Legacy Personal Provider Config Importer", () => {
           legacyProvider("builtin:zai", { source, apiKey: " zai-key " }),
         ],
       });
-      expect(document.providers.keys()).toEqual(["bigmodel-api", "zai-api"]);
-      expect(document.providers.getRule("bigmodel-api")?.templateId).toBe("bigmodel-api");
-      expect(document.providers.getRule("bigmodel-api")?.enabled).toBeUndefined();
-      expect(document.providers.get("bigmodel-api")?.toJSON()).toEqual({
+      // 说明：内置 API Key 模板 id 已更名为 *-standard-api（见 shared BUILTIN_PROVIDER_TEMPLATE_IDS），
+      // 旧 legacy id（builtin:bigmodel / builtin:zai）作为输入仍然有效。
+      expect(document.providers.keys()).toEqual(["bigmodel-standard-api", "zai-standard-api"]);
+      expect(document.providers.getRule("bigmodel-standard-api")?.templateId).toBe("bigmodel-standard-api");
+      expect(document.providers.getRule("bigmodel-standard-api")?.enabled).toBeUndefined();
+      expect(document.providers.get("bigmodel-standard-api")?.toJSON()).toEqual({
         group: "standard-personal",
         access: { type: "api-key", apiKey: "test-key" },
       });
-      expect(document.providers.get("zai-api")?.access).toMatchObject({ apiKey: "zai-key" });
-      expect(document.models.getExact("bigmodel-api", "model-a")).toBeUndefined();
+      expect(document.providers.get("zai-standard-api")?.access).toMatchObject({
+        apiKey: "zai-key",
+      });
+      expect(document.models.getExact("bigmodel-standard-api", "model-a")).toBeUndefined();
     },
   );
 
@@ -175,8 +179,8 @@ describe("Legacy Personal Provider Config Importer", () => {
         legacyProvider("builtin:zai", { apiKey: "" }),
       ],
     });
-    expect(document.providers.keys()).toEqual(["bigmodel-api"]);
-    expect(document.providers.get("bigmodel-api")?.access).toMatchObject({ apiKey: "kept-key" });
+    expect(document.providers.keys()).toEqual(["bigmodel-standard-api"]);
+    expect(document.providers.get("bigmodel-standard-api")?.access).toMatchObject({ apiKey: "kept-key" });
   });
 
   it("不凭名称或 URL 丢弃 UUID 自定义供应商", () => {
@@ -406,7 +410,7 @@ describe("Legacy Personal Provider Config Importer", () => {
     });
     expect(
       resolution.resolvedProviders
-        .find((provider) => provider.providerId === "zai-api")
+        .find((provider) => provider.providerId === "zai-standard-api")
         ?.models.map((model) => model.modelId),
     ).toEqual(["glm-5.3", "glm-5.2", "glm-5-turbo"]);
   });

@@ -85,5 +85,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # e2e-report 的入口指向 dist-node（见 packages/e2e-report/package.json exports）；
+      # checks job 里 pnpm typecheck 会顺带产出它，本 job 不跑 typecheck，需显式构建，
+      # 否则 desktop e2eReporting* 三个单测在新检出上会因「Failed to resolve entry」收集失败。
+      - name: Build e2e-report entry
+        run: pnpm --filter @zcode/e2e-report build:node
+
+      # 修复原因：全量 16000+ 用例在 threads 池（4 workers）下曾在 CI 触发
+      # ERR_WORKER_OUT_OF_MEMORY，worker 被杀会把在跑文件一并计为失败；提高堆上限后再评估。
       - name: Unit tests
+        env:
+          NODE_OPTIONS: "--max-old-space-size=6144"
         run: pnpm test:unit
