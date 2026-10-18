@@ -64,10 +64,6 @@ import {
   clearCodingPlanUpgradeMockEnv,
   shouldPrepareCodingPlanTeamMock,
 } from "./test/e2e/helpers/coding-plan-mock-env.js";
-import {
-  HIGHSPEED_MOCK_SCENARIO_ENV,
-  resolveHighspeedE2EMockScenario,
-} from "./test/e2e/helpers/highspeed-mock-env.js";
 import { createE2ERendererBridgeRootHooks } from "./test/e2e/helpers/e2e-renderer-bridge-root-hook.js";
 import { installHookTrustFixture } from "./test/e2e/helpers/hook-trust-fixture.js";
 import { resolveUpstreamModels } from "./test/e2e/helpers/upstream-recorded-models.js";
@@ -2085,12 +2081,6 @@ async function stopCodingPlanTeamMock() {
   clearCodingPlanTeamMockEnv(process.env, ownedBaseUrl);
 }
 
-const HIGHSPEED_DATA_PLANE_FIXTURE_PATHS = [
-  "test/e2e/fixtures/upstream/conversation-session/conversation-session-highspeed-card.json",
-  "test/e2e/fixtures/upstream/conversation-session/conversation-session-highspeed-card-draw-timeout.json",
-  "test/e2e/fixtures/upstream/conversation-session/conversation-session-highspeed-card-draw-miss.json",
-];
-
 interface DataPlaneTurnFixture {
   match: { lastUserMessageIncludes: string[] };
   response: { body: string };
@@ -2172,17 +2162,6 @@ async function startCodingPlanDataPlaneProxy(specs: readonly string[]) {
         "test/e2e/fixtures/upstream/conversation-session/conversation-session-start-plan-independent.json",
       )
     : null;
-  // Highspeed 抽卡 case 的每轮请求都走 Team Coding Plan 内建 HTTPS Endpoint（spec §7）；
-  // 静态 body 无法区分轮次，多轮 case 会在首轮就误判完成，必须按轮次标记回放。
-  const highspeedFixtures = specs.some((spec) =>
-    spec.includes("conversation-session-highspeed-card"),
-  )
-    ? (
-        await Promise.all(
-          HIGHSPEED_DATA_PLANE_FIXTURE_PATHS.map((path) => readDataPlaneTurnFixtures(path)),
-        )
-      ).flat()
-    : null;
   codingPlanDataPlaneProxy = await startE2ENetworkCaptureProxy({
     artifactPath: CODING_PLAN_DATA_PLANE_ARTIFACT_PATH,
     caDir: E2E_CODING_PLAN_DATA_PLANE_CA_DIR,
@@ -2209,12 +2188,7 @@ async function startCodingPlanDataPlaneProxy(specs: readonly string[]) {
           ]
         : []),
       {
-        body: highspeedFixtures
-          ? createDataPlaneTurnResponder(highspeedFixtures, {
-              fallbackBody: modelResponseBody,
-              title: { id: "highspeed-title", text: '{"title":"Highspeed draw"}' },
-            })
-          : modelResponseBody,
+        body: modelResponseBody,
         headers: { "content-type": "text/event-stream; charset=utf-8" },
         host: "open.bigmodel.cn",
         method: "POST",
@@ -2426,17 +2400,6 @@ async function materializeOffPeakMockZCodeBuiltinProviderConfig(port: number): P
     `${JSON.stringify(document, null, 2)}\n`,
     "utf8",
   );
-}
-
-// Highspeed E2E 使用 Host 内置的确定性 transport；按 spec 注入场景，避免普通会话
-// 在默认测试套件里意外抽到卡。该变量必须在 Electron 启动前设置，Host 才能装配 mock。
-function configureHighspeedE2EMock(specs: string[] = []): void {
-  const scenario = resolveHighspeedE2EMockScenario(specs);
-  if (scenario) {
-    process.env[HIGHSPEED_MOCK_SCENARIO_ENV] = scenario;
-  } else {
-    delete process.env[HIGHSPEED_MOCK_SCENARIO_ENV];
-  }
 }
 
 async function stopCodingPlanUpgradeE2EMock() {
@@ -4693,7 +4656,6 @@ export const config: WebdriverIO.Config = {
     applyUpstreamE2EHttpModeForWorker(specs);
     applyAskUserQuestionClockScaleForWorker(specs);
     applyE2EProviderEnv(specs);
-    configureHighspeedE2EMock(specs);
     currentE2EBeforeSessionError = null;
     applyE2EWorkerModelRetryEnv(process.env, specs, configuredModelRetryMaxRetries);
     currentE2EChromiumUserDataDir = resolveE2EWorkerChromiumProfileDir(

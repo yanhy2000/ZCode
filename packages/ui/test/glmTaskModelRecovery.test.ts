@@ -80,20 +80,20 @@ describe("task model recovery", () => {
     const recovered = mergeRecoveredTaskModelConfigOptions({
       taskMeta: {
         provider: "codex",
-        model: "36965ea6-734a-46a8-8851-3dfec026589e/glm-5.1-highspeed",
+        model: "36965ea6-734a-46a8-8851-3dfec026589e/glm-5.2",
       },
       configOptions: [],
     });
 
     expect(recovered?.[0]).toEqual({
       category: "model",
-      currentValue: "36965ea6-734a-46a8-8851-3dfec026589e/glm-5.1-highspeed",
+      currentValue: "36965ea6-734a-46a8-8851-3dfec026589e/glm-5.2",
       id: "model",
       name: "Model",
       options: [
         {
-          name: "glm-5.1-highspeed",
-          value: "36965ea6-734a-46a8-8851-3dfec026589e/glm-5.1-highspeed",
+          name: "glm-5.2",
+          value: "36965ea6-734a-46a8-8851-3dfec026589e/glm-5.2",
         },
       ],
       type: "select",

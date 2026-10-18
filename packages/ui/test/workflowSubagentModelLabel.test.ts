@@ -49,12 +49,12 @@ describe("describeWorkflowSubagentModel", () => {
 
   it("没有档位就没有第二段", () => {
     expect(
-      describeWorkflowSubagentModel(`${TEAM_PLAN_PROVIDER}/GLM-5.3-Highspeed`, {
+      describeWorkflowSubagentModel(`${TEAM_PLAN_PROVIDER}/GLM-5.2`, {
         formatMessage: en,
       }),
     ).toEqual({
-      canonical: `${TEAM_PLAN_PROVIDER}/GLM-5.3-Highspeed`,
-      name: "GLM-5.3-Highspeed",
+      canonical: `${TEAM_PLAN_PROVIDER}/GLM-5.2`,
+      name: "GLM-5.2",
     });
   });
 

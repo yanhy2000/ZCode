@@ -12,7 +12,7 @@ const name =
     ? "GLM"
     : params.get("name") === "extreme"
       ? `GLM-${"LongModelName".repeat(20)}`
-      : "GLM-5.3-Highspeed";
+      : "GLM-5.3-Flash";
 function Fixture() {
   const [selected, setSelected] = useState("text");
   return (

@@ -46,10 +46,8 @@
   `CronCreate/CronUpdate/CronDelete`，让模型无法递归创建、自改或自删；`activeAutomationId` 与
   `automation-port` 的 CronCreate 拒绝逻辑继续作为伪造创建调用的兜底，命中时不得调用
   `automation/create`。turn 结束后恢复原工具面，普通用户输入不受影响。
-- Highspeed 期间仍允许用户调用 `CronCreate`；创建记录保存会话稳定 `modelSelection`，不保存当前 Turn
-  指向加速卡内建 Provider 的临时选型。后续定时执行以 `automationId` 为最终门禁，使用记录中保存的
-  provider/model，并忽略误传的加速 `modelSelection` / `modelExecution`，因此不会抽取、复用或安装
-  Highspeed 卡。
+- 创建记录保存会话稳定 `modelSelection`；后续定时执行以 `automationId` 为最终门禁，使用记录中保存的
+  provider/model，并忽略误传的临时 `modelSelection` / `modelExecution`。
 - 若目标 session 正处于 active/routing busy，turn-scoped `toolDisallowlist` 必须随 automation 输入进入
   deferred queue item，并在 replay、重排和 drain 后原样传给 `startPromptTurn`；不得只在立即启动或
   `steerTurn` fallback 路径隐藏 automation 写工具。

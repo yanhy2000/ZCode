@@ -4123,18 +4123,6 @@
           }
         },
         {
-          "modelMatch": ".*",
-          "baseUrlMatch": "https://zcode\\.z\\.ai/api/v1/highspeed/anthropic/?",
-          "config": {
-            "properties": {
-              "inputFormat": {
-                "supportsImage": true,
-                "supportsVideo": true
-              }
-            }
-          }
-        },
-        {
           "modelMatch": ".*claude-.*",
           "apiTypeMatch": "anthropic-messages",
           "baseUrlMatch": "(?:https://api\\.anthropic\\.com/v1)",
@@ -4217,17 +4205,6 @@
           "config": {
             "properties": {
               "supportsNativeWebSearch": false,
-              "supportsMidConversationSystem": true
-            }
-          }
-        },
-        {
-          "modelMatch": ".*",
-          "apiTypeMatch": "anthropic-messages",
-          "baseUrlMatch": "https://zcode\\.z\\.ai/api/v1/highspeed/anthropic/?",
-          "config": {
-            "properties": {
-              "supportsNativeWebSearch": true,
               "supportsMidConversationSystem": true
             }
           }

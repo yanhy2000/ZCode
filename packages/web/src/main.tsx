@@ -1267,10 +1267,6 @@ export function createHomeOnlyWebRemoteControlServices(): RootServices {
     clientScenesService: createEmptyHomeOnlyService<RootServices["clientScenesService"]>({
       list: async () => ({ code: 0, msg: "", data: [] }),
     }),
-    highspeedCardService:
-      createUnsupportedHomeOnlyService<RootServices["highspeedCardService"]>(
-        "highspeedCardService",
-      ),
     skillsService: createEmptyHomeOnlyService<RootServices["skillsService"]>({
       list: async () => ({
         skills: [],

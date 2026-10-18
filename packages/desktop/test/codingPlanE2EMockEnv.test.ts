@@ -30,13 +30,6 @@ describe("Coding Plan E2E mock env", () => {
       true,
     );
   });
-  it.each([
-    "conversation-session-highspeed-card.test.ts",
-    "conversation-session-highspeed-card-draw-timeout.test.ts",
-    "conversation-session-highspeed-card-draw-miss.test.ts",
-  ])("prepares Coding Plan entitlement for highspeed draw case %s", (spec) => {
-    expect(shouldPrepareCodingPlanTeamMock([`./test/e2e/conversation-session/${spec}`])).toBe(true);
-  });
   it("keeps both prepared mock addresses while a team worker activates only the team mock", () => {
     const environment: Record<string, string | undefined> = {};
     const teamBaseUrl = "http://127.0.0.1:41001";

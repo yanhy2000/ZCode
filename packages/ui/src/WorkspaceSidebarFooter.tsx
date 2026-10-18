@@ -1,7 +1,7 @@
 /* oxlint-disable eslint(max-lines) -- footer 聚合偏好菜单与用量入口。 */
 import type { Locale } from "@zcode/shared";
 import { DesktopCommandIds, TID_LOGIN_TRIGGER, TID_TASK_SETTINGS_BUTTON } from "@zcode/shared";
-import { memo, useCallback, useEffect, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import {
   Globe,
   Maximize,
@@ -52,7 +52,6 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
   workspaceRemoteSessionId,
   activeTaskId,
   isDesktop = false,
-  banner,
   className,
 }: {
   theme: Theme;
@@ -67,7 +66,6 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
   workspaceRemoteSessionId?: string;
   activeTaskId?: string | null;
   isDesktop?: boolean;
-  banner?: ReactNode;
   className?: string;
 }) {
   const { intl } = useZCodeIntl();
@@ -124,7 +122,6 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
   return (
     // footer 被 Settings 复用，页面专属边距由调用方传入，避免修改共享默认样式。
     <footer className={cn("flex shrink-0 flex-col gap-2.5 px-4 pt-2 pb-4", className)}>
-      {banner}
       <div className="flex min-w-0 gap-2">
         <DropdownMenu open={preferencesMenuOpen} onOpenChange={setPreferencesMenuOpen}>
           <DropdownMenuTrigger asChild>

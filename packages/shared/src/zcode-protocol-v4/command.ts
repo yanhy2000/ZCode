@@ -114,9 +114,8 @@ export const commandPayloadSchemas = {
       // 本次执行仍使用上面的标准 Selection；这里只携带不持久化语义、动态鉴权和 child 策略。
       // 仅 idle startNow 接受，防止 Secret/Ticket 进入普通 CommandInbox。
       modelExecution: modelExecutionSchema.optional(),
-      // Highspeed 卡快照随输入事实进入 message.data；不包含 runtime 凭据或 header。
-      // 加速本轮的模型与凭据走上面的 modelSelection + modelExecution，见
-      // docs/highspeed/highspeed-access-mode-migration.md。
+      // Highspeed 加速卡快照（自维护版已移除该功能）；字段按协议兼容保留，历史上随输入
+      // 事实进入 message.data，不包含 runtime 凭据或 header。缺少生产方时本字段恒为惰性。
       highspeedMeta: highspeedMessageMetaSchema.optional(),
       automationId: z.string().min(1).optional(),
       offPeakTaskId: z.string().min(1).optional(),

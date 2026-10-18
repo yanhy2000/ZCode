@@ -4158,30 +4158,7 @@
             }
           }
         },
-        {
-          "modelMatch": ".*",
-          "baseUrlMatch": "https://zcode\\.z\\.ai/api/v1/highspeed/anthropic/?",
-          "config": {
-            "properties": {
-              "inputFormat": {
-                "supportsImage": true,
-                "supportsVideo": true
-              }
-            }
-          }
-        },
-        {
-          "modelMatch": ".*",
-          "baseUrlMatch": "https://zcode\\.z\\.ai/api/v1/highspeed/anthropic/?",
-          "config": {
-            "properties": {
-              "inputFormat": {
-                "supportsImage": true,
-                "supportsVideo": true
-              }
-            }
-          }
-        },
+
         {
           "modelMatch": ".*claude-.*",
           "apiTypeMatch": "anthropic-messages",
@@ -4313,28 +4290,7 @@
             }
           }
         },
-        {
-          "modelMatch": ".*",
-          "apiTypeMatch": "anthropic-messages",
-          "baseUrlMatch": "https://zcode\\.z\\.ai/api/v1/highspeed/anthropic/?",
-          "config": {
-            "properties": {
-              "supportsNativeWebSearch": true,
-              "supportsMidConversationSystem": true
-            }
-          }
-        },
-        {
-          "modelMatch": ".*",
-          "apiTypeMatch": "anthropic-messages",
-          "baseUrlMatch": "https://zcode\\.z\\.ai/api/v1/highspeed/anthropic/?",
-          "config": {
-            "properties": {
-              "supportsNativeWebSearch": true,
-              "supportsMidConversationSystem": true
-            }
-          }
-        },
+
         {
           "modelMatch": "deepseek-v4-flash",
           "apiTypeMatch": "openai-responses",

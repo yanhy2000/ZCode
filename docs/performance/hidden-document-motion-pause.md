@@ -55,5 +55,4 @@ visibilitychange ──► document.visibilityState === "hidden"
 
 - 只覆盖 CSS transition / animation；`motion` 等 JS 驱动（Web Animations API）的动画不受影响。
 - 进入 hidden 瞬间正在进行的过渡会被取消（触发 `transitioncancel` 而非 `transitionend`），
-  依赖 `transitionend` 收口的逻辑需自带兜底（现有 `useAnimatedResizablePanel`、
-  `HighspeedActivationVisual` 已有超时兜底）。
+  依赖 `transitionend` 收口的逻辑需自带兜底（现有 `useAnimatedResizablePanel` 已有超时兜底）。

@@ -167,14 +167,10 @@ CLI task owner → sessions-index 只读投影 → 工作区 hook 观察成功�
 验收 MTC-TASK-COMPLETE：成功完成刷新、历史不刷新、失败/中断不刷新、重复去重、
 再次运行后完成、批量完成合并、断连恢复基线、远程身份和清理，以及隐藏/在途调度。
 
-### 左下角与 Highspeed 分享卡共享槽位优先级（2026-09-20）
+### 左下角展示槽位（已移除）
 
-左下角侧栏底部的「领 token」营销 Banner 与 Highspeed 分享卡（全局通知 `highspeed-share`）折叠到**同一展示槽位**，两者同时命中时**领 token Banner 优先覆盖在上**；Banner 消失或被关闭后，同一槽位才显示 Highspeed 分享卡。仲裁由只读投影组件 `SidebarBottomActivity` 完成：读取两侧各自 store 的可见性择一渲染，不复制状态、不新增计时器。Banner「可见」复用唯一谓词 `isMarketingBannerRenderable`（`banner && resource_position === "banner" && (image || bannerHero)`，领取 `pending` 期间仍算可见）。完整时序与归属见 [Highspeed 卡规格 §9.5](highspeed/highspeed-card-spec.md)。
-
-```text
-banner 可见 → 渲染领 token Banner（覆盖 Highspeed）
-banner 消失/关闭/pending 结束无投放 → 同一槽位渲染 Highspeed 分享卡（若仍在 24h 窗口内）
-```
+侧栏底部「领 token」Banner 与 Highspeed 分享卡的共享槽位仲裁（`SidebarBottomActivity` 只读投影）
+已随 Highspeed（加速卡）功能一并移除（2026-10，自维护版移除批次 A4），左下角不再存在该展示槽位。
 
 ### 启动请求序号 seq
 

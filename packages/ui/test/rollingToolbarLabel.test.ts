@@ -47,16 +47,16 @@ it.each([false, true])("系统减少动画=%s 时供应商和模型共用一个�
     await act(async () =>
       root.render(
         createElement(RollingToolbarLabel, {
-          label: "ZAPI (Anthropic) / GLM-5.3-Highspeed-fusion",
+          label: "ZAPI (Anthropic) / GLM-5.3-Flash-fusion",
           prefix: "ZAPI (Anthropic) / ",
           prefixClassName: "inline",
-          value: "GLM-5.3-Highspeed-fusion",
+          value: "GLM-5.3-Flash-fusion",
         }),
       ),
     );
     const lines = host.querySelectorAll(":scope > span > span");
     expect(lines).toHaveLength(1);
-    expect(lines[0].textContent).toBe("ZAPI (Anthropic) / GLM-5.3-Highspeed-fusion");
+    expect(lines[0].textContent).toBe("ZAPI (Anthropic) / GLM-5.3-Flash-fusion");
   } finally {
     await act(async () => root.unmount());
     host.remove();

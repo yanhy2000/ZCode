@@ -117,7 +117,6 @@ import { WorkspaceFileTree } from "@/WorkspaceFileTree.js";
 import { WorkspaceArchivedTasksFlatSection } from "@/WorkspaceArchivedTasksFlatSection.js";
 import { WebRemoteControlTaskIndex } from "@/WebRemoteControlTaskIndex.js";
 import { WorkspaceSidebarFooter } from "@/WorkspaceSidebarFooter.js";
-import { SidebarBottomActivity } from "@/sidebar-activity/SidebarBottomActivity.js";
 import { WorkspacePinnedTasksSection } from "@/WorkspacePinnedTasksSection.js";
 import { WorkspaceTimelineTasksSection } from "@/WorkspaceTimelineTasksSection.js";
 import { WorkspaceGroupedTasksSection } from "@/WorkspaceGroupedTasksSection.js";
@@ -1427,9 +1426,6 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
     ],
   );
 
-  // Bugfix：Footer 使用 memo，内联 JSX 会让无关的侧栏更新也穿透其稳定引用边界。
-  const sidebarBottomActivity = useMemo(() => <SidebarBottomActivity />, []);
-
   return (
     <aside
       data-testid={TID_SIDEBAR}
@@ -1885,7 +1881,6 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
 
           <WorkspaceSidebarFooter
             className="pr-3"
-            banner={sidebarBottomActivity}
             theme={theme}
             localeMenuValue={localeMenuValue}
             onLocaleChange={handleLocaleChange}

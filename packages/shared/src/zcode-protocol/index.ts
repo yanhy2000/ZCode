@@ -1178,8 +1178,8 @@ export const zcodeProviderAccountAccessSchema = z
   .object({
     type: z.literal("zhipu-account"),
     accountType: z.enum(["zai", "bigmodel"]),
-    // `highspeed` 指加速卡这一账号访问类别（隐藏 Provider + 免签网关），与模型名
-    // GLM-5.1-Highspeed 无关，仅字面重合。见 docs/highspeed/highspeed-access-mode-migration.md。
+    // `highspeed` 指加速卡这一账号访问类别（自维护版已移除该功能），与模型名
+    // GLM-5.1-Highspeed 无关，仅字面重合；枚举按协议兼容保留。
     mode: z.enum([
       "start-plan",
       "individual-coding-plan",

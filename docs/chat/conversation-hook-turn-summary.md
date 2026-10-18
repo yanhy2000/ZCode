@@ -137,8 +137,8 @@ HookRunner
   但位于连续 `turnTailBoundary` 之前。
 - assistant 正文存在时继续显示 copy/feedback/fork/time；没有正文、被中断或 error 的终态轮次，只要
   实际执行过 Hook，也允许单独显示 Hook action。
-- 同一轮最多渲染一个 Hook 入口：普通 assistant action bar 与独立 Hook action bar 必须互斥。
-  Highspeed 来源页脚独立渲染，既不得让有正文的轮次重复显示 Hook，也不得遮掉无正文终态轮的 Hook 入口。
+- 同一轮最多渲染一个 Hook 入口：普通 assistant action bar 与独立 Hook action bar 必须互斥，
+  且不得遮掉无正文终态轮的 Hook 入口。
 - Hook action 与 copy/feedback/fork/retry 共用同一 turn eligibility：`timelineOnly` 维护 turn
   （纯 compact/modelChange marker 轮）即使带有历史遗留的 `didExecute=true` Hook row，也不得
   渲染 Hook action 或空操作栏；无正文终态轮（HK11）的豁免只覆盖真实 product turn。

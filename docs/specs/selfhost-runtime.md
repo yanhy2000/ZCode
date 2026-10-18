@@ -148,6 +148,7 @@
 - 内置 Provider 配置删除全部 `account:*` 规则与 Coding Plan 模板，revision 提升以覆盖旧 active/LKG 缓存；`zai-standard-api` / `bigmodel-standard-api` 等第三方模板保留。
 - 漏洞上报（zsrc）：移除公开配置字段、帮助菜单入口与文案。
 - 官方账号、登录、套餐、余额、权益、Rewards、营销触达与官方模型准入：移除客户端入口与服务调用。
+- Highspeed（加速卡）：物理删除 Host `HighspeedCardService`（draw / healthy / 加速执行材料与 Coding Plan 双 JWT 头）、UI 激活动效/模型标识/倒计时/节省时间/来源 footer/分享卡与全局通知承载位、桌面 E2E 用例与 Mock 场景、相关单测与文案。加速卡是与官方 Coding Plan 账号权益强绑定的隐藏 Provider（`account:*-highspeed-card`），自维护版无可用路径。
 
 保留：
 
@@ -155,6 +156,7 @@
 - 插件市场排序 `pluginStoreOrder`。
 - 手机远控 relay 与本地配对凭据。
 - 模型上下文预算的本地默认值。
+- shared 协议中的 `highspeedMeta` 输入字段、`setHighspeedMetrics` 命令与 CLI 侧 highspeed 投影/持久化分支：没有 Host 生产端后这些数据是惰性的，仅为协议兼容与历史消息读取保留；`isHighspeedProviderId` 谓词与 `HIGHSPEED_PROVIDER_IDS` 映射保留用于过滤历史/恢复出的加速 Provider 选择（CLI 测试经 junction 直接引用根 shared，删除会破坏「CLI 零改动」约束）。
 
 数据兼容：
 
@@ -201,3 +203,6 @@
 28. “添加供应商”模板页不渲染“智谱 / 其他”分组标题：首位为“创建自定义供应商”，Z.ai 与 BigModel 模板显示在列表末尾，其余模板顺序与内置 Provider 配置一致。
 29. 手机远控链接为 `https://zcode.z.ai/remote/v4?...&app_version=3.15.1`：路径与 `app_version` 都使用官方基线版本，私有版本号不出现在链接中；手机浏览器打开后能进入远控页并连接成功（无需手工改 URL）。
 30. 版本号用途分离可验证：About、安装包名、Release tag 与自动更新比较使用 `1.0.0+3.15.1`；请求头 `X-ZCode-App-Version`、`app_version` 参数、帮助配置、OAuth 中转、项目访问令牌、遥测/反馈与远端进程应用版本使用 `3.15.1`。自维护远端资源 CDN/manifest 仍以 `1.0.0+3.15.1` 为键。
+31. Highspeed 已物理删除：仓库中不存在 `HighspeedCardService`、`IHighspeedCardService`、`createHighspeedHttpTransport`、`createHighspeedMockTransport`、`HIGHSPEED_DRAW_PROVIDER_IDS`、`HIGHSPEED_CARD_EXPIRED_PROVIDER_ERROR_CODE`；`packages/ui/src` 不存在 `highspeed/` 与 `v4/highspeed/` 模块；Host 不注册加速卡服务，也不读取 `ZCODE_HIGHSPEED_MOCK_SCENARIO`；桌面 E2E 的 highspeed 卡片用例、fixtures 与 Mock 场景已删除。`HIGHSPEED_PROVIDER_IDS` 作为 CLI 兼容映射保留（见上文「保留」）。
+32. Highspeed 移除后 UI 无残留：输入框不出现加速描边/粒子/模型锁定/倒计时，会话行不出现 Highspeed 标签、节省时间或来源 footer，左下角不出现分享卡；普通发送、编辑重发与队列提升不再走抽卡 prepare。协议层 `highspeedMeta` / `setHighspeedMetrics` 字段保留但不产生新数据。
+33. Highspeed 移除不影响本地用量统计：`usage-stats` 的本地 App 用量聚合（`model_usage/turn_usage/tool_usage`）行为不变，只删除加速卡专用的普通 TPS 请求类型。

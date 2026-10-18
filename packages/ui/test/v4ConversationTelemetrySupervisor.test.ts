@@ -1148,7 +1148,7 @@ describe("ConversationTelemetrySupervisor", () => {
       sourceCommandId: "parent-command",
       sendTime: now,
       extraDetail: {
-        model_name: "main-provider/GLM-5.2-Highspeed",
+        model_name: "main-provider/GLM-5.2",
         model_provider: "main-provider",
       },
     });

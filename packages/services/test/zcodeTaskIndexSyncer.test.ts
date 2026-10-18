@@ -1407,7 +1407,7 @@ describe("createZCodeTaskIndexSyncer", () => {
         userMessageText: "fix perf",
         settingsModel: {
           providerId: "36965ea6-734a-46a8-8851-3dfec026589e",
-          modelId: "glm-5.1-highspeed",
+          modelId: "glm-5.2",
         },
         messageModel: {
           providerId: "default-deepseek",

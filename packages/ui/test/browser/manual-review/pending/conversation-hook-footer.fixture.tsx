@@ -9,7 +9,7 @@ import "@/styles.css";
 
 const query = new URLSearchParams(location.search);
 const mobile = query.get("mobile") === "true";
-const highspeed = query.get("highspeed") === "true";
+const noText = query.get("noText") === "true";
 const theme = query.get("theme") === "light" ? "light" : "dark";
 document.documentElement.className = `${theme} theme-zai-${theme}`;
 const base = { turnId: "hook-footer", createdAt: 1_700_000_000_000, createdAtSeq: 1 };
@@ -19,7 +19,7 @@ const rows: ConversationRow[] = [
     rowId: 1,
     kind: "turnHeader",
     origin: "userInput",
-    state: highspeed ? "completedInterrupted" : "completedSuccess",
+    state: noText ? "completedInterrupted" : "completedSuccess",
     startedAt: base.createdAt,
   },
   {
@@ -28,19 +28,6 @@ const rows: ConversationRow[] = [
     kind: "userInput",
     origin: "realUser",
     text: "nihao",
-    ...(highspeed
-      ? {
-          highspeed: {
-            schemaVersion: 1,
-            cardId: "hsc-hooks",
-            taskId: "hook-footer",
-            provider: "zai",
-            model: "glm-5",
-            issuedAt: 1_000,
-            expiresAt: 10_000,
-          },
-        }
-      : {}),
   },
   {
     ...base,
@@ -71,7 +58,7 @@ const rows: ConversationRow[] = [
       },
     ],
   },
-  ...(!highspeed
+  ...(!noText
     ? [
         {
           ...base,
@@ -92,7 +79,7 @@ createRoot(document.getElementById("root")!).render(
     <ZCodeIntlProvider initialLocale={mobile ? "en-US" : "zh-CN"}>
       <main className="min-h-dvh bg-background text-foreground @container/conversation">
         <ConversationTurnGroup
-          unit={{ ...unit!, showHighspeedOutputFooter: highspeed }}
+          unit={unit!}
           context={{
             workspacePath: "/fixture",
             theme,

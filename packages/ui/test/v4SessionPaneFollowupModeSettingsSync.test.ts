@@ -62,16 +62,6 @@ const projectionState = vi.hoisted(() => ({
 }));
 
 const servicesMock = vi.hoisted(() => ({
-  highspeedCardService: {
-    getSnapshot: vi.fn(async () => ({ card: null, nextDrawAt: null, drawing: false })),
-    prepareTurn: vi.fn(async () => ({
-      kind: "fallback" as const,
-      reason: "draw-miss" as const,
-      nextDrawAt: null,
-    })),
-    healthy: vi.fn(),
-    share: vi.fn(),
-  },
   // 修复原因：readiness hook 将 service 作为 effect 依赖；每次 render 重建会导致无限重渲染直至 OOM。
   zcodeSessionService: {
     updateProviderRegistry: vi.fn(),

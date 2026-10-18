@@ -39,9 +39,10 @@ export const modelExecutionSchema = z
      * 触发条件由发起方声明：`providerId` 限定只匹配本轮 execution Selection 指向的 provider；
      * `rules` 按声明顺序匹配，首个命中的规则决定退回原因，`providerErrorCode` 缺省表示该 provider
      * 的任何失败（用户取消与上下文超窗除外）。CLI 不按 provider id 前缀、模型名或错误文案硬编码。
-     * 退回目标先取 `target`（发起方抽卡时的提交选择，即会话原模型），再取 runtime 会话常驻 Selection：
-     * execution 作用域从不改写会话选择，但常驻选择只在 runtime 内存里，冷恢复竞态下可能未绑定，
-     * 所以发起方必须声明 `target`（docs/highspeed/highspeed-card-spec.md §2.2）。
+     * 退回目标先取 `target`（发起方的提交选择），再取 runtime 会话常驻 Selection：execution
+     * 作用域从不改写会话选择，但常驻选择只在 runtime 内存里，冷恢复竞态下可能未绑定，
+     * 所以发起方应当声明 `target`。自维护版已移除原发起方（Highspeed 加速卡），字段本身
+     * 作为 CLI/Turn 执行协议保留，历史数据仍按此语义解析。
      */
     selectionFallback: z
       .object({
