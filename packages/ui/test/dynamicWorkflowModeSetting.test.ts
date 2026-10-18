@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-// DWG-22（docs/dynamic-workflow/launch.md「The user's choice」）：常规设置里的动态工作流行。
-// 只在服务端提供功能时出现；值与「默认」标签都读 Host 算好的快照；选回默认值写空串删除选择。
+// DWG-22（docs/dynamic-workflow/launch.md「The user's choice」、docs/specs/selfhost-runtime.md「工作流」）：
+// 常规设置里的动态工作流行。自维护版固定提供 alwaysOn，值与「默认」标签来自本地快照（提供 + 用户选择）；
+// 选回默认值写空串删除选择。
 import { createElement, type ReactNode } from "react";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -111,9 +112,10 @@ describe("DynamicWorkflowModeSetting（DWG-22）", () => {
     resetDynamicWorkflowAvailabilityStoreForTests();
   });
 
-  it("快照加载中、读取失败、服务端未提供时整行不渲染", () => {
+  it("初始快照即提供 alwaysOn（不经过加载态），快照变成未提供时整行收起", () => {
     const { container, rerender } = render(createElement(DynamicWorkflowModeSetting));
-    expect(container.innerHTML).toBe("");
+    expect(screen.getByTestId("select").getAttribute("data-value")).toBe("alwaysOn");
+    expect(taggedOptions()).toEqual(["alwaysOn"]);
 
     act(() =>
       useDynamicWorkflowAvailabilityStore.setState({
@@ -122,10 +124,6 @@ describe("DynamicWorkflowModeSetting（DWG-22）", () => {
         config: null,
       }),
     );
-    rerender(createElement(DynamicWorkflowModeSetting));
-    expect(container.innerHTML).toBe("");
-
-    act(() => publish("disabled", "alwaysOn"));
     rerender(createElement(DynamicWorkflowModeSetting));
     expect(container.innerHTML).toBe("");
   });

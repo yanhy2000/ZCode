@@ -1,14 +1,9 @@
 // @vitest-environment jsdom
-// DWG-22（docs/dynamic-workflow/launch.md「The user's choice」）：设置里的选择变化后，本窗口 Root
-// 先让 Host 重发策略，再重读快照；首次读到的值只是基线，不发信号。多次变化按顺序串行。
+// docs/specs/selfhost-runtime.md「工作流」：设置里的选择变化后，Root 先按最新选择重算本地快照，
+// 再让 Host 重发策略并重读快照；首次读到的值只是基线，不发信号。多次变化按顺序串行。
 import { cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ICodingPlanSubscriptionService } from "@zcode/services";
-import {
-  applyDynamicWorkflowUserMode,
-  createDynamicWorkflowClientConfig,
-  type DynamicWorkflowMode,
-} from "@zcode/shared";
+import type { DynamicWorkflowMode } from "@zcode/shared";
 import { useDynamicWorkflowUserModeSync } from "@/hooks/useDynamicWorkflowAvailability.js";
 import {
   resetDynamicWorkflowAvailabilityStoreForTests,
@@ -19,84 +14,95 @@ vi.mock("@/logger.js", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-const OFFER = createDynamicWorkflowClientConfig("alwaysOn", "remote");
-
 function setup() {
-  const events: string[] = [];
-  let currentChoice: DynamicWorkflowMode | undefined;
-  const zcodeAgentService = {
-    syncDynamicWorkflowUserMode: vi.fn(async (params: { mode?: DynamicWorkflowMode }) => {
-      events.push(`sync:${params.mode ?? "follow"}`);
-    }),
-  };
-  const codingPlanSubscriptionService = {
-    getDynamicWorkflowClientConfig: vi.fn(async () => {
-      events.push("reload");
-      return applyDynamicWorkflowUserMode(OFFER, currentChoice);
-    }),
-  } as unknown as ICodingPlanSubscriptionService;
+  const syncMock = vi.fn(async (_params: { mode?: DynamicWorkflowMode }) => undefined);
   const hook = renderHook(
-    (props: { settingsLoaded: boolean; userMode: DynamicWorkflowMode | undefined }) => {
-      currentChoice = props.userMode;
+    (props: { settingsLoaded: boolean; userMode: DynamicWorkflowMode | undefined }) =>
       useDynamicWorkflowUserModeSync({
         ...props,
-        zcodeAgentService,
-        codingPlanSubscriptionService,
-      });
-    },
+        zcodeAgentService: { syncDynamicWorkflowUserMode: syncMock },
+      }),
     { initialProps: { settingsLoaded: false, userMode: undefined } },
   );
-  return { events, hook, zcodeAgentService };
+  return { hook, syncMock };
 }
 
-describe("useDynamicWorkflowUserModeSync（DWG-22）", () => {
+describe("useDynamicWorkflowUserModeSync", () => {
   afterEach(() => {
     cleanup();
     resetDynamicWorkflowAvailabilityStoreForTests();
   });
 
-  it("设置未加载与首次读到的值都不发信号", () => {
-    const { events, hook } = setup();
-    hook.rerender({ settingsLoaded: true, userMode: "onDemand" });
-    expect(events).toEqual([]);
+  it("设置未加载时不改快照、不发信号", () => {
+    const { hook, syncMock } = setup();
+    hook.rerender({ settingsLoaded: false, userMode: "disabled" });
+
+    expect(syncMock).not.toHaveBeenCalled();
+    expect(useDynamicWorkflowAvailabilityStore.getState().config?.mode).toBe("alwaysOn");
   });
 
-  it("选择变化：先让 Host 重发策略，再重读快照；回到跟随时发不带 mode 的信号", async () => {
-    const { events, hook } = setup();
-    hook.rerender({ settingsLoaded: true, userMode: undefined });
-    hook.rerender({ settingsLoaded: true, userMode: "disabled" });
-    await waitFor(() => expect(events).toEqual(["sync:disabled", "reload"]));
+  it("首次读到的值只是基线：写进快照但不发信号", () => {
+    const { hook, syncMock } = setup();
+    hook.rerender({ settingsLoaded: true, userMode: "onDemand" });
+
+    expect(syncMock).not.toHaveBeenCalled();
     expect(useDynamicWorkflowAvailabilityStore.getState()).toMatchObject({
-      status: "ready",
-      enabled: false,
-      config: { mode: "disabled", offeredMode: "alwaysOn" },
+      enabled: true,
+      config: { mode: "onDemand", offeredMode: "alwaysOn" },
     });
-
-    hook.rerender({ settingsLoaded: true, userMode: undefined });
-    await waitFor(() =>
-      expect(events).toEqual(["sync:disabled", "reload", "sync:follow", "reload"]),
-    );
-    expect(useDynamicWorkflowAvailabilityStore.getState().enabled).toBe(true);
   });
 
-  it("连续两次变化串行：第二次信号在第一次重读之后才发", async () => {
-    const { events, hook } = setup();
+  it("选择变化：先重算快照，再让 Host 重发策略并重读；回到跟随时发不带 mode 的信号", async () => {
+    const { hook, syncMock } = setup();
     hook.rerender({ settingsLoaded: true, userMode: undefined });
     hook.rerender({ settingsLoaded: true, userMode: "disabled" });
+
+    expect(useDynamicWorkflowAvailabilityStore.getState().enabled).toBe(false);
+    await waitFor(() => expect(syncMock).toHaveBeenCalledWith({ mode: "disabled" }));
+
+    hook.rerender({ settingsLoaded: true, userMode: undefined });
+    await waitFor(() => expect(syncMock).toHaveBeenLastCalledWith({}));
+    expect(useDynamicWorkflowAvailabilityStore.getState()).toMatchObject({
+      enabled: true,
+      config: { mode: "alwaysOn", offeredMode: "alwaysOn" },
+    });
+  });
+
+  it("连续两次变化串行：第二次信号在第一次完成后才发", async () => {
+    const { hook, syncMock } = setup();
+    let releaseFirst: (() => void) | undefined;
+    syncMock.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseFirst = resolve;
+        }),
+    );
+
+    hook.rerender({ settingsLoaded: true, userMode: undefined });
+    hook.rerender({ settingsLoaded: true, userMode: "disabled" });
+    await waitFor(() => expect(syncMock).toHaveBeenCalledTimes(1));
+
     hook.rerender({ settingsLoaded: true, userMode: "onDemand" });
-    await waitFor(() =>
-      expect(events).toEqual(["sync:disabled", "reload", "sync:onDemand", "reload"]),
-    );
-    expect(useDynamicWorkflowAvailabilityStore.getState().config).toMatchObject({
-      mode: "onDemand",
-    });
+    await Promise.resolve();
+    expect(syncMock).toHaveBeenCalledTimes(1);
+
+    releaseFirst?.();
+    await waitFor(() => expect(syncMock).toHaveBeenCalledTimes(2));
+    expect(syncMock).toHaveBeenLastCalledWith({ mode: "onDemand" });
+    expect(useDynamicWorkflowAvailabilityStore.getState().config?.mode).toBe("onDemand");
   });
 
-  it("Host 同步失败也会重读快照（快照以 Host 当前结果为准）", async () => {
-    const { events, hook, zcodeAgentService } = setup();
-    zcodeAgentService.syncDynamicWorkflowUserMode.mockRejectedValueOnce(new Error("host gone"));
+  it("Host 同步失败也不回滚显示：快照仍按本地选择", async () => {
+    const { hook, syncMock } = setup();
+    syncMock.mockRejectedValueOnce(new Error("host gone"));
+
     hook.rerender({ settingsLoaded: true, userMode: undefined });
     hook.rerender({ settingsLoaded: true, userMode: "disabled" });
-    await waitFor(() => expect(events).toEqual(["reload"]));
+
+    await waitFor(() => expect(syncMock).toHaveBeenCalledTimes(1));
+    expect(useDynamicWorkflowAvailabilityStore.getState()).toMatchObject({
+      enabled: false,
+      config: { mode: "disabled" },
+    });
   });
 });

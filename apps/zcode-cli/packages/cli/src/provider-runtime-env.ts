@@ -12,7 +12,11 @@ import {
   ZCODE_PERSONAL_PROVIDER_CONFIG_FILE_ENV,
   type ZCodeBuiltinRefreshEvent,
 } from "@zcode/provider-node";
-import { resolveRuntimeZCodeEndpointOrigin, ZCODE_VERSION } from "@zcode/shared";
+import {
+  resolveRuntimeZCodeEndpointOrigin,
+  resolveUpstreamVersion,
+  ZCODE_VERSION,
+} from "@zcode/shared";
 import type { CliEnv } from "./env.js";
 
 export const SEA_ZCODE_BUILTIN_PROVIDER_CONFIG_ASSET_KEY = "zcode-provider/zcode-builtin.json";
@@ -74,7 +78,8 @@ export async function prepareCliProviderRuntimeEnv(
     }));
   const personalFilePath =
     explicitPersonal ?? join(dataBaseDir, ".zcode", "v2", PERSONAL_PROVIDER_CONFIG_FILE_NAME);
-  const appVersion = options.appVersion ?? ZCODE_VERSION;
+  // 内置 Provider 配置的缓存与远端取数按官方基线版本归档（docs/specs/selfhost-runtime.md「版本规则」）。
+  const appVersion = resolveUpstreamVersion(options.appVersion ?? ZCODE_VERSION) ?? ZCODE_VERSION;
   const platform = options.platform ?? resolveZCodeBuiltinClientPlatform();
   const zcodeEndpointOrigin = resolveRuntimeZCodeEndpointOrigin(options.env);
   const cachePaths = resolveZCodeBuiltinCachePaths({

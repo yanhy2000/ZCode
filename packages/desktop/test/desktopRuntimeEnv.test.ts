@@ -54,6 +54,7 @@ vi.mock("@zcode/shared", () => ({
   },
   ZCODE_COMMIT: "commit-test",
   ZCODE_VERSION: "0.0.0-test",
+  ZCODE_UPSTREAM_VERSION: "0.0.0-test",
   DEFAULT_ZCODE_ENDPOINT_ORIGIN: "https://zcode.z.ai",
   TEST_ZCODE_ENDPOINT_ORIGIN: "https://zcode.z.ai",
   resolveRuntimeZCodeEndpointOrigin: (env: Record<string, string | undefined>) =>

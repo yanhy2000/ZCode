@@ -7,6 +7,7 @@ import type { ProviderEndpointRoutingPort } from "@zcode/contracts";
 import {
   resolveRuntimeZCodeEnv,
   resolveRuntimeZCodeEndpointOrigin,
+  resolveUpstreamVersion,
   ZCODE_APP_VERSION_ENV,
 } from "@zcode/shared";
 import {
@@ -72,7 +73,11 @@ function resolveAppVersionForHeaders(
   env: EnvRecord,
   options: Pick<RuntimeExecutionConfigOptions, "appVersion">,
 ): string | undefined {
-  return normalizePrintableHeaderValue(env[ZCODE_APP_VERSION_ENV] ?? options.appVersion);
+  // 桌面包已通过 ZCODE_APP_VERSION 下发官方基线版本；独立 CLI 的自身版本是私有版本号，
+  // 上报云端前同样归一成基线（docs/specs/selfhost-runtime.md「版本规则」）。
+  return normalizePrintableHeaderValue(
+    env[ZCODE_APP_VERSION_ENV] ?? resolveUpstreamVersion(options.appVersion),
+  );
 }
 
 function detectDefaultProviderSourceTitle(): ModelProviderSourceTitle {

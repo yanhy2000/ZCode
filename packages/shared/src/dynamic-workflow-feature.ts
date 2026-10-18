@@ -133,3 +133,23 @@ function resolveDynamicWorkflowOffer(input: {
   if (remoteMode) return createDynamicWorkflowClientConfig(remoteMode, "remote");
   return createDynamicWorkflowClientConfig(DEFAULT_DYNAMIC_WORKFLOW_MODE, "default");
 }
+
+/** 自维护构建固定提供的模式（docs/specs/selfhost-runtime.md「工作流」）：不再请求云端灰度。 */
+export const SELFHOST_DYNAMIC_WORKFLOW_OFFER_MODE: DynamicWorkflowMode = "alwaysOn";
+
+/**
+ * 自维护构建的本地「提供」：固定 `alwaysOn`，只允许本地覆盖改写（未打包 dev 直接透传，
+ * preview 包由 Main 写入 `alwaysOn`；production 包没有该变量）。
+ *
+ * Host 传进程环境；renderer 拿不到进程环境，按不带 env 的固定默认算，所以 dev 覆盖只影响
+ * 运行时候选、不影响设置行显示——这是调试用差异，打包态不存在。
+ * 返回的是「提供」，用户选择由调用方用 `applyDynamicWorkflowUserMode` 套上（Host 每次现读设置）。
+ */
+export function resolveSelfHostDynamicWorkflowOffer(input?: {
+  env?: Record<string, string | undefined>;
+}): DynamicWorkflowClientConfig {
+  const override = normalizeDynamicWorkflowMode(input?.env?.[ZCODE_DYNAMIC_WORKFLOW_MODE_ENV]);
+  return override
+    ? createDynamicWorkflowClientConfig(override, "override")
+    : createDynamicWorkflowClientConfig(SELFHOST_DYNAMIC_WORKFLOW_OFFER_MODE, "default");
+}

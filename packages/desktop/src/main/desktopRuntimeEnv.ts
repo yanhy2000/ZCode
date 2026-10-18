@@ -15,6 +15,7 @@ import {
   ZCODE_PRODUCT_FLAVOR,
   ZCODE_RUNTIME_ENV_KEY,
   ZCODE_VERSION,
+  ZCODE_UPSTREAM_VERSION,
   buildZCodeToolEnvPassthroughEnv,
   resolveRuntimeZCodeEndpointOrigin,
   resolveZaiBusinessBaseUrl,
@@ -574,7 +575,9 @@ export function buildHostProcessEnv(hostProcessLocalEnv: Record<string, string>)
     ...dynamicWorkflowModeHostEnv,
     // 模型请求默认 header 由 agent 进程构造，过去只继承 shell env 导致桌面启动时拿不到 app 版本。
     // 这里从 main 进程显式下发，agent 子进程继承 host env 后即可稳定写入请求 header。
-    [ZCODE_APP_VERSION_ENV]: ZCODE_VERSION,
+    // 下发官方基线版本：云端按它分档，私有版本号会在请求头/灰度/供应商配置请求里被当成旧客户端
+    // （docs/specs/selfhost-runtime.md「版本规则」）。
+    [ZCODE_APP_VERSION_ENV]: ZCODE_UPSTREAM_VERSION,
     // Telemetry 的构建身份必须来自 Desktop 编译期元数据，不能让 Agent 在运行时读取
     // 工作树或根据安装路径猜测；否则同一产品版本的不同修复包无法在 ARMS 中区分。
     [ZCODE_BUILD_COMMIT_ID_ENV]: ZCODE_COMMIT,

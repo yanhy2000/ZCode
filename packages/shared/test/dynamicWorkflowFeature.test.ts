@@ -7,6 +7,7 @@ import {
   isDynamicWorkflowOffered,
   normalizeDynamicWorkflowMode,
   resolveDynamicWorkflowClientConfig,
+  resolveSelfHostDynamicWorkflowOffer,
   ZCODE_DYNAMIC_WORKFLOW_MODE_ENV,
 } from "../src/dynamic-workflow-feature.js";
 
@@ -192,5 +193,55 @@ describe("applyDynamicWorkflowUserMode（DWG-18）", () => {
         offeredMode: "sometimes",
       } as unknown as Parameters<typeof isDynamicWorkflowOffered>[0]),
     ).toBe(false);
+  });
+});
+
+// docs/specs/selfhost-runtime.md「工作流」：自维护版固定提供 alwaysOn，只有 Main 写入的本地覆盖
+// （未打包 dev / preview）能改写「提供」；用户选择由调用方用 applyDynamicWorkflowUserMode 套上。
+describe("resolveSelfHostDynamicWorkflowOffer", () => {
+  it("无覆盖时固定提供 alwaysOn，来源标 default", () => {
+    expect(resolveSelfHostDynamicWorkflowOffer()).toEqual({
+      mode: "alwaysOn",
+      enabled: true,
+      source: "default",
+      offeredMode: "alwaysOn",
+    });
+  });
+
+  it("本地覆盖改写「提供」并标 override", () => {
+    expect(
+      resolveSelfHostDynamicWorkflowOffer({
+        env: { [ZCODE_DYNAMIC_WORKFLOW_MODE_ENV]: "onDemand" },
+      }),
+    ).toEqual({
+      mode: "onDemand",
+      enabled: true,
+      source: "override",
+      offeredMode: "onDemand",
+    });
+  });
+
+  it("非法覆盖值被忽略，仍固定提供 alwaysOn", () => {
+    expect(
+      resolveSelfHostDynamicWorkflowOffer({
+        env: { [ZCODE_DYNAMIC_WORKFLOW_MODE_ENV]: "sometimes" },
+      }).offeredMode,
+    ).toBe("alwaysOn");
+  });
+
+  it("覆盖只决定「提供」，用户选择决定生效模式", () => {
+    expect(
+      applyDynamicWorkflowUserMode(
+        resolveSelfHostDynamicWorkflowOffer({
+          env: { [ZCODE_DYNAMIC_WORKFLOW_MODE_ENV]: "onDemand" },
+        }),
+        "disabled",
+      ),
+    ).toMatchObject({
+      mode: "disabled",
+      enabled: false,
+      offeredMode: "onDemand",
+      source: "override",
+    });
   });
 });

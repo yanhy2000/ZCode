@@ -36,9 +36,10 @@ const MODE_ICONS: Record<DynamicWorkflowMode, ComponentType<SVGProps<SVGSVGEleme
 };
 
 /**
- * 设置行要显示什么（docs/dynamic-workflow/launch.md「The user's choice」）。快照加载中、读取失败、
- * 服务端未提供功能时都返回 null：行不渲染，灰度对用户不可见。值与「默认」都取 Host 算好的结果，
- * renderer 不自己套用户选择。
+ * 设置行要显示什么（docs/dynamic-workflow/launch.md「The user's choice」、docs/specs/selfhost-runtime.md
+ * 「工作流」）。返回 null 表示功能未提供：行不渲染。自维护版由 renderer 本地合成快照（固定提供
+ * alwaysOn + 设置里的用户选择，见 dynamicWorkflowAvailabilityStore），所以 value 是用户选择、
+ * offeredMode 是本地默认，两者不同时才说明用户显式改过。
  */
 export function resolveDynamicWorkflowModeSettingView(
   snapshot: DynamicWorkflowAvailabilitySnapshot,
@@ -48,7 +49,7 @@ export function resolveDynamicWorkflowModeSettingView(
   return { value: config.mode, offeredMode: config.offeredMode };
 }
 
-/** 选回服务端提供的模式等于删除选择（空串哨兵，服务层归一成删除），安装继续跟随服务端翻转。 */
+/** 选回提供的模式等于删除选择（空串哨兵，服务层归一成删除），安装继续跟随提供的默认翻转。 */
 export function buildDynamicWorkflowModePatch(
   next: DynamicWorkflowMode,
   offeredMode: DynamicWorkflowMode,

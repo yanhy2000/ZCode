@@ -5,6 +5,7 @@ import {
   buildZCodeSourceHeadersFromContext,
   resolveRuntimeZCodeEndpointOrigin,
   resolveRuntimeZCodeEnv,
+  resolveUpstreamVersion,
   ZCODE_APP_VERSION_ENV,
 } from "@zcode/shared";
 import type { ModelProviderSourceTitle } from "./model-config.js";
@@ -24,7 +25,7 @@ export async function createProviderEndpointRoutingSourceHeaders(
   const env = options.env ?? process.env;
   const deviceMid = await readExistingDeviceMid(resolveTelemetryStateFile(env));
   return buildZCodeSourceHeadersFromContext({
-    appVersion: env[ZCODE_APP_VERSION_ENV] ?? options.appVersion,
+    appVersion: env[ZCODE_APP_VERSION_ENV] ?? resolveUpstreamVersion(options.appVersion),
     arch: readOsArch(),
     clientLanguage: resolveClientLanguage(),
     clientTimezone: resolveClientTimezone(),

@@ -65,7 +65,7 @@ import { createHostResourceUsageResponder } from "./hostResourceUsage.js";
 import {
   HostMessageTypes,
   HostResponseTypes,
-  ZCODE_VERSION,
+  ZCODE_UPSTREAM_VERSION,
   formatLogPrefix,
   formatZCodeHostProcessName,
   formatZodError,
@@ -2693,7 +2693,8 @@ async function setupRemoteConnection(
     signal,
     // SSH/Docker 远端 server 由 host process 单独启动，不能依赖桌面 main 的环境继承。
     // 这里显式透传编译期版本，避免漏导入后生成裸 ZCODE_VERSION 引用导致 SSH 初始化直接 ReferenceError。
-    appVersion: ZCODE_VERSION,
+    // 远端 zcode-server/agent 的请求头与灰度按官方基线版本参与，与桌面进程保持一致。
+    appVersion: ZCODE_UPSTREAM_VERSION,
     // 远端 zcode-server/agent 是独立进程，不能继承 host 里的测试/生产 endpoint 选择。
     // 这里只透传 server 侧白名单允许的公开环境变量，避免把 credential/token 带到远端机器。
     remoteRuntimeEnv: pickRemoteRuntimeEnv(process.env),

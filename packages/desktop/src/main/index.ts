@@ -61,6 +61,7 @@ import {
   TEST_ZCODE_ENDPOINT_ORIGIN,
   ZCODE_VERSION,
   buildZCodeEndpointUrls,
+  resolveUpstreamVersion,
   resolveWebRemoteControlRelayWsUrl,
   resolveZCodeEndpointOrigin,
   type UpdateStatePayload,
@@ -669,12 +670,15 @@ const webRemoteControlSharedHostAttachments = createWebRemoteControlSharedHostAt
 });
 const deviceMid = ensureDesktopDeviceMidSync();
 // 帮助配置是公开读取，不能复用下面附带账号鉴权的灰度响应缓存。
+// 帮助配置与手机远控向云端上报官方基线版本（docs/specs/selfhost-runtime.md「版本规则」「手机远控」）：
+// 私有版本 `1.0.0` 会被云端当成远低于基线的旧客户端，远控链接退回已下线的 /remote/v3 并 404。
+const upstreamAppVersion = resolveUpstreamVersion(ZCODE_VERSION || app.getVersion()) ?? ZCODE_VERSION;
 const readHelpConfig = createDesktopHelpConfigReader({
-  appVersion: ZCODE_VERSION || app.getVersion(),
+  appVersion: upstreamAppVersion,
   deviceMid,
   resolveEndpointOrigin: resolveCurrentZCodeEndpointOrigin,
 });
-const webRemoteControlAppVersion = ZCODE_VERSION || app.getVersion();
+const webRemoteControlAppVersion = upstreamAppVersion;
 const defaultZCodeEndpointUrls = buildZCodeEndpointUrls(DEFAULT_ZCODE_ENDPOINT_ORIGIN, {
   appVersion: webRemoteControlAppVersion,
 });

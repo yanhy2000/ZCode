@@ -12,6 +12,13 @@
 - Release tag 为 `v<version>`，例如 `v1.0.0+3.15.1`；tag 必须与 `package.json` 完全一致。
 - 版本比较按“私有版本优先，官方基线次之”的二元组进行。SemVer 会忽略 `+` 之后的 build metadata，因此更新检查不得直接使用 `semver.gt`。
 
+版本号的两种用途：
+
+- 「显示与更新」使用完整的 `<私有版本>+<官方基线>`：About / 版本信息、安装包名、Release tag、自动更新比较，以及需要区分自维护包身份的本地场景。
+- 「与云端/官方服务交互」使用官方基线版本（`1.0.0+3.15.1` → `3.15.1`，实现为 shared `ZCODE_UPSTREAM_VERSION`）：请求头（`X-ZCode-App-Version`、`User-Agent`）、`app_version` 查询参数、客户端灰度与帮助配置、OAuth 中转、项目访问令牌、遥测与反馈、注入远端进程的应用版本，以及依赖版本比较的功能门槛（如手机远控前端 v4 判定）。官方服务不认识私有版本号，`1.0.0` 会被当成远低于基线的旧客户端。
+- 例外：自维护远端资源（server bundle / remote assets 的 CDN 路径、manifest、握手校验）继续以私有版本为键，保证构建与部署两侧自洽；这些链路不访问官方资产。
+- 版本号缺少 `+` 基线时（非自维护构建、测试桩）按原样使用，不做转换。
+
 ## 产品身份与数据目录
 
 - 发布与手动 Windows 构建固定使用 production 身份：
@@ -87,7 +94,9 @@
 
 - 自维护构建固定提供 `alwaysOn`，不再请求官方 `/api/v1/client/configs` 的 `dynamicWorkflow` 灰度。
 - 服务端无法远程关闭或降级该功能；设置里的“关闭 / 通过命令启用 / 始终开启”选择仍然生效，默认跟随 `alwaysOn`。
-- 未打包 dev 的合法 `ZCODE_DYNAMIC_WORKFLOW_MODE` 覆盖保留，仅供本地调试；打包态不接受外部环境改写。
+- 设置行的取值 = 本地固定的「提供 `alwaysOn`」套上设置里的用户选择：修改后切换设置页面、重新打开设置或重启应用都保持该选择；选择回“始终开启（默认）”时删除设置里的 `dynamicWorkflowMode` 字段，继续跟随默认。
+- Host 用同一规则计算生效模式（闩住的提供 + 每次现读的用户选择），并在 workspace 客户端就绪时把结论下发给 CLI：`onDemand` / `alwaysOn` 下发 `enabled:true` 与对应 mode，`disabled` 下发 `enabled:false`。
+- 未打包 dev 的合法 `ZCODE_DYNAMIC_WORKFLOW_MODE` 覆盖保留，仅供本地调试，且只改写 Host 的运行时候选；设置行仍按本地默认显示（调试用差异，打包态不存在）。打包态不接受外部环境改写。
 - 本地 Host 与 SSH/WSL/Docker 远程 Host 使用同一结论，不再依赖云端配置。
 - 用户可见名称统一为“工作流 / Workflows”；内部协议字段和代码标识仍使用 `dynamicWorkflow`。
 
@@ -96,6 +105,12 @@
 - 自维护构建不读取官方 `desktopContextPrompt` 云端灰度，也不再传递 `ZCODE_DESKTOP_CONTEXT_PROMPT_ENABLED`。
 - 本地 Desktop Host 与 desktop-attached remote Host 固定使用 desktop presentation surface；普通 HTTP/manual app-server 没有 Desktop 宿主事实，仍为 terminal。
 - 因此 Desktop 的 system prompt、Gen UI 输出目录与内联评论能力不再受离线或未登录影响。
+
+## 手机远控
+
+- 远控二维码链接固定使用官方基线版本：`https://zcode.z.ai/remote/v4?...&app_version=<官方基线>`（例如 `app_version=3.15.1`）。
+- 远程前端版本按官方基线判定（门槛常量 `WEB_REMOTE_CONTROL_V4_MIN_APP_VERSION`）；私有版本 `1.0.0` 不得参与该判定，否则链接会退回云端已下线的 `/remote/v3` 并返回 404。
+- relay、attachment、会话复用与本地配对凭据链路保持不变；云端页面模板不属于自维护范围。
 
 ## 强制更新
 
@@ -161,7 +176,7 @@
 5. 设置页不再出现预览版更新、自动下载安装两个开关。
 6. 打包应用不初始化 ARMS，不发送产品事件。
 7. 内置 Provider 云刷新关闭，第三方 Provider 配置仍可正常加载。
-8. 工作流入口默认可见；读取该能力时不请求 `/api/v1/client/configs`，设置中的模式切换仍然生效。
+8. 工作流入口默认可见；读取该能力时不请求 `/api/v1/client/configs`，设置中的模式切换仍然生效：切换设置页面或重启后设置行仍显示用户的选择，Host 用同一结论下发 CLI 策略（关闭时 `enabled:false`）。
 9. Desktop Host 固定使用 desktop presentation surface，不请求 `desktopContextPrompt` 灰度，也不读取 `ZCODE_DESKTOP_CONTEXT_PROMPT_ENABLED`。
 10. Windows 产物只包含正式身份：安装包名 `ZCode-<version>-win-x64.exe`，解包目录存在 `ZCode.exe`，不存在 `ZCode Preview.exe`，`app.asar` 内 `zcodeProductFlavor` 为 `production`。
 11. `pnpm typecheck`、`pnpm lint`、相关单测通过。
@@ -182,3 +197,5 @@
 26. 定时任务不受影响：自动化页仍可创建、编辑、启停、立即运行、查看运行历史；`off_peak_tasks` 表与既有迁移 checksum 保持原样，仅为历史数据兼容保留。
 27. 设置 → 模型设置没有任何供应商时，右栏直接显示“添加供应商”模板页而非“加载中”；该页保持显示直到创建出第一个供应商，此时不显示返回按钮。
 28. “添加供应商”模板页不渲染“智谱 / 其他”分组标题：首位为“创建自定义供应商”，Z.ai 与 BigModel 模板显示在列表末尾，其余模板顺序与内置 Provider 配置一致。
+29. 手机远控链接为 `https://zcode.z.ai/remote/v4?...&app_version=3.15.1`：路径与 `app_version` 都使用官方基线版本，私有版本号不出现在链接中；手机浏览器打开后能进入远控页并连接成功（无需手工改 URL）。
+30. 版本号用途分离可验证：About、安装包名、Release tag 与自动更新比较使用 `1.0.0+3.15.1`；请求头 `X-ZCode-App-Version`、`app_version` 参数、帮助配置、OAuth 中转、项目访问令牌、遥测/反馈与远端进程应用版本使用 `3.15.1`。自维护远端资源 CDN/manifest 仍以 `1.0.0+3.15.1` 为键。

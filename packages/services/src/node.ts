@@ -15,6 +15,7 @@ import {
 import { getAppConfigDir as resolveAppConfigDir } from "./paths.js";
 import {
   buildLocalMediaPreviewUrl,
+  resolveSelfHostDynamicWorkflowOffer,
   type DynamicWorkflowMode,
   type ProviderProvisioningTrigger,
 } from "@zcode/shared";
@@ -474,7 +475,7 @@ import {
   type ZCodeAutomationRun,
   getCapturedZCodeAgentTelemetryEnv,
   ZAI_PROVIDER_ID,
-  ZCODE_VERSION,
+  ZCODE_UPSTREAM_VERSION,
   ZCODE_ENV,
   buildRuntimeZCodeApiUrl,
 } from "@zcode/shared";
@@ -1177,7 +1178,7 @@ export function createLocalServices(options: {
     zcodeBuiltinEnvironment: {
       environmentConfigRoot: resolveAppConfigDir(),
       platform: clientConfigPlatform,
-      appVersion: ZCODE_VERSION,
+      appVersion: ZCODE_UPSTREAM_VERSION,
       resolveEndpointOrigin: resolveCurrentZCodeEndpointOrigin,
       onRefreshResult: (event) => {
         if (event.result === "updated")
@@ -1189,7 +1190,7 @@ export function createLocalServices(options: {
           apiClient,
           endpointOrigin,
           signal,
-          appVersion: ZCODE_VERSION,
+          appVersion: ZCODE_UPSTREAM_VERSION,
           platform: clientConfigPlatform,
         }),
     },
@@ -1702,9 +1703,14 @@ export function createLocalServices(options: {
   const resolveDynamicWorkflowUserMode = isDesktopAttachedRemote
     ? undefined
     : async () => (await settingService.get()).dynamicWorkflowMode;
+  // 自维护构建不再请求云端灰度：Host 用本地固定的「提供」+ 每次现读的用户选择算出生效模式
+  // （docs/specs/selfhost-runtime.md「工作流」）。dev/preview 的本地覆盖由 Main 写进进程环境。
+  const resolveDynamicWorkflowClientConfig = async () =>
+    resolveSelfHostDynamicWorkflowOffer({ env: process.env });
   const zcodeAgentService = createZCodeAgentService({
     ...(modelSelectionReadinessSource ? { modelSelectionReadinessSource } : {}),
     authorizeLocalMediaPreviewPath: options?.authorizeLocalMediaPreviewPath,
+    resolveDynamicWorkflowClientConfig,
     ...(resolveDynamicWorkflowUserMode ? { resolveDynamicWorkflowUserMode } : {}),
     forwardDynamicWorkflowUserMode: options?.forwardDynamicWorkflowUserMode,
     commandResolver: options?.zcodeAgentCommandResolver,
@@ -2030,7 +2036,7 @@ export function createLocalServices(options: {
         getToken: () => credentialService.load("zcodejwttoken"),
         getDeviceMid: () => options?.agentTelemetry?.getDeviceMid?.(),
         baseUrl: buildRuntimeZCodeApiUrl(process.env, "/"),
-        appVersion: ZCODE_VERSION,
+        appVersion: ZCODE_UPSTREAM_VERSION,
         onSnapshot: (snapshot) => marketingAssets.accept(snapshot),
       }),
     )
@@ -2085,7 +2091,7 @@ export function createLocalServices(options: {
         apiClient,
         resolveRequestContext: async () => ({
           endpointOrigin: await resolveCurrentZCodeEndpointOrigin(),
-          appVersion: ZCODE_VERSION,
+          appVersion: ZCODE_UPSTREAM_VERSION,
           platform: `${process.platform}-${process.arch}`,
         }),
       }),
