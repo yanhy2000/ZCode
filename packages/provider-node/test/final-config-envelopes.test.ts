@@ -79,7 +79,14 @@ describe("Todo104 最终文件外壳", () => {
     expect(raw.revision).toBeGreaterThanOrEqual(18);
     const parsed = decodeZCodeBuiltinRelease(raw);
     expect(encodeZCodeBuiltinRelease(parsed)).toEqual(raw);
-    expect(parsed.config.providers.keys().length).toBeGreaterThan(0);
+    // 账号商业面删除后，正式 Built-in 不再声明 Built-in Provider（providerRules 为空）。
+    // 这里按当前文件的真实名单对齐，而不是假设至少存在一个 Provider。
+    const declaredProviderIds = (
+      raw as {
+        config: { providerConfigRules: { providerRules: readonly { providerId: string }[] } };
+      }
+    ).config.providerConfigRules.providerRules.map((rule) => rule.providerId);
+    expect(parsed.config.providers.keys()).toEqual(declaredProviderIds);
     expect(parsed.config.providerTemplates.keys().length).toBeGreaterThan(0);
     for (const rule of parsed.config.providers.toJSON()) {
       expect(rule.config).not.toHaveProperty("templateId");

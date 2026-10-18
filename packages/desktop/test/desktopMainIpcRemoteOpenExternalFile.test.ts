@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { PlatformChannels } from "@zcode/shared";
 
 type IpcHandler = (...args: unknown[]) => unknown;
@@ -138,8 +141,11 @@ describe("OpenExternal 对 file URL 的分流", () => {
   it("带锚点的 file URL 剥掉 hash 后仍走 shell.openPath", async () => {
     const { listener } = await registerOpenExternalListener();
     const sender = { getURL: vi.fn(() => "about:blank") };
+    // Windows 下 file:///tmp/... 不是绝对路径会走 warn 分支；用平台绝对路径构造 file URL，
+    // 让「剥掉 hash 后仍交给 openPath」这一断言跨平台成立。
+    const target = pathToFileURL(join(tmpdir(), "zcode-report.html")).toString();
 
-    listener({ sender }, "file:///tmp/report.html#section");
+    listener({ sender }, `${target}#section`);
 
     await vi.waitFor(() => expect(h.shellOpenPath).toHaveBeenCalledTimes(1));
     expect(h.shellOpenPath).not.toHaveBeenCalledWith(expect.stringContaining("#"));
@@ -157,14 +163,19 @@ describe("OpenExternal 对 file URL 的分流", () => {
     expect(h.shellOpenPath).not.toHaveBeenCalled();
   });
 
-  it("file URL 无法转换为本地路径时记录 warn 且不回退到 shell.openExternal", async () => {
-    const { listener, options } = await registerOpenExternalListener();
-    const sender = { getURL: vi.fn(() => "about:blank") };
+  // Windows 把 file://host/path 解析成 UNC 路径（\\host\path），这是有效的本地路径，
+  // 「无法转换为本地路径」的分支只在 POSIX 触发，故在 Windows 跳过（见 docs/windows-test-compatibility.md）。
+  it.skipIf(process.platform === "win32")(
+    "file URL 无法转换为本地路径时记录 warn 且不回退到 shell.openExternal",
+    async () => {
+      const { listener, options } = await registerOpenExternalListener();
+      const sender = { getURL: vi.fn(() => "about:blank") };
 
-    listener({ sender }, "file://server/share/page.html");
+      listener({ sender }, "file://server/share/page.html");
 
-    await vi.waitFor(() => expect(options.logger.warn).toHaveBeenCalledTimes(1));
-    expect(h.shellOpenPath).not.toHaveBeenCalled();
-    expect(h.shellOpenExternal).not.toHaveBeenCalled();
-  });
+      await vi.waitFor(() => expect(options.logger.warn).toHaveBeenCalledTimes(1));
+      expect(h.shellOpenPath).not.toHaveBeenCalled();
+      expect(h.shellOpenExternal).not.toHaveBeenCalled();
+    },
+  );
 });

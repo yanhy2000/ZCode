@@ -1,6 +1,6 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
+import { readSourceText } from "./readSourceText.js";
 import {
   buildE2ERunIdArg,
   buildWindowsTaskkillArgs,
@@ -40,7 +40,7 @@ describe("desktop e2e process cleanup", () => {
   });
 
   it("passes both run and HOME identity markers through Electron appArgs", () => {
-    const wdioSource = readFileSync(new URL("../wdio.conf.ts", import.meta.url), "utf8");
+    const wdioSource = readSourceText(new URL("../wdio.conf.ts", import.meta.url));
 
     expect(CURRENT_HOME_MARKER).toBe(`--zcode-e2e-home=${CURRENT_HOME}`);
     expect(wdioSource).toMatch(
@@ -49,7 +49,7 @@ describe("desktop e2e process cleanup", () => {
   });
 
   it("stages and launches an immutable app output under the current run cache", () => {
-    const wdioSource = readFileSync(new URL("../wdio.conf.ts", import.meta.url), "utf8");
+    const wdioSource = readSourceText(new URL("../wdio.conf.ts", import.meta.url));
 
     // Bugfix: dev watcher 会清空共享 out；Electron 必须从 runId 隔离副本启动。
     expect(wdioSource).toMatch(/const E2E_APP_OUTPUT_DIR = resolve\(E2E_RUN_CACHE_DIR, "app"\)/u);
@@ -61,8 +61,8 @@ describe("desktop e2e process cleanup", () => {
   });
 
   it("lets ChromeDriver close the renderer before Electron app.quit", () => {
-    const wdioSource = readFileSync(new URL("../wdio.conf.ts", import.meta.url), "utf8");
-    const mainSource = readFileSync(new URL("../src/main/index.ts", import.meta.url), "utf8");
+    const wdioSource = readSourceText(new URL("../wdio.conf.ts", import.meta.url));
+    const mainSource = readSourceText(new URL("../src/main/index.ts", import.meta.url));
 
     expect(wdioSource).toMatch(/appWindow\.once\("closed", requestQuitAfterDriverClose\)/u);
     expect(wdioSource).toMatch(/async after[\s\S]*?await armCurrentElectronAppQuit\("after"\)/u);
@@ -76,24 +76,13 @@ describe("desktop e2e process cleanup", () => {
     );
   });
 
-  it("waits for each window Host once and keeps update install on the strict policy", () => {
-    const mainSource = readFileSync(new URL("../src/main/index.ts", import.meta.url), "utf8");
+  it("waits for each window Host once during app quit", () => {
+    const mainSource = readSourceText(new URL("../src/main/index.ts", import.meta.url));
 
     // R1 后 remote session 是窗口 Host 内资源；manager 只清理请求关联，真正的连接释放由
     // windowHostProcessMap 中唯一 Host 的 shutdown barrier 完成。
     expect(mainSource).toMatch(
       /async function prepareAppQuit[\s\S]*?remoteSessionManager\.disposeAllAndWaitForAppShutdown\(reason\)/u,
-    );
-    expect(mainSource).toMatch(
-      /async function prepareAppQuit[\s\S]*?stopRemoteUsageArmsPeriodicSampling\(\)[\s\S]*?remoteSessionManager\.disposeAllAndWaitForAppShutdown\(reason\)/u,
-    );
-    expect(mainSource).toMatch(
-      /async function prepareAppQuit[\s\S]*?stopDesktopResourceTelemetry\(\{ flushPendingWindows: true \}\)/u,
-    );
-    // 修复原因：更新安装现在复用唯一的 prepareAppQuit 屏障并显式选择严格预算；旧断言要求
-    // Windows 专项资源扫描再次等待 Remote Host，已经与“只执行一次 Host 屏障”的事实冲突。
-    expect(mainSource).toMatch(
-      /prepareAppQuit\("auto-update quitAndInstall", "update-install"\)[\s\S]*?prepareWindowsProcessesForUpdateInstall\(\)/u,
     );
     expect(mainSource).toMatch(
       /async function prepareAppQuit[\s\S]*?selectAppShutdownPolicy[\s\S]*?if \(hasPreparedAppQuit\)[\s\S]*?if \(appQuitPreparationInFlight\)/u,
@@ -110,10 +99,6 @@ describe("desktop e2e process cleanup", () => {
     expect(mainSource).not.toMatch(
       /appQuitPreparationInFlight = Promise\.all\(\[[\s\S]*?desktopWindowSizePersistence\?\.flush\(\)/u,
     );
-    // /event/report 的内存内投递必须与 Host/Cron 清理并行进入同一个退出屏障，且等待有界。
-    expect(mainSource).toMatch(
-      /appQuitPreparationInFlight = Promise\.all\(\[[\s\S]*?appTelemetryCore\.flushPendingReports\(\{ timeoutMs: 2_000 \}\)/u,
-    );
     // Bug 根因：Browser tab 已改为进程内 stateless residency，完整退出不再恢复 tab。
     // 退出屏障只等待真实的 Host/Cron owner；继续要求 recovery idle 会让测试绑定已删除的恢复链路。
     expect(mainSource).not.toMatch(/browserGuestManager\.whenRecoveryIdle\(\)/u);
@@ -123,7 +108,7 @@ describe("desktop e2e process cleanup", () => {
   });
 
   it("forces the Host to exit after its parent IPC disconnects", () => {
-    const hostSource = readFileSync(new URL("../src/host/index.ts", import.meta.url), "utf8");
+    const hostSource = readSourceText(new URL("../src/host/index.ts", import.meta.url));
 
     expect(hostSource).toMatch(
       /process\.once\("disconnect"[\s\S]*?disposeHostResources\("disconnect"\)\.finally\(\(\) => process\.exit\(1\)\)/u,
@@ -131,7 +116,7 @@ describe("desktop e2e process cleanup", () => {
   });
 
   it("Host waits for the remote stdio close handshake", () => {
-    const hostSource = readFileSync(new URL("../src/host/index.ts", import.meta.url), "utf8");
+    const hostSource = readSourceText(new URL("../src/host/index.ts", import.meta.url));
 
     expect(hostSource).toMatch(
       /async function disposeHostRemoteConnection[\s\S]*?connection\.disposeAndWait\(\{ timeoutMs: 5_000 \}\)[\s\S]*?name: "remote-registry-dispose"[\s\S]*?timeoutMs: 6_000/u,

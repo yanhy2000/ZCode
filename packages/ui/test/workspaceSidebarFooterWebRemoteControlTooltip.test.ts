@@ -2,22 +2,13 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { WorkspaceSidebarFooter } from "@/WorkspaceSidebarFooter.js";
-import {
-  resolveSidebarFooterProfilePlanBadge,
-  resolveSidebarFooterPlanBadgeLabel,
-  WorkspaceSidebarFooterPlanBadge,
-} from "@/WorkspaceSidebarFooterUsageSummary.js";
-import { resolveSidebarCurrentCodingPlanUsageSource } from "@/lib/codingPlanUsageSources.js";
-import { BUILTIN_MODEL_PROVIDER_IDS } from "@zcode/shared";
 
-const mockFooterSettings = vi.hoisted(() => ({
-  current: {
-    modelProviderFamilySelectedKeys: {} as Record<string, string>,
-    providerFamilyDomain: undefined as "zai" | "bigmodel" | undefined,
-  },
-}));
+// 说明：本文件原先还覆盖「侧边栏底部方案徽标 / Coding Plan 用量来源解析」，那部分被测导出
+// （resolveSidebarFooterProfilePlanBadge / resolveSidebarFooterPlanBadgeLabel /
+// WorkspaceSidebarFooterPlanBadge / resolveSidebarCurrentCodingPlanUsageSource）已随商业面
+// 清理删除，对应用例随之移除；这里只保留仍存在的远控触发、缩放子菜单、帮助与偏好分组行为。
 
 vi.mock("@/ControlHintTooltip.js", () => ({
   ControlHintTooltip: ({ children, title }: { children: unknown; title: string }) =>
@@ -55,46 +46,13 @@ vi.mock("@/store/StoreProvider.js", () => ({
   ) => selector({ interfaceMode: "coding", setInterfaceMode: vi.fn() }),
 }));
 
-vi.mock("@/hooks/useModelProviders.js", () => ({
-  useModelProviders: () => ({
-    modelProviders: [],
-    loading: false,
-  }),
-}));
-
+// 快捷键 label 走 useSettings 的共享快照（WorkspaceSidebarFooter -> useShortcutCommandLabel），
+// 这里给一个无覆盖的静态设置，避免渲染路径落到真实 ServiceProvider 上。
 vi.mock("@/hooks/useSettingService.js", () => ({
-  useSettings: () => ({
-    settings: mockFooterSettings.current,
-    update: vi.fn(),
-  }),
-}));
-
-vi.mock("@/hooks/useUsageEntitlement.js", () => ({
-  useUsageEntitlement: () => ({
-    snapshot: null,
-    loading: false,
-    error: null,
-    refresh: vi.fn(),
-  }),
-}));
-
-vi.mock("@/settings/model-provider-section/useEnterpriseCodingPlanProducts.js", () => ({
-  useEnterpriseCodingPlanProducts: () => ({
-    snapshot: null,
-    loading: false,
-    error: null,
-    refresh: vi.fn(),
-  }),
+  useSettings: () => ({ settings: { shortcutBindings: undefined }, update: vi.fn() }),
 }));
 
 describe("WorkspaceSidebarFooter web remote control tooltip", () => {
-  beforeEach(() => {
-    mockFooterSettings.current = {
-      modelProviderFamilySelectedKeys: {},
-      providerFamilyDomain: undefined,
-    };
-  });
-
   it("renders a preferences trigger instead of profile identity", () => {
     const html = renderToStaticMarkup(
       createElement(WorkspaceSidebarFooter, {
@@ -110,296 +68,6 @@ describe("WorkspaceSidebarFooter web remote control tooltip", () => {
     expect(html).toContain('data-testid="login-trigger"');
     expect(html).not.toContain("sidebar.profile.notLoggedIn");
     expect(html).not.toContain("profile-menu-header");
-  });
-
-  it("derives compact sidebar footer plan badge labels", () => {
-    expect(
-      resolveSidebarFooterPlanBadgeLabel({
-        generatedAt: 1,
-        authenticated: true,
-        provider: null,
-        remaining: null,
-        subscription: null,
-        quota: { level: "lite", limits: [] },
-      }),
-    ).toBe("Lite");
-    expect(
-      resolveSidebarFooterPlanBadgeLabel({
-        generatedAt: 1,
-        authenticated: true,
-        provider: null,
-        remaining: null,
-        subscription: {
-          identityType: "unknown",
-          identityMasked: null,
-          details: [
-            {
-              productId: "pro",
-              productName: "GLM Coding Pro",
-              purchaseTime: null,
-              beginTime: null,
-              expireTime: null,
-            },
-          ],
-        },
-        quota: null,
-      }),
-    ).toBe("Pro");
-    expect(
-      resolveSidebarFooterPlanBadgeLabel({
-        generatedAt: 1,
-        authenticated: true,
-        unavailableReason: "no_plan",
-        provider: null,
-        remaining: null,
-        subscription: null,
-        quota: null,
-      }),
-    ).toBeNull();
-  });
-
-  it("shows Team in the profile badge for team usage sources", () => {
-    const html = renderToStaticMarkup(
-      createElement(WorkspaceSidebarFooterPlanBadge, {
-        state: {
-          profilePlanBadge: {
-            audience: "team",
-          },
-          usageState: {
-            visibleSnapshot: {
-              generatedAt: 1,
-              authenticated: true,
-              provider: null,
-              remaining: null,
-              subscription: null,
-              quota: { level: "max", limits: [] },
-            },
-          },
-        },
-      }),
-    );
-
-    expect(html).toContain("sidebar.usage.plan.audienceTeam");
-    expect(html).toContain("text-ui-xs");
-    expect(html).not.toContain("text-ui-sm");
-    expect(html).not.toContain("Max");
-  });
-
-  it("prefers personal Coding Plan entitlement over Team entitlement", () => {
-    const snapshot = {
-      generatedAt: 1,
-      authenticated: true,
-      provider: {
-        id: BUILTIN_MODEL_PROVIDER_IDS.bigmodelIndividualCodingPlan,
-        name: "BigModel Coding Plan",
-      },
-      remaining: null,
-      subscription: {
-        identityType: "unknown" as const,
-        identityMasked: null,
-        details: [{ productId: "pro", productName: "GLM Coding Pro", expireTime: null }],
-      },
-      quota: null,
-    };
-
-    expect(
-      resolveSidebarFooterProfilePlanBadge({
-        hasTeamPlanEntitlement: true,
-        individualEntitlements: [
-          {
-            providerId: BUILTIN_MODEL_PROVIDER_IDS.bigmodelIndividualCodingPlan,
-            snapshot,
-          },
-        ],
-      }),
-    ).toEqual({
-      audience: "individual",
-      snapshot,
-    });
-  });
-
-  it("shows Team only from confirmed Team entitlement", () => {
-    expect(
-      resolveSidebarFooterProfilePlanBadge({
-        hasTeamPlanEntitlement: true,
-        individualEntitlements: [
-          {
-            providerId: BUILTIN_MODEL_PROVIDER_IDS.bigmodelIndividualCodingPlan,
-            snapshot: null,
-          },
-        ],
-      }),
-    ).toEqual({
-      audience: "team",
-    });
-  });
-
-  it("keeps stale BigModel Team Plan state out of the profile badge under Z.ai domain", () => {
-    mockFooterSettings.current = {
-      providerFamilyDomain: "zai",
-      modelProviderFamilySelectedKeys: {
-        bigmodel: "team:bigmodel:team-a:project-a",
-      },
-    };
-
-    const html = renderToStaticMarkup(
-      createElement(WorkspaceSidebarFooter, {
-        theme: "dark",
-        localeMenuValue: "zh-CN",
-        onLocaleChange: () => {},
-        onThemeChange: () => {},
-        onSettingsButtonClick: () => {},
-        user: {
-          id: "user-zai-domain",
-          username: "zai-user",
-          displayName: "Zai User",
-        },
-      }),
-    );
-
-    expect(html).not.toContain("sidebar.usage.plan.audienceTeam");
-  });
-
-  it("waits for personal Coding Plan entitlement before showing Team", () => {
-    expect(
-      resolveSidebarFooterProfilePlanBadge({
-        hasTeamPlanEntitlement: true,
-        individualEntitlements: [
-          {
-            providerId: BUILTIN_MODEL_PROVIDER_IDS.bigmodelIndividualCodingPlan,
-            snapshot: null,
-            loading: true,
-          },
-        ],
-      }),
-    ).toBeNull();
-  });
-
-  it("does not show Team from a selected Team Plan key without Team entitlement", () => {
-    expect(
-      resolveSidebarFooterProfilePlanBadge({
-        hasTeamPlanEntitlement: false,
-        individualEntitlements: [
-          {
-            providerId: BUILTIN_MODEL_PROVIDER_IDS.bigmodelIndividualCodingPlan,
-            snapshot: null,
-            loading: false,
-          },
-        ],
-      }),
-    ).toBeNull();
-  });
-
-  it("resolves sidebar usage to the current workspace connection only", () => {
-    const teamSources = [
-      {
-        id: "team:bigmodel:team-a:org-a:project-a" as const,
-        providerId: BUILTIN_MODEL_PROVIDER_IDS.bigmodelTeamCodingPlan,
-        label: "BigModel - Team A",
-        accountAccess: {
-          type: "zhipu-account" as const,
-          family: "bigmodel" as const,
-          planKind: "team-coding-plan" as const,
-          productId: "team-a",
-          organizationId: "org-a",
-          projectId: "project-a",
-        },
-      },
-      {
-        id: "team:bigmodel:team-b:org-b:project-b" as const,
-        providerId: BUILTIN_MODEL_PROVIDER_IDS.bigmodelTeamCodingPlan,
-        label: "Team B Plan",
-        accountAccess: {
-          type: "zhipu-account" as const,
-          family: "bigmodel" as const,
-          planKind: "team-coding-plan" as const,
-          productId: "team-b",
-          organizationId: "org-b",
-          projectId: "project-b",
-        },
-      },
-    ];
-
-    expect(
-      resolveSidebarCurrentCodingPlanUsageSource({
-        selections: {
-          bigmodel: {
-            kind: "team-coding-plan",
-            productId: "team-b",
-            organizationId: "org-b",
-            projectId: "project-b",
-          },
-        },
-        selectedProviderId: BUILTIN_MODEL_PROVIDER_IDS.bigmodelTeamCodingPlan,
-        accountAccesses: {
-          bigmodel: {
-            type: "zhipu-account",
-            family: "bigmodel",
-            mode: "individual-coding-plan",
-          },
-        },
-        teamSources,
-      }),
-    ).toMatchObject({
-      audience: "team",
-      sourceId: "team:bigmodel:team-b:org-b:project-b",
-      teamSource: { accountAccess: { projectId: "project-b" } },
-    });
-    expect(
-      resolveSidebarCurrentCodingPlanUsageSource({
-        selections: { bigmodel: { kind: "individual-coding-plan" } },
-        selectedProviderId: BUILTIN_MODEL_PROVIDER_IDS.bigmodelIndividualCodingPlan,
-        accountAccesses: {
-          bigmodel: {
-            type: "zhipu-account",
-            family: "bigmodel",
-            mode: "individual-coding-plan",
-          },
-        },
-        teamSources,
-      }),
-    ).toMatchObject({
-      audience: "individual",
-      sourceId: BUILTIN_MODEL_PROVIDER_IDS.bigmodelIndividualCodingPlan,
-    });
-  });
-
-  it("does not guess a Team usage source after its product identity changes", () => {
-    expect(
-      resolveSidebarCurrentCodingPlanUsageSource({
-        selections: {
-          bigmodel: {
-            kind: "team-coding-plan",
-            productId: "product-old",
-            organizationId: "org-a",
-            projectId: "project-a",
-          },
-        },
-        selectedProviderId: BUILTIN_MODEL_PROVIDER_IDS.bigmodelTeamCodingPlan,
-        accountAccesses: {
-          bigmodel: {
-            type: "zhipu-account",
-            family: "bigmodel",
-            planKind: "individual-coding-plan",
-          },
-        },
-        teamSources: [
-          {
-            id: "team:bigmodel:product-current:org-a:project-a",
-            providerId: BUILTIN_MODEL_PROVIDER_IDS.bigmodelTeamCodingPlan,
-            label: "BigModel - Team A",
-            accountAccess: {
-              type: "zhipu-account",
-              family: "bigmodel",
-              planKind: "team-coding-plan",
-              productId: "product-current",
-              organizationId: "org-a",
-              projectId: "project-a",
-            },
-          },
-        ],
-      }),
-    ).toBeNull();
   });
 
   it("does not wrap the remote control trigger in a second tooltip", () => {
@@ -479,7 +147,8 @@ describe("WorkspaceSidebarFooter web remote control tooltip", () => {
 
     expect(footerSource).toContain("onUsageClick={usageButtonClick}");
     expect(summarySource).toContain("<DropdownMenuSeparator />");
-    expect(summarySource).toContain("sidebar.usage.plan.openStats");
+    // 用量入口文案 id 现为 sidebar.usage.openStats（旧的 sidebar.usage.plan.openStats 已随方案面清理）。
+    expect(summarySource).toContain("sidebar.usage.openStats");
     expect(summarySource).toContain("setPendingSettingsUsageIntent();");
     expect(summarySource).toContain("onUsageClick?.();");
     expect(summarySource).not.toContain("onUpgradeClick");

@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { migrateLegacyModelProviderId } from "../src/legacy-model-provider-identity.js";
+import { BUILTIN_PROVIDER_TEMPLATE_IDS } from "../src/model-provider-types.js";
 
 describe("旧 Provider 身份仅在升级边界静态转换", () => {
   it("迁移接口不接受账号或 Registry 上下文", () => {
@@ -8,7 +9,8 @@ describe("旧 Provider 身份仅在升级边界静态转换", () => {
   for (const family of ["bigmodel", "zai"] as const) {
     it(`${family} 离线转换全部旧身份，Coding Plan 固定 Individual`, () => {
       const pairs = [
-        [`builtin:${family}`, `${family}-api`],
+        // 上游已把内置模板改名为 `<family>-standard-api`，这里直接引用常量，避免再次漂移。
+        [`builtin:${family}`, BUILTIN_PROVIDER_TEMPLATE_IDS[family]],
         [`builtin:${family}-start-plan`, `account:${family}-start-plan`],
         [`builtin:${family}-coding-plan`, `account:${family}-individual-coding-plan`],
       ];

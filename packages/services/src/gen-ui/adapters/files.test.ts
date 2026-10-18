@@ -60,8 +60,12 @@ describe("Gen UI executor file reader", () => {
     await expect(readGenUiDocument({ ...target, path: oldPath }, outputRoot)).rejects.toThrow(
       "host output directory",
     );
-    await symlink(oldPath, target.path);
-    await expect(readGenUiDocument(target, outputRoot)).rejects.toThrow("symbolic links");
+    // Windows 普通用户没有 SeCreateSymbolicLinkPrivilege，创建文件符号链接会 EPERM；
+    // 该子断言由 Linux CI 覆盖。目录 junction 无需特权，下面的检查仍然执行。
+    if (process.platform !== "win32") {
+      await symlink(oldPath, target.path);
+      await expect(readGenUiDocument(target, outputRoot)).rejects.toThrow("symbolic links");
+    }
     await rm(directory, { recursive: true });
     await symlink(target.workspacePath, directory, "junction");
     await expect(readGenUiDocument(target, outputRoot)).rejects.toThrow("symbolic links");

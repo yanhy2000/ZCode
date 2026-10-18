@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { IServiceAccessor } from "@zcode/services";
 import type { IPlatformService } from "@zcode/shared";
 import { useRootOAuthEffects } from "@/root/useRootOAuthEffects.js";
+import { useRootProviderSettingsSnapshot } from "@/root/useRootProviderSettingsSnapshot.js";
 import { logger } from "@/logger.js";
 vi.mock("@/hooks/useAlertDialog.js", () => ({ useAlertDialog: () => vi.fn() }));
 vi.mock("@/i18n/IntlProvider.js", () => ({
@@ -33,8 +34,10 @@ describe("Root 账号刷新生命周期", () => {
     const refreshProviderState = vi.fn(async () => {
       throw new Error("temporary refresh failure");
     });
-    // 订阅已拆到独立 hook；真实挂载全部 effect，不能再假定第一个 effect 负责订阅。
-    const { unmount } = renderHook(() =>
+    // 订阅已拆到独立 hook（useRootProviderSettingsSnapshot）；真实挂载全部 effect，
+    // 不能再假定 OAuth effect 自身负责账号事实订阅。
+    const { unmount } = renderHook(() => {
+      useRootProviderSettingsSnapshot(services);
       useRootOAuthEffects({
         accountIntentKey: "test-account/individual",
         platform: {
@@ -50,8 +53,8 @@ describe("Root 账号刷新生命周期", () => {
         setOAuthPollingActive: vi.fn(),
         markOAuthSuccess: vi.fn(),
         onReauthenticationRequired: vi.fn(),
-      }),
-    );
+      });
+    });
     try {
       await waitFor(() =>
         expect(logger.warn).toHaveBeenCalledWith("[Root] 启动账号配置刷新失败，继续观察后续更新", {

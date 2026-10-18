@@ -49,7 +49,10 @@ describe("powershell-command", () => {
       const output = execFileSync(
         "powershell.exe",
         createEncodedPowerShellArgs(
-          "[Console]::Out.Write($zcodeArg0 + [Environment]::NewLine + $zcodeArg1)",
+          // Windows PowerShell 把 stdout 按当前控制台代码页编码；断言里含中文，必须显式
+          // 让被测脚本以 UTF-8 输出，否则在非 UTF-8 代码页的机器上回读会得到乱码
+          //（这是宿主控制台编码差异，不是 createEncodedPowerShellArgs 的参数编码问题）。
+          "[Console]::OutputEncoding=[Text.Encoding]::UTF8; [Console]::Out.Write($zcodeArg0 + [Environment]::NewLine + $zcodeArg1)",
           values,
         ),
         { encoding: "utf8" },

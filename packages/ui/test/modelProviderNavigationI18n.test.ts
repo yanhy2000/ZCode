@@ -71,12 +71,11 @@ describe("model provider navigation i18n", () => {
 
     const { useModelProviderNavigation } =
       await import("@/settings/model-provider-section/useModelProviderNavigation.js");
+    const { createCustomProviderNodeKey } =
+      await import("@/settings/model-provider-section/utils.js");
     const provider = createCustomProvider();
-    const codingPlanEntitlements = {};
     const commonOptions = {
-      presetProviders: [],
       modelProviders: [provider],
-      codingPlanEntitlements,
       selectedNodeKey: null,
       setSelectedNodeKey: vi.fn(),
     };
@@ -105,6 +104,7 @@ describe("model provider navigation i18n", () => {
     const enCustomGroup = enResult.navigationGroups.find((group) => group.id === "custom");
     expect(enCustomGroup?.title).toBe("Custom Providers");
     expect(enCustomGroup?.items).toHaveLength(1);
-    expect(enCustomGroup?.items[0]?.type).toBe("custom");
+    // 导航项已改为通过 key 标识自定义供应商（原 type: "custom" 字段已随预置入口移除）。
+    expect(enCustomGroup?.items[0]?.key).toBe(createCustomProviderNodeKey("custom-provider"));
   });
 });

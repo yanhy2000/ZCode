@@ -166,15 +166,15 @@ describe("WindowsCaptionMenuButton", () => {
     expect(html).not.toContain("titleBar.menu.help.toggleBulkSessionStressTest");
   });
 
-  it("Preview 隐藏更新入口，生产版继续保留", async () => {
+  it("自维护构建对所有产品身份都保留更新入口", async () => {
     const { shouldShowDesktopUpdateEntry } = await import("@/WindowsCaptionMenuButton.js");
 
-    // 更新入口跟随产品身份：生产后端的 Preview 同样隐藏。
-    expect(shouldShowDesktopUpdateEntry("preview")).toBe(false);
-    expect(shouldShowDesktopUpdateEntry("production")).toBe(true);
+    // 自维护 fork：更新源改为 GitHub Release（desktopUpdateMenu 不再按产品身份区分，
+    // 该函数恒为 true、无参数），因此 Preview 与生产版都要能看到更新入口。
+    expect(shouldShowDesktopUpdateEntry()).toBe(true);
 
     const html = await renderButton("header");
-    expect(html).not.toContain("titleBar.menu.help.checkForUpdates");
+    expect(html).toContain("titleBar.menu.help.checkForUpdates");
   });
 
   it("includes help actions migrated from the shared question-mark menu", async () => {

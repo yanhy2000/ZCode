@@ -159,9 +159,9 @@ describe("model selection groups", () => {
     expect(buildRegistryModelSelectGroups("glm", selectionView)).toEqual([
       {
         key: `registry-provider:${providerId}`,
-        label: "BigModel",
-        labelBadge: "Team",
-        directItems: true,
+        // 账号 Provider 的 Team/Individual 徽标与 directItems 展示已随套餐商业面移除，
+        // 现在统一按注册表 providerName 投影为普通分组。
+        label: "BigModel Coding Plan",
         items: [
           {
             key: `registry-provider:${providerId}:GLM-5.2`,

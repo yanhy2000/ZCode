@@ -29,7 +29,8 @@ describe("providerBusinessError", () => {
   });
 
   it("recognizes provider business codes for localized banners", () => {
-    expect(isProviderBusinessErrorCode("3007")).toBe(true);
+    // 3007（安全校验拒绝）已随「只移除渲染层请求校验」一并移出业务码集合。
+    expect(isProviderBusinessErrorCode("3007")).toBe(false);
     expect(getProviderBusinessErrorMessageId("1005")).toBe(
       "zcode.error.providerBusiness.1005",
     );

@@ -126,7 +126,8 @@ describe("Provider Provisioning Target", () => {
   it.each(["write", "commit"])("%s 阶段失败保留安全错误码且回滚原数据", async (phase) => {
     const f = await createTarget();
     const before = await f.personal.read();
-    if (phase === "write") f.settingUpdate.mockRejectedValueOnce(new Error("fixture write failed"));
+    // settings 写入已随账号链路移除；write 阶段失败改由仍会写盘的 Credential 域注入。
+    if (phase === "write") f.credentialSave.mockRejectedValueOnce(new Error("fixture write failed"));
     else await mkdir(join(f.directory, "provisioning.json"));
     expect(await f.target.apply(createEnvelope() as never)).toMatchObject({
       status: "failed",
@@ -194,7 +195,7 @@ describe("Provider Provisioning Target", () => {
     expect(f.credentialSave).not.toHaveBeenCalled();
   });
 
-  it("writes all target stores, refreshes the registry and is idempotent", async () => {
+  it("writes credentials and personal config, refreshes the registry and is idempotent", async () => {
     const { target, personal, replacePersonalConfig, settingUpdate, credentialSave } =
       await createTarget();
 
@@ -206,7 +207,8 @@ describe("Provider Provisioning Target", () => {
       configRevision: "target-revision",
       rolledBack: false,
     });
-    expect(settingUpdate).toHaveBeenCalledOnce();
+    // Target 不再写账号 Settings（accountSettings 只保留在 v1 信封做兼容校验）。
+    expect(settingUpdate).not.toHaveBeenCalled();
     expect(credentialSave).toHaveBeenCalledWith("oauth:zai:access_token", "new-token");
     expect(replacePersonalConfig).toHaveBeenCalledOnce();
     expect((await personal.read()).defaultModelSelection).toEqual({
@@ -296,7 +298,7 @@ describe("Provider Provisioning Target", () => {
     expect(f.credentialSave).not.toHaveBeenCalledWith(legacyKey, expect.anything());
   });
 
-  it("rolls back settings, credentials and config when a later write fails", async () => {
+  it("rolls back credentials and config when a later write fails", async () => {
     const { target, replacePersonalConfig, settingUpdate, credentialSave } = await createTarget({
       refresh: vi
         .fn()
@@ -308,7 +310,8 @@ describe("Provider Provisioning Target", () => {
       status: "failed",
       rolledBack: true,
     });
-    expect(settingUpdate).toHaveBeenCalledTimes(2);
+    // 账号 Settings 已不在事务内，回滚只覆盖 Credential 与 Personal 配置。
+    expect(settingUpdate).not.toHaveBeenCalled();
     expect(credentialSave).toHaveBeenCalledWith("oauth:zai:access_token", "old-token");
     expect(replacePersonalConfig).toHaveBeenCalledTimes(2);
   });

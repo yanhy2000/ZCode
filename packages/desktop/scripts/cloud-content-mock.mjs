@@ -61,18 +61,79 @@ export async function createCloudContentMockServer({ port = 0 } = {}) {
       },
     ],
   };
-  const hero = await readFile(
-    new URL("../../ui/src/assets/cloud-content/weekend-plan-hero.html", import.meta.url),
+  // 修复原因：Weekend Plan 商业化资产与 dialog mock JSON 已随商业面清理删除，
+  // 本 mock 原先直接读这两个文件，导致 cloudContentService 单测与 e2e 预热全部 ENOENT。
+  // 这里改为自带中性 fixture：只保留 cloud-content 沙箱/ZIP/租约链路所需的形状，
+  // 不含任何套餐文案，也不重新引入被删的商业化资源。
+  const hero = Buffer.from(
+    `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cloud content demo</title>
+    <style>html,body{margin:0;height:100%}body{display:flex;align-items:center;justify-content:center;font-family:sans-serif}</style>
+  </head>
+  <body>
+    <div data-channel="zcode-cloud-hero-v1" id="cloud-demo">zcode-cloud-hero-v1</div>
+  </body>
+</html>
+`,
+    "utf8",
   );
-  const fixture = JSON.parse(
-    await readFile(
-      new URL(
-        "../../ui/src/components/cloud-content-dialog/mocks/weekendPlanResultDialog.zh-CN.json",
-        import.meta.url,
-      ),
-      "utf8",
-    ),
-  );
+  const fixture = {
+    schemaVersion: 1,
+    id: "cloud-content-mock-dialog",
+    revision: 1,
+    kind: "campaign",
+    locale: "zh-CN",
+    dialog: {
+      title: "云端内容弹窗（本地 mock）",
+      description: { format: "html", text: "<p>本地 HTTP mock。</p>" },
+      hero: {
+        type: "interactive_bundle",
+        runtime: "zcode-hero-sandbox-v1",
+        bundle: {
+          format: "zip",
+          url: "https://cloud-content-mock.invalid/placeholder.zip",
+          entry: "index.html",
+          sha256: "0".repeat(64),
+          sizeBytes: 1,
+        },
+        viewport: { aspectRatio: "4:3" },
+        data: {
+          planName: "Cloud content demo",
+          amountLabel: "1,000,000 Tokens",
+          amountValue: "1,000,000",
+          amountUnit: "Tokens",
+          benefits: ["Cloud content demo"],
+          endsAtLabel: "2026-01-01 23:59",
+          endsAtPrefix: "有效期至",
+          replayLabel: "重新播放",
+        },
+        events: { replay: "replay" },
+      },
+      buttons: [
+        {
+          id: "open-model-settings",
+          label: "模型设置",
+          variant: "primary",
+          actionId: "open-model-settings",
+        },
+        {
+          id: "copy-share",
+          label: "复制分享",
+          variant: "secondary",
+          actionId: "copy-share",
+        },
+      ],
+    },
+    actions: {
+      "open-model-settings": { type: "navigate", destination: "model_settings" },
+      "copy-share": { type: "copy_text", text: "Cloud content demo" },
+    },
+  };
   const zip = new yazl.ZipFile();
   zip.addBuffer(hero, "index.html", { mtime: new Date("2026-01-01T00:00:00Z") });
   zip.end();

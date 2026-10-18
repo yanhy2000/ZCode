@@ -13,6 +13,7 @@ import {
   NodePersonalProviderConfigRepository,
   NodeZCodeBuiltinProviderConfigSource,
 } from "@zcode/provider-node";
+import { BUILTIN_PROVIDER_TEMPLATE_IDS } from "@zcode/shared";
 import { getAppConfigDir, setDataBaseDir } from "../src/paths.js";
 import { readLegacyZCodeConfigProviders } from "../src/model-provider/legacyZCodeConfigProviderReader.js";
 import { importLegacyPersonalProviderConfig } from "../src/model-provider/legacyPersonalProviderConfigImporter.js";
@@ -95,7 +96,12 @@ describe("Todo 72 已发布 config.json 首次升级", () => {
     });
     try {
       const personal = await repository.read();
-      expect(personal.providers.keys()).toEqual(["bigmodel-api", "zai-api", customId]);
+      // 上游已把内置模板改名为 `<family>-standard-api`；直接引用常量，避免再次漂移。
+      expect(personal.providers.keys()).toEqual([
+        BUILTIN_PROVIDER_TEMPLATE_IDS.bigmodel,
+        BUILTIN_PROVIDER_TEMPLATE_IDS.zai,
+        customId,
+      ]);
       const builtin = await source.read();
       const resolved = new ProviderConfigResolver().resolve({
         zcodeBuiltinProviders: builtin.providers,
@@ -106,7 +112,7 @@ describe("Todo 72 已发布 config.json 首次升级", () => {
         accountProviders: ProviderConfigMap.empty(),
       });
       for (const family of ["bigmodel", "zai"] as const) {
-        const id = `${family}-api`;
+        const id = BUILTIN_PROVIDER_TEMPLATE_IDS[family];
         const provider = resolved.resolvedProviders.find((item) => item.providerId === id)!;
         expect(provider.config.api?.baseUrl).toBe(
           builtin.providerTemplates?.get(id)?.config.api?.baseUrl,
@@ -148,12 +154,14 @@ describe("Todo 72 已发布 config.json 首次升级", () => {
       expect(missingKey.registryProviders.some((item) => item.providerId === customId)).toBe(false);
       await repository.update((current) => ({
         ...current,
-        providers: current.providers.delete("bigmodel-api").setRule({
+        providers: current.providers.delete(BUILTIN_PROVIDER_TEMPLATE_IDS.bigmodel).setRule({
           ...current.providers.getRule(customId)!,
           enabled: !(enabled ?? true),
         }),
       }));
-      expect((await repository.read()).providers.has("bigmodel-api")).toBe(false);
+      expect((await repository.read()).providers.has(BUILTIN_PROVIDER_TEMPLATE_IDS.bigmodel)).toBe(
+        false,
+      );
       const reopened = new NodePersonalProviderConfigRepository({
         filePath: join(configDir, "provider_config.json"),
         pollingIntervalMs: false,
@@ -167,7 +175,7 @@ describe("Todo 72 已发布 config.json 首次升级", () => {
       try {
         const persisted = await reopened.read();
         expect(persisted.providers.getRule(customId)?.enabled).toBe(!(enabled ?? true));
-        expect(persisted.providers.has("bigmodel-api")).toBe(false);
+        expect(persisted.providers.has(BUILTIN_PROVIDER_TEMPLATE_IDS.bigmodel)).toBe(false);
       } finally {
         reopened.dispose();
       }

@@ -219,9 +219,11 @@ describe("desktopApplicationMenu endpoint submenu", () => {
     expect(findMenuItem(template, "ZCode Endpoint")).toBeUndefined();
   });
 
-  it("Preview 隐藏更新入口，生产版继续显示", async () => {
+  it("更新入口在 Preview 与生产版都显示（自托管更新）", async () => {
     const { rebuildApplicationMenu } = await import("../src/main/desktopApplicationMenu.js");
 
+    // 自托管更新后，更新入口只打开 GitHub Releases 页面，不再依赖 electron-updater，
+    // 因此不再按产品身份（Preview/生产）隐藏。
     envMock.value = "test";
     rebuildApplicationMenu({
       currentApplicationLocale: "en-US",
@@ -230,7 +232,7 @@ describe("desktopApplicationMenu endpoint submenu", () => {
     let template = buildFromTemplateMock.mock.calls.at(
       -1,
     )?.[0] as Electron.MenuItemConstructorOptions[];
-    expect(findMenuItem(template, undefined, "check-for-update")).toBeUndefined();
+    expect(findMenuItem(template, undefined, "check-for-update")).toBeTruthy();
 
     envMock.value = "production";
     rebuildApplicationMenu({

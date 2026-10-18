@@ -3,7 +3,6 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
-import { fileURLToPath } from "node:url";
 import { afterEach, expect, it } from "vitest";
 
 const roots: string[] = [];
@@ -33,9 +32,9 @@ it.each([false, true])(
     });
   `,
     );
-    const proxy = fileURLToPath(
-      new URL("./e2e/helpers/subagent-config-proxy.mjs", import.meta.url),
-    );
+    // NODE_OPTIONS 的 --import 只接受 URL；Windows 绝对路径会被当成协议 "d:" 拒绝，
+    // 所以必须传 file:// URL（import.meta.url 派生出的 href 跨平台一致）。
+    const proxy = new URL("./e2e/helpers/subagent-config-proxy.mjs", import.meta.url).href;
     const child = spawn(process.execPath, [entry, "app-server", "--stdio"], {
       env: {
         ...process.env,

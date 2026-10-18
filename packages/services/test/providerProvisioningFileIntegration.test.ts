@@ -56,23 +56,24 @@ async function setup() {
     get: vi.fn(async () => accountSettings),
     update: vi.fn(async () => undefined),
   };
-  const account = { refresh: vi.fn(async () => undefined) };
   const registry = {
     refresh: vi.fn(async () => ({ sourceRevisions: { config: "config:fixture" } })),
     validateSelection: vi.fn<(selection: ModelSelection) => ModelSelectionValidation>(() => ({
       ok: true,
     })),
   };
+  // Provisioning target 已不再写账号 Settings（accountSettings 只用于 v1 兼容校验），
+  // 因此并发/失败注入点改到仍会写盘的 Credential 域。
+  const credentialService = {
+    load: async () => null,
+    save: async () => undefined,
+    delete: vi.fn(async () => undefined),
+  };
   const target = createProviderProvisioningTarget({
     personalRepository: personal,
     providerRuntime: { start: async () => undefined, registryService: registry } as never,
-    accountProviderSource: account as never,
     settingService: settings as never,
-    credentialService: {
-      load: async () => null,
-      save: async () => undefined,
-      delete: async () => undefined,
-    } as never,
+    credentialService: credentialService as never,
     personalConfigFilePath: filePath,
     stateFilePath: join(directory, "provisioning.json"),
   });
@@ -85,7 +86,16 @@ async function setup() {
       credentials: [],
     });
   }
-  return { directory, filePath, personal, settings, account, registry, target, envelope };
+  return {
+    directory,
+    filePath,
+    personal,
+    settings,
+    registry,
+    credentialService,
+    target,
+    envelope,
+  };
 }
 
 describe("Todo104 分发同文件原子边界", () => {
@@ -165,8 +175,9 @@ describe("Todo104 分发同文件原子边界", () => {
   });
 
   it("写入其他域时 Personal 已发生变化，前向替换也必须保留并发值", async () => {
-    const { personal, settings, target, envelope } = await setup();
-    settings.update.mockImplementationOnce(async () => {
+    const { personal, credentialService, target, envelope } = await setup();
+    // Target 不再写账号 Settings，改用仍会落盘的 Credential 域制造“同步期间其它域写入”。
+    credentialService.delete.mockImplementationOnce(async () => {
       await personal.update((current) => ({
         ...current,
         defaultModelSelection: { providerId: "fixture", modelId: "new-before-apply" },
@@ -217,9 +228,10 @@ describe("Todo104 分发同文件原子边界", () => {
   });
 
   it("后续刷新失败时整份恢复 Provider 和默认选择", async () => {
-    const { personal, account, target, envelope } = await setup();
+    const { personal, registry, target, envelope } = await setup();
     const before = encodeProviderConfigFile(await personal.read());
-    account.refresh.mockRejectedValueOnce(new Error("refresh failed"));
+    // 刷新失败现在来自 Registry refresh（账号 Source refresh 已随账号链路移除）。
+    registry.refresh.mockRejectedValueOnce(new Error("refresh failed"));
     expect(await target.apply(envelope(false))).toMatchObject({
       status: "failed",
       rolledBack: true,
@@ -231,8 +243,8 @@ describe("Todo104 分发同文件原子边界", () => {
   it.each(["provider", "default"])(
     "刷新失败前另一个写入修改 %s，不能用旧回滚覆盖",
     async (field) => {
-      const { personal, account, target, envelope } = await setup();
-      account.refresh.mockImplementationOnce(async () => {
+      const { personal, registry, target, envelope } = await setup();
+      registry.refresh.mockImplementationOnce(async () => {
         await personal.update((current) =>
           field === "provider"
             ? {
