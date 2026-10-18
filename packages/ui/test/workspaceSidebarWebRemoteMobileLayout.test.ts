@@ -165,8 +165,6 @@ function createSidebarProps(overrides: Record<string, unknown> = {}) {
     onCancelRemoteProject: vi.fn(async () => {}),
     onConnectRemote: vi.fn(async () => ""),
     onCreateTask: vi.fn(),
-    onLogin: vi.fn(),
-    onLogout: vi.fn(),
     onReconnectRemoteWorkspace: vi.fn(async () => {}),
     onSelectRemoteProject: vi.fn(async () => {}),
     onSelectTask: vi.fn(),
@@ -174,7 +172,6 @@ function createSidebarProps(overrides: Record<string, unknown> = {}) {
     remoteWorkspaceErrorByWorkspaceKey: {},
     selectedProvider: "codex",
     theme: "light",
-    user: null,
     webRemoteControlWorkspaceSwitcher: {
       listWorkspaces: vi.fn(async () => ({ tasks: [], workspaces: [] })),
       switchWorkspace: vi.fn(async () => {}),

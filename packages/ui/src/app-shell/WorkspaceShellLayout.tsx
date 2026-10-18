@@ -309,8 +309,6 @@ export const WorkspaceShellLayout = memo(
     onSelectRemoteProject,
     onCancelRemoteProject,
     onReconnectRemoteWorkspace,
-    onLogout,
-    onLogin,
     user,
     reconnectingRemoteWorkspaceKeys,
     remoteWorkspaceErrorByWorkspaceKey,
@@ -2440,9 +2438,6 @@ export const WorkspaceShellLayout = memo(
                     reconnectingRemoteWorkspaceLogsByWorkspaceKey={
                       reconnectingRemoteWorkspaceLogsByWorkspaceKey
                     }
-                    onLogout={onLogout}
-                    onLogin={onLogin}
-                    user={user}
                     isDesktop={isDesktop}
                     isWebRemoteControl={isWebRemoteControlShell}
                     isMacDesktop={isMacDesktop}

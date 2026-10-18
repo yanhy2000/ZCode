@@ -212,8 +212,6 @@ export function RootWorkspaceContent({
             onCreateTask={handleCreateTask}
             onOpenWorkspace={handleOpenWorkspace}
             allowOpenWorkspace={allowOpenWorkspace}
-            onLogin={onLogin}
-            onLogout={handleLogout}
             user={user}
           />
         </ScopedErrorBoundary>
