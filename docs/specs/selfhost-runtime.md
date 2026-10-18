@@ -86,9 +86,11 @@
 
 ## 内置 Provider 云刷新
 
-- 保留 `zcodeBuiltinRemote` 的构造代码，供后续第三方接入参考。
-- 自维护构建固定关闭：不创建 `zcodeBuiltinRemote`，不访问官方 release 拉取内置 Provider 配置。
-- 通过显式开关控制，后续替换为自有第三方 Provider 逻辑时再删除。
+- 保留 `zcodeBuiltinRemote` / `EndpointScopedZCodeBuiltinSource` 的构造代码，供后续第三方接入参考。
+- 自维护构建固定关闭：Host 装配（`packages/services/src/node.ts`）**不传** `zcodeBuiltinEnvironment`，因此不会构造 Endpoint-scoped source 与其 remote synchronizer，不创建 `zcodeBuiltinRemote`，不请求 `/api/v1/client/configs`，也不下载官方 CDN 内置 Provider 配置。
+- 内置 Provider 配置只来自仓库 `config/provider/zcode-builtin.json`，不存在 Active/LKG 物化与远端接管。
+- 历史更正（2026-10-18）：此前只保证「不创建 `zcodeBuiltinRemote`」，但传了 `zcodeBuiltinEnvironment`，`EndpointScopedZCodeBuiltinSource` 会**在内部自建** synchronizer 并跑 60s 周期检查，启动即请求 `/api/v1/client/configs` 并下载官方配置（实测远端 revision 23 含 `zhipu-account`/`start-plan`）。当时因仓库内置配置 revision 更大未被采用，但上游 revision 一旦超过就会静默接管 Provider 配置。
+- 通过显式开关控制，后续替换为自有第三方 Provider 逻辑时再删除保留代码。
 
 ## 工作流
 
@@ -175,7 +177,7 @@
 4. 帮助菜单和托盘菜单都能触发 GitHub Release 检查，并覆盖上述成功与失败分支。
 5. 设置页不再出现预览版更新、自动下载安装两个开关。
 6. 打包应用不初始化 ARMS，不发送产品事件。
-7. 内置 Provider 云刷新关闭，第三方 Provider 配置仍可正常加载。
+7. 内置 Provider 云刷新关闭：Host 装配不传 `zcodeBuiltinEnvironment`，不构造 Endpoint-scoped source 与 remote synchronizer，启动与运行期都不请求 `/api/v1/client/configs`、不下载官方 CDN 配置；内置 Provider 配置只来自 `config/provider/zcode-builtin.json`（`refreshZCodeBuiltin()` 返回 `skipped`），第三方 Provider 配置仍可正常加载。
 8. 工作流入口默认可见；读取该能力时不请求 `/api/v1/client/configs`，设置中的模式切换仍然生效：切换设置页面或重启后设置行仍显示用户的选择，Host 用同一结论下发 CLI 策略（关闭时 `enabled:false`）。
 9. Desktop Host 固定使用 desktop presentation surface，不请求 `desktopContextPrompt` 灰度，也不读取 `ZCODE_DESKTOP_CONTEXT_PROMPT_ENABLED`。
 10. Windows 产物只包含正式身份：安装包名 `ZCode-<version>-win-x64.exe`，解包目录存在 `ZCode.exe`，不存在 `ZCode Preview.exe`，`app.asar` 内 `zcodeProductFlavor` 为 `production`。

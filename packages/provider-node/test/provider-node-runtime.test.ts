@@ -553,6 +553,28 @@ describe("@zcode/provider-node", () => {
     runtime.dispose();
   });
 
+  it("不传 zcodeBuiltinEnvironment 时不创建远端刷新：refresh 返回 skipped，只读内置配置", async () => {
+    const root = await temporaryDirectory();
+    const zcodeBuiltinFilePath = join(root, "zcodeBuiltin.json");
+    await writeZCodeBuiltin(zcodeBuiltinFilePath, "zcodeBuiltin-model");
+
+    const runtime = new NodeProviderConfigRuntime({
+      zcodeBuiltinFilePath,
+      personalFilePath: join(root, "config.json"),
+      watch: false,
+      personalPollingIntervalMs: false,
+    });
+
+    await runtime.start();
+
+    // docs/specs/selfhost-runtime.md「内置 Provider 云刷新」：自维护构建不传 zcodeBuiltinEnvironment，
+    // 因此不存在 EndpointScoped source 与 remote synchronizer，不会产生任何 release 请求，
+    // 也不会按 Endpoint 物化 Active 配置。
+    await expect(runtime.refreshZCodeBuiltin()).resolves.toBe("skipped");
+    await expect(runtime.resolveZCodeBuiltinActiveFilePath()).resolves.toBe(zcodeBuiltinFilePath);
+    runtime.dispose();
+  });
+
   it("正式 Personal Config 损坏时保留原文件且不误调 Legacy Importer", async () => {
     const root = await temporaryDirectory();
     const zcodeBuiltinFilePath = join(root, "zcodeBuiltin.json");
