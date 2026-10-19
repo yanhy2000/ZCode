@@ -2559,7 +2559,7 @@ const enUS: Record<string, string> = {
   "settings.askUserQuestionAutoResolution": "Automatically continue questions",
   "settings.askUserQuestionAutoResolutionDescription":
     "When enabled, Agent questions automatically continue after 5 minutes without an answer. When disabled, current and future questions wait for your response.",
-  "settings.dynamicWorkflow": "Workflows",
+  "settings.dynamicWorkflow": "Dynamic workflows",
   "settings.dynamicWorkflowDescription":
     "Let the model orchestrate many subagents working in parallel, so it can take on complex tasks and deliver polished results.",
   "settings.dynamicWorkflow.option.disabled": "Off",
@@ -2572,7 +2572,7 @@ const enUS: Record<string, string> = {
   "settings.dynamicWorkflow.option.alwaysOn.description":
     "You can type /workflow, and the model can also start a workflow on its own when your request calls for one.",
   "settings.dynamicWorkflow.defaultTag": "Default",
-  "settings.dynamicWorkflow.saveError": "Could not save the workflow setting",
+  "settings.dynamicWorkflow.saveError": "Could not save the dynamic workflow setting",
   "settings.modelIoFullRetention": "Keep complete model I/O",
   "settings.modelIoFullRetentionDescription":
     "Keep complete model requests and responses without compression, size limits, or automatic deletion.",
