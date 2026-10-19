@@ -6,14 +6,16 @@ import type {
   OAuthSessionCallbackResult,
   UserInfo,
 } from "@zcode/shared";
-import { DesktopCommandIds, ZCODE_JWT_INVALID_BROADCAST_CHANNEL } from "@zcode/shared";
+import { ZCODE_JWT_INVALID_BROADCAST_CHANNEL } from "@zcode/shared";
 import type { IServiceAccessor } from "@zcode/services";
 import { useAlertDialog } from "@/hooks/useAlertDialog.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { reportAppTelemetryEvent, resolveProviderTelemetryLabel } from "@/lib/appTelemetry.js";
 import { logger } from "@/logger.js";
-import { applyCachedOAuthSessionRestoreResult } from "@/root/oauthCachedSessionRestore.js";
-import { markZcodeJwtInvalidRestart } from "@/root/zcodeJwtInvalidRestartMarker.js";
+import {
+  applyCachedOAuthSessionRestoreResult,
+  requestOAuthReauthentication,
+} from "@/root/oauthCachedSessionRestore.js";
 import { shouldApplyOAuthPollingFailure } from "@/root/oauthLoginAttemptGuard.js";
 
 export async function handleOAuthCallbackSuccess(params: {
@@ -140,37 +142,37 @@ export function useRootOAuthEffects({
 
   useEffect(() => {
     let disposed = false;
+    let promptPending = false;
     const disposable = services.broadcastService.onMessage((message) => {
-      if (message.channel !== ZCODE_JWT_INVALID_BROADCAST_CHANNEL || disposed) {
+      if (message.channel !== ZCODE_JWT_INVALID_BROADCAST_CHANNEL || disposed || promptPending) {
         return;
       }
-      void (async () => {
-        const confirmed = await requestAlert({
+      promptPending = true;
+      // 业务 token 撤销后仍显示头像并要求重启会阻断恢复；与启动过期共用 Welcome 登录入口。
+      void requestOAuthReauthentication({
+        setUser,
+        requestAlert,
+        onReauthenticationRequired: () => {
+          if (!disposed) onReauthenticationRequired();
+        },
+        shouldReauthenticate: async () =>
+          !disposed && (await services.oauthService.getActiveProvider()) === null,
+        copy: {
           title: intl.formatMessage({ id: "login.expired.title" }),
           description: intl.formatMessage({ id: "login.expired.description" }),
-          actionLabel: intl.formatMessage({ id: "login.expired.restart" }),
+          actionLabel: intl.formatMessage({ id: "login.expired.action" }),
+        },
+      })
+        .catch((error) => logger.error("[Root] 登录失效恢复提示失败", { error }))
+        .finally(() => {
+          promptPending = false;
         });
-        if (disposed) {
-          return;
-        }
-        if (!confirmed) {
-          onReauthenticationRequired();
-          return;
-        }
-        markZcodeJwtInvalidRestart();
-        if (typeof window !== "undefined" && !("zcode" in window)) {
-          // Web 没有 Electron RelaunchApp；marker 写入后立即刷新，避免停留在僵尸登录态。
-          window.location.reload();
-          return;
-        }
-        await platform.executeDesktopCommand(DesktopCommandIds.RelaunchApp);
-      })();
     });
     return () => {
       disposed = true;
       disposable.dispose();
     };
-  }, [intl, onReauthenticationRequired, platform, requestAlert, services.broadcastService]);
+  }, [intl, onReauthenticationRequired, requestAlert, services.broadcastService, setUser]);
 
   useEffect(() => {
     if (!oauthPollingActive) {

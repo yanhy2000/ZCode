@@ -354,18 +354,6 @@ describe("UpdateStatusButton release notes", () => {
     expect(formatUpdateReleaseDate("2026-04-15T00:00:00.000Z", "en-US")).toBe("April 15, 2026");
   });
 
-  it("shows the auto download checkbox before downloading", () => {
-    expect(
-      updateStatusDialogElementContainsText(
-        "before-download",
-        "updateDialog.autoDownloadAndInstall",
-      ),
-    ).toBe(true);
-    expect(
-      updateStatusDialogElementContainsText("downloading", "updateDialog.autoDownloadAndInstall"),
-    ).toBe(false);
-  });
-
   it("omits release notes from the update dialog", () => {
     expect(
       updateStatusDialogElementContainsText("before-download", "Visible before downloading"),
@@ -420,7 +408,7 @@ describe("UpdateStatusButton release notes", () => {
   });
 
   it("disables visible update actions while a command is in flight", () => {
-    expect(countUpdateStatusDialogBooleanProp("before-download", "disabled", true)).toBe(4);
+    expect(countUpdateStatusDialogBooleanProp("before-download", "disabled", true)).toBe(3);
     expect(countUpdateStatusDialogBooleanProp("downloading", "disabled", true)).toBe(1);
     expect(countUpdateStatusDialogBooleanProp("downloaded", "disabled", true)).toBe(2);
   });

@@ -136,7 +136,9 @@ it("a late mobile task switch cannot reopen an unmounted sidebar", async () => {
   });
   expect(switchWorkspace).toHaveBeenCalledWith("/task-cwd", {
     taskHostId: "local",
-    fileTreeTaskId: "task-cwd",
+    taskId: "task-cwd",
+    resolveTaskDirectoryOnly: true,
+    openFileManager: true,
     mobileNavigationIntent: "chat",
   });
   expect(onOpenFileManager).not.toHaveBeenCalled();

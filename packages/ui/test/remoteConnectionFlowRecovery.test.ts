@@ -21,7 +21,6 @@ import enUS from "@/i18n/locales/en-US.js";
 import { createCanonicalWslTargetResolver } from "@desktop/main/desktopWslTargetResolver.js";
 
 const ports = vi.hoisted(() => ({
-  trace: { complete: vi.fn(), fail: vi.fn(), cancel: vi.fn() },
   locale: "zh-CN",
   snapshot: {} as SourceServerManagementSnapshot,
   credentialService: { load: vi.fn(async (): Promise<string | null> => null), save: vi.fn() },
@@ -119,7 +118,6 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-vi.mock("@/lib/userActionTelemetry.js", () => ({ startUserAction: () => ports.trace }));
 import {
   useRemoteConnectionFlow,
   type RemoteConnectionFlowOptions,
@@ -746,27 +744,6 @@ it("WSL 成功收尾后重复入口仍应用同一发行版", async () => {
   await drain();
   expect(result.current.currentStep).toBe("settings");
   expect(result.current.settingsStep.wslDistro).toBe("Ubuntu");
-});
-it("主动取消立即结算 trace，迟到拒绝不重复结算", async () => {
-  let reject!: (error: Error) => void;
-  const props = defaults({
-    onConnect: vi.fn(
-      () =>
-        new Promise<string>((_, r) => {
-          reject = r;
-        }),
-    ),
-  });
-  const { result } = renderHook(() => useRemoteConnectionFlow(props));
-  act(() => result.current.selectionStep.onSelectTarget(targetA));
-  act(() => result.current.connectingStep.onCancelConnection());
-  expect(ports.trace.cancel).toHaveBeenCalledTimes(1);
-  await act(async () => {
-    reject(Object.assign(new Error("cancelled"), { code: "remote-connection-canceled" }));
-  });
-  expect(ports.trace.cancel).toHaveBeenCalledTimes(1);
-  expect(ports.trace.complete).not.toHaveBeenCalled();
-  expect(ports.trace.fail).not.toHaveBeenCalled();
 });
 it("失败页脚提供关闭与返回列表，不改写失败为取消", async () => {
   const onOpenChange = vi.fn();

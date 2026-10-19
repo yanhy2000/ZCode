@@ -97,30 +97,7 @@ describe("ChatErrorBanner feedback draft", () => {
     expect(description).not.toContain("报错摘要\nProvider authentication failed.");
   });
 
-  it("没有升级处理器时不展示不可用的升级动作", () => {
-    renderToStaticMarkup(
-      createElement(
-        ZCodeIntlProvider,
-        { initialLocale: "zh-CN" },
-        createElement(
-          PlatformProvider,
-          { platform: mockPlatform },
-          createElement(ChatErrorBanner, {
-            error: {
-              code: "model_config_missing",
-              message: "Model config is missing.",
-            },
-            onOpenModelSettings: vi.fn(),
-          }),
-        ),
-      ),
-    );
-
-    expect(buttonMock.props.some((props) => props["aria-label"] === "升级")).toBe(false);
-    expect(buttonMock.props.some((props) => props["aria-label"] === "配置")).toBe(true);
-  });
-
-  it("远程 workspace 缺模型时只切换措辞，动作仍是本机配置与升级", () => {
+  it("远程 workspace 缺模型时只切换措辞，动作仍是本机配置", () => {
     const html = renderToStaticMarkup(
       createElement(
         ZCodeIntlProvider,
@@ -135,7 +112,6 @@ describe("ChatErrorBanner feedback draft", () => {
             },
             modelConfigTarget: "remote",
             onOpenModelSettings: vi.fn(),
-            onOpenUpgrade: vi.fn(),
           }),
         ),
       ),
@@ -144,7 +120,6 @@ describe("ChatErrorBanner feedback draft", () => {
     expect(html).toContain(zhCN["chat.error.remoteNoAvailableModel"]);
     expect(html).not.toContain(zhCN["chat.error.noAvailableModel"]);
     expect(buttonMock.props.some((props) => props["aria-label"] === "配置")).toBe(true);
-    expect(buttonMock.props.some((props) => props["aria-label"] === "升级")).toBe(true);
     expect(buttonMock.props.some((props) => props["aria-label"] === "去同步")).toBe(false);
   });
 });

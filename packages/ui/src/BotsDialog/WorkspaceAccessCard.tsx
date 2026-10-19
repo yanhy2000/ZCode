@@ -31,6 +31,11 @@ export function WorkspaceAccessCard({
 }) {
   const { intl } = useZCodeIntl();
   const allAllowed = isAllWorkspacesAllowed(bot.allowedWorkspaces);
+  // allowedWorkspaces 存的是虚拟项目 ID；currentWorkspace.id 是 workspace identity（未打开的
+  // tab 会是 cwd 路径），不能直接落库。只有它确实命中可选项目时才沿用，否则退回首个项目。
+  const selectedWorkspaceId =
+    workspaceRefs.find((workspace) => workspace.id === currentWorkspace?.id)?.id ??
+    workspaceRefs[0]?.id;
   const allowedCount = allAllowed
     ? workspaceRefs.length
     : bot.allowedWorkspaces.filter((workspaceId) =>
@@ -54,7 +59,6 @@ export function WorkspaceAccessCard({
           <Select
             value={allAllowed ? "all" : "selected"}
             onValueChange={(value) => {
-              const selectedWorkspaceId = currentWorkspace?.id ?? workspaceRefs[0]?.id;
               if (value === "all") void onPatchAllowedWorkspaces([ALL_BOT_WORKSPACES]);
               else if (selectedWorkspaceId) void onPatchAllowedWorkspaces([selectedWorkspaceId]);
             }}

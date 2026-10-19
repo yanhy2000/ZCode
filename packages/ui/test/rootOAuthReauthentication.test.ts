@@ -14,9 +14,6 @@ vi.mock("@/hooks/useAlertDialog.js", () => ({ useAlertDialog: () => requestAlert
 vi.mock("@/i18n/IntlProvider.js", () => ({
   useZCodeIntl: () => ({ intl: { formatMessage: ({ id }: { id: string }) => id } }),
 }));
-vi.mock("@/root/useAccountConnectionLossNotification.js", () => ({
-  useAccountConnectionLossNotification: vi.fn(),
-}));
 vi.mock("@/logger.js", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 import { useRootOAuthEffects } from "@/root/useRootOAuthEffects.js";
 
@@ -37,7 +34,6 @@ describe("运行时登录失效进入重新登录", () => {
       onReauthenticationRequired = vi.fn(),
       executeDesktopCommand = vi.fn();
     useRootOAuthEffects({
-      accountIntentKey: "synthetic",
       platform: { executeDesktopCommand } as never,
       services: {
         oauthService: { getActiveProvider: async () => null },
@@ -87,7 +83,6 @@ describe("运行时登录失效进入重新登录", () => {
         onReauthenticationRequired = vi.fn();
       let receive!: (message: { channel: string }) => void;
       useRootOAuthEffects({
-        accountIntentKey: "synthetic",
         platform: {} as never,
         services: {
           oauthService: { getActiveProvider },
