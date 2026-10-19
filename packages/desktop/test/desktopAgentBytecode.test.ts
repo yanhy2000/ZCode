@@ -17,7 +17,9 @@ afterEach(async () => {
 });
 
 async function fixture(source: string) {
-  const dir = await mkdtemp(join(tmpdir(), "zcode bytecode 中文 "));
+  // CI（GitHub runner）的 TEMP 可能是 8.3 短名 `RUNNER~1`，而字节码子进程回报的 __dirname 是
+  // 产物实际路径；在创建时就收敛成规范路径，避免「期望长名 / 实得短名」的假失败。
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "zcode bytecode 中文 ")));
   directories.push(dir);
   const entryPath = join(dir, "zcode.cjs");
   await writeFile(entryPath, source);
@@ -43,7 +45,7 @@ process.stdout.write(JSON.stringify({value, args:process.argv.slice(2),
     value: 42,
     args: ["app-server", "--stdio"],
     filename: "zcode.cjs",
-    directory: await realpath(dir),
+    directory: dir,
     dynamic: 7,
     hasDynamicSource: true,
   });

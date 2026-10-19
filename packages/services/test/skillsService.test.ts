@@ -3,6 +3,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -18,7 +19,9 @@ const originalProcessLabel = process.env.ZCODE_PROCESS_LABEL;
 const tempHomes: string[] = [];
 
 function makeTempHome(): string {
-  const home = mkdtempSync(join(tmpdir(), "zcode-skills-home-"));
+  // CI（GitHub runner）的 TEMP 可能是 8.3 短名 `RUNNER~1`，而 skills 服务在读取用户技能根时会
+  // realpath 收敛成规范长名；断言必须与同一形态比较，否则短名机器上路径包含关系不成立。
+  const home = realpathSync(mkdtempSync(join(tmpdir(), "zcode-skills-home-")));
   tempHomes.push(home);
   return home;
 }

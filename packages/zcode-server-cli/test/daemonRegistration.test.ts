@@ -25,7 +25,7 @@ vi.mock("../src/platform/serviceManager.js", async (importOriginal) => ({
 import { runServerCli } from "../src/cli.js";
 import { createControlServer } from "../src/ipc/controlServer.js";
 import { createServiceDescriptor } from "../src/platform/serviceManager.js";
-import { resolveCanonicalServerLayout, resolveServerLayout } from "../src/runtime/paths.js";
+import { resolveCanonicalServerLayout } from "../src/runtime/paths.js";
 import { DataRootLock } from "../src/runtime/lock.js";
 
 async function writeStatusSnapshot(statusFile: string, status: unknown): Promise<void> {
@@ -78,7 +78,9 @@ describe("daemon service registration", () => {
 
   it("stops and unregisters a same-root legacy service before registering the root-scoped identity", async () => {
     const root = await mkdtemp(join(process.platform === "win32" ? tmpdir() : "/tmp", "zdr-"));
-    const layout = resolveServerLayout(join(root, "server"));
+    // CI 的 TEMP 可能是 8.3 短名（RUNNER~1）：CLI 的 serve 命令会用 resolveCanonicalServerLayout 收敛
+    // root 后再派生 control endpoint，测试必须用同一个规范布局建管道，否则命令序列为空（connect ENOENT）。
+    const layout = await resolveCanonicalServerLayout(join(root, "server"));
     const platform = process.platform === "darwin" || process.platform === "linux" ? process.platform : "win32";
     const kind = platform === "darwin" ? "launchd" : platform === "linux" ? "systemd" : "task-scheduler";
     const legacyDescriptor = createServiceDescriptor({

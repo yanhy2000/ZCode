@@ -373,7 +373,10 @@
     System::Call 'Kernel32::SetEnvironmentVariableW(w "ZCODE_SHORTCUT_PATH", w "$R9") i.R1'
     StrCmp $R1 "0" zcodeReadShortcutTargetDone 0
 
-    nsExec::ExecToStack /TIMEOUT=5000 `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "[Console]::Out.Write(([Activator]::CreateInstance([type]::GetTypeFromProgID('WScript.Shell'))).CreateShortcut([Environment]::GetEnvironmentVariable('ZCODE_SHORTCUT_PATH')).TargetPath)"`
+    ; 修复原因：CI 满负载（全套单测并发）下冷启 PowerShell + 创建 WScript.Shell COM 可能超过 5s，
+    ; nsExec 超时后 $R1 非 0、函数返回空字符串，被上层误判成「安装器没有保留快捷方式」。
+    ; 放宽到 20s：只在 PowerShell 真的异常时才会等满，正常路径的时间不变。
+    nsExec::ExecToStack /TIMEOUT=20000 `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "[Console]::Out.Write(([Activator]::CreateInstance([type]::GetTypeFromProgID('WScript.Shell'))).CreateShortcut([Environment]::GetEnvironmentVariable('ZCODE_SHORTCUT_PATH')).TargetPath)"`
     Pop $R1
     Pop $R2
     StrCmp $R1 "0" zcodeReadShortcutTargetDone 0

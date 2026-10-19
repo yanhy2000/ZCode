@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -116,10 +116,16 @@ function runFixture(installerPath, installDir, customLogPath) {
   const args = ["/S"];
   if (customLogPath) args.push(`/LOG=${customLogPath}`);
   args.push(`/D=${installDir}`);
-  execFileSync(installerPath, args, {
-    encoding: "utf-8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  // 用 spawnSync 而不是 execFileSync：安装器读快捷方式目标靠内部调起的 PowerShell，失败时输出为空，
+  // 只有把安装器的 stdout/stderr 带进断言信息，CI 上才诊断得出原因（本机复现不了的环境差异）。
+  const result = spawnSync(installerPath, args, { encoding: "utf-8" });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(
+      `installer exited with ${result.status}\nstdout:\n${result.stdout ?? ""}\nstderr:\n${result.stderr ?? ""}`,
+    );
+  }
+  return { stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
 }
 
 async function main() {
@@ -166,7 +172,7 @@ async function main() {
         elevatedLogPath: join(tempRoot, `${scenario}-elevated.log`),
       });
       const customLogPath = scenario === "stale" ? join(tempRoot, "custom.log") : undefined;
-      runFixture(installerPath, installDir, customLogPath);
+      const installerRun = runFixture(installerPath, installDir, customLogPath);
       assertInstallerLog(customLogPath ?? join(tempRoot, `${scenario}-default.log`), "silent");
 
       const appExe = join(installDir, "ZCode.exe");
@@ -189,7 +195,8 @@ async function main() {
           normalizeWindowsPath(expectedInitialTarget)
         ) {
           throw new Error(
-            `${scenario}: installer could not read shortcut target: ${readShortcutTargetResult}`,
+            `${scenario}: installer could not read shortcut target: ${readShortcutTargetResult}\n` +
+              `installer stdout:\n${installerRun.stdout}\ninstaller stderr:\n${installerRun.stderr}`,
           );
         }
 

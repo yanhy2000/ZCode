@@ -91,6 +91,12 @@ jobs:
       - name: Build e2e-report entry
         run: pnpm --filter @zcode/e2e-report build:node
 
+      # 修复原因：storagePreparationProtocol 单测 import 了 apps/zcode-cli 的 bootstrap 源码，而 CLI 包的
+      # exports 指向 dist（.gitignore 忽略）；不构建就只有「曾经构建过 CLI 的开发机」能通过，CI 新检出必然收集失败。
+      # 用 @zcode/bootstrap... 只构建该测试需要的依赖闭包（本机实测约 68s）。
+      - name: Build CLI packages needed by root tests
+        run: pnpm -r --filter "@zcode/bootstrap..." run build
+
       # 修复原因：全量 16000+ 用例在 threads 池（4 workers）下曾在 CI 触发
       # ERR_WORKER_OUT_OF_MEMORY，worker 被杀会把在跑文件一并计为失败；提高堆上限后再评估。
       - name: Unit tests
