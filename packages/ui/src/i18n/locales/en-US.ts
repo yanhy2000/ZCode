@@ -1,4 +1,3 @@
-import { requestSecurityMessagesEnUS } from "@/request-security-edition/messages.js";
 /** English translations */
 const enUS: Record<string, string> = {
   "preview.image.copy": "Copy image",
@@ -8089,7 +8088,6 @@ const enUS: Record<string, string> = {
     "I used the ZCode Highspeed card and saved {duration}s. Give it a try. Download ZCode https://zcode.z.ai",
   "globalNotice.highspeed.imageSummary": "{tokens} tokens · {duration}s saved",
   "globalNotice.highspeed.close": "Close Highspeed share card",
-  ...requestSecurityMessagesEnUS,
 };
 
 export default enUS;

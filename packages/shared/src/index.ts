@@ -35,7 +35,13 @@ export type {
 } from "./protocol.js";
 export type { WorkspacePurpose } from "./workspacePurpose.js";
 export { DEFAULT_LOCALE } from "./protocol.js";
-export { ZCODE_VERSION, ZCODE_COMMIT, ZCODE_BUILD_TIME } from "./version.js";
+export {
+  ZCODE_VERSION,
+  ZCODE_UPSTREAM_VERSION,
+  resolveUpstreamVersion,
+  ZCODE_COMMIT,
+  ZCODE_BUILD_TIME,
+} from "./version.js";
 export type { HelloMessage, HelloAckMessage } from "./handshake.js";
 export type { ArmsRumEnv, ZCodeEnv, ZCodeProductFlavor } from "./env.js";
 export type { RemoteAssetInstallMode } from "./remoteAssetInstallMode.js";
@@ -81,7 +87,6 @@ export {
   normalizeZCodeProductFlavor,
 } from "./env.js";
 export * from "./errors.js";
-export * from "./rendererActionTrace.js";
 export * from "./validation.js";
 export * from "./api.js";
 export * from "./zcode-protocol/index.js";
@@ -136,7 +141,6 @@ export * from "./helpAppConfig.js";
 export * from "./remoteAssetInstallMode.js";
 export * from "./onboardingRecord.js";
 export * from "./remoteResourcePackages.js";
-export * from "./plan-identity.js";
 export {
   BROWSER_SCREENSHOT_SURFACE_PREPARE_TIMEOUT_MS,
   BROWSER_VIEW_RESTORE_BOOTSTRAP_URL,
@@ -310,8 +314,6 @@ export * from "./web-remote-control-rpc-transport.js";
 export * from "./settings-sync.js";
 export * from "./uuid.js";
 export * from "./usage-stats.js";
-export * from "./coding-plan-subscription.js";
-export * from "./forceUpdate.js";
 export * from "./intranetProbe.js";
 export * from "./intranetDefaults.js";
 export * from "./hooks.js";
@@ -322,7 +324,6 @@ export * from "./workspaceSessionRestore.js";
 export * from "./skill-scan-policy.js";
 export * from "./browser-use/index.js";
 
-export * from "./coding-plan-reset.js";
 export * from "./highspeed.js";
 export {
   parseSubagentMarkdownSelection,
@@ -369,6 +370,5 @@ export {
   requestSecuritySensitiveHeaders,
   isRequestSecurityFailure,
 } from "./request-security-edition/policy.js";
-export * from "./request-security-edition/verification-policy.js";
 
 export * from "./conversation-share-tool-presentation.js";

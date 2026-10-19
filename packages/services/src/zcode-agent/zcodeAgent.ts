@@ -969,9 +969,6 @@ export interface IZCodeAgentService {
   onDynamicOffPeakLifecycle(
     params: ZCodeAgentWorkspaceTarget,
   ): Event<import("@zcode/shared").OffPeakLifecycleNotification>;
-  controlOffPeakExecutionV4(
-    params: ZCodeAgentWorkspaceTarget & { control: import("@zcode/shared").OffPeakControlParams },
-  ): Promise<import("@zcode/shared").OffPeakControlResult>;
   /** 当前窗口全部本地 live task 的 CUA 权限观察；历史、远程与 replayable 不在此事件面。 */
   onDynamicCuaPermissionObservation(): Event<ZCodeAgentCuaPermissionObservation>;
   /** 本地桌面窗口创建插件页面，不依赖 conversation 订阅。 */
