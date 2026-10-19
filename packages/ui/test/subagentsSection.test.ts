@@ -1247,15 +1247,17 @@ describe("SubagentsSection", () => {
       modelSelection: {
         providerId: "custom-openai",
         modelId: "glm-5.2",
-        options: { reasoningLevel: "high" },
+        options: { reasoningLevel: "max" },
       },
       modelSelectionOverride: {
         providerId: "custom-openai",
         modelId: "glm-5.2",
-        options: { reasoningLevel: "high" },
+        options: { reasoningLevel: "max" },
       },
       tools: ["Read"],
     };
+    // 用 max 作为回滚目标：切到 gpt-5.4 时乐观档位是 high，回滚后必须回到 max，
+    // 否则“thoughtLevel 仍是 high”无法区分「已回滚」与「停在乐观态」。
     mockSubagentsService.list.mockResolvedValue({
       agents: [agent],
       userAgents: [agent],
@@ -1270,13 +1272,20 @@ describe("SubagentsSection", () => {
         }),
     );
 
+    // 原因：原先用“点击后新增的渲染历史切片”断言中间乐观帧，该写法依赖 act 内具体产生
+    // 了几帧渲染；CI（windows-latest/Node 24）调度下这个历史切片不稳定，曾因此看不到
+    // 中间帧而失败。这里改为断言本次交互真正可观察的结果：写请求必须携带新选模型，
+    // 失败后控件必须回到上一个内置配置；两者都不依赖渲染次数或渲染历史。
+    const currentBuiltInModelValue = () =>
+      document
+        .querySelector<HTMLElement>(
+          `[data-testid="${testId(TID_SUBAGENT_BUILT_IN_MODEL_TRIGGER, agent.name)}"]`,
+        )
+        ?.getAttribute("data-model-current-value");
+
     await renderInteractiveSubagentsSection();
     await waitFor(() => {
-      expect(
-        capturedModelConfigSelects.some(
-          (candidate) => candidate.normalizedValue === "custom:custom-openai:glm-5.2",
-        ),
-      ).toBe(true);
+      expect(currentBuiltInModelValue()).toBe("custom:custom-openai:glm-5.2");
     });
 
     const initialPicker = capturedModelConfigSelects.findLast(
@@ -1284,37 +1293,30 @@ describe("SubagentsSection", () => {
     );
     const onModelValueChange = initialPicker?.onValueChange;
     expect(onModelValueChange).toBeTypeOf("function");
-    const beforeOptimisticRender = capturedModelConfigSelects.length;
-    act(() => {
+    // 等待本次 act 完整刷新，避免未完成的 act 队列与后续 waitFor 的 act 交错。
+    await act(async () => {
       (onModelValueChange as (value: string) => void)("custom:custom-openai:gpt-5.4");
     });
-    await waitFor(() => {
-      expect(
-        capturedModelConfigSelects
-          .slice(beforeOptimisticRender)
-          .some((candidate) => candidate.normalizedValue === "custom:custom-openai:gpt-5.4"),
-      ).toBe(true);
+    // 乐观提交必须真的把用户选择送达持久化层；失败回滚不能吞掉这次写入意图。
+    expect(mockSubagentsService.setBuiltInModelOverride).toHaveBeenCalledWith({
+      agentName: "Explore",
+      modelSelection: {
+        providerId: "custom-openai",
+        modelId: "gpt-5.4",
+        options: { reasoningLevel: "high" },
+      },
     });
 
     expect(rejectWrite).toBeTypeOf("function");
-    const beforeRollbackRender = capturedModelConfigSelects.length;
-    const beforeThoughtRollbackRender = capturedThoughtLevelControls.length;
     await act(async () => {
       rejectWrite!(new Error("write failed"));
       await Promise.resolve();
     });
 
+    // 持久化失败后必须回滚到上一个内置模型配置（glm-5.2 + max），不能停留在乐观态。
     await waitFor(() => {
-      expect(
-        capturedModelConfigSelects
-          .slice(beforeRollbackRender)
-          .some((candidate) => candidate.normalizedValue === "custom:custom-openai:glm-5.2"),
-      ).toBe(true);
-      expect(
-        capturedThoughtLevelControls
-          .slice(beforeThoughtRollbackRender)
-          .some((candidate) => candidate.option?.currentValue === "high"),
-      ).toBe(true);
+      expect(currentBuiltInModelValue()).toBe("custom:custom-openai:glm-5.2");
+      expect(capturedThoughtLevelControls.at(-1)?.option?.currentValue).toBe("max");
     });
   });
 
