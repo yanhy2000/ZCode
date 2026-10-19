@@ -74,10 +74,6 @@ import {
   shouldPrepareCodingPlanTeamMock,
   shouldReuseDesktopE2EBuild,
 } from "./test/e2e/helpers/coding-plan-mock-env.js";
-import {
-  HIGHSPEED_MOCK_SCENARIO_ENV,
-  resolveHighspeedE2EMockScenario,
-} from "./test/e2e/helpers/highspeed-mock-env.js";
 import { createE2ERendererBridgeRootHooks } from "./test/e2e/helpers/e2e-renderer-bridge-root-hook.js";
 import { installHookTrustFixture } from "./test/e2e/helpers/hook-trust-fixture.js";
 import { resolveUpstreamModels } from "./test/e2e/helpers/upstream-recorded-models.js";
@@ -99,7 +95,6 @@ import { createE2EStartupCredentialSeed } from "./test/e2e/helpers/e2e-startup-c
 import { seedRemoteOnboardingFixture } from "./test/e2e/helpers/remote-startup-profile.js";
 import { getE2EProviderEndpointEnv } from "#e2e/helpers/e2e-provider-endpoint";
 import { prepareOAuthCompletionRaceFixture } from "./test/e2e/helpers/oauth-completion-race-fixture.js";
-import { prepareWebRemoteControlAuthGateFixture } from "./test/e2e/helpers/web-remote-control-auth-gate-fixture.js";
 import { prepareAccessToken401Fixture } from "./test/e2e/helpers/access-token-401-fixture.js";
 import { createE2EReplayFixtureVariables } from "./test/e2e/helpers/e2e-runtime-paths.js";
 import { stageE2EAppOutput } from "./test/e2e/helpers/e2e-app-output-stage.js";
@@ -620,7 +615,6 @@ let modelContextBudgetConfigMockServer: ModelContextBudgetConfigMockServer | nul
 let dynamicWorkflowConfigMockServer: DynamicWorkflowConfigMockServer | null = null;
 let clientScenesMockServer: ClientScenesMockServer | null = null;
 let stopOAuthCompletionRaceFixture: (() => Promise<void>) | null = null;
-let stopWebRemoteControlAuthGateFixture: (() => Promise<void>) | null = null;
 let stopAccessToken401Fixture: (() => Promise<void>) | null = null;
 let pluginCdnZipFixtureServer: PluginCdnZipFixtureServer | null = null;
 let upstreamE2EBaseUrl: string = e2eProviderPreset.baseUrl;
@@ -2565,16 +2559,7 @@ async function materializeOffPeakMockZCodeBuiltinProviderConfig(
   );
 }
 
-// Highspeed E2E 使用 Host 内置的确定性 transport；按 spec 注入场景，避免普通会话
-// 在默认测试套件里意外抽到卡。该变量必须在 Electron 启动前设置，Host 才能装配 mock。
-function configureHighspeedE2EMock(specs: string[] = []): void {
-  const scenario = resolveHighspeedE2EMockScenario(specs);
-  if (scenario) {
-    process.env[HIGHSPEED_MOCK_SCENARIO_ENV] = scenario;
-  } else {
-    delete process.env[HIGHSPEED_MOCK_SCENARIO_ENV];
-  }
-}
+// Highspeed（极速卡）已从本分支移除，对应 mock 场景装配一并删除。
 
 async function stopCodingPlanUpgradeE2EMock() {
   const ownedBaseUrl =
@@ -4890,7 +4875,6 @@ export const config: WebdriverIO.Config = {
     applyUpstreamE2EHttpModeForWorker(specs);
     applyAskUserQuestionClockScaleForWorker(specs);
     applyE2EProviderEnv(specs);
-    configureHighspeedE2EMock(specs);
     currentE2EBeforeSessionError = null;
     applyE2EWorkerModelRetryEnv(process.env, specs, configuredModelRetryMaxRetries);
     currentE2EChromiumUserDataDir = resolveE2EWorkerChromiumProfileDir(
@@ -4982,12 +4966,6 @@ export const config: WebdriverIO.Config = {
           credentialsFile: E2E_APP_CREDENTIALS_FILE,
           settingsFile: E2E_APP_SETTINGS_FILE,
         });
-        stopWebRemoteControlAuthGateFixture = await prepareWebRemoteControlAuthGateFixture({
-          specs,
-          credentialsFile: E2E_APP_CREDENTIALS_FILE,
-          settingsFile: E2E_APP_SETTINGS_FILE,
-          workspacePath: resolve(E2E_HOME_DIR, "ZCodeProject"),
-        });
         // resetHome 之后、Electron 启动之前安装，Main -> Host -> Agent 才会同时继承
         // case-owned PATH；其他 spec 由 helper 保持 no-op。
         await installBashPrefixPermissionPnpmShim({
@@ -5073,8 +5051,6 @@ export const config: WebdriverIO.Config = {
           currentE2EElectronAppPid = null;
           await stopOAuthCompletionRaceFixture?.();
           stopOAuthCompletionRaceFixture = null;
-          await stopWebRemoteControlAuthGateFixture?.();
-          stopWebRemoteControlAuthGateFixture = null;
           await stopAccessToken401Fixture?.();
           stopAccessToken401Fixture = null;
           currentE2EBeforeSessionError = null;
@@ -5155,8 +5131,6 @@ export const config: WebdriverIO.Config = {
           await stopClientScenesE2EMock();
           await stopOAuthCompletionRaceFixture?.();
           stopOAuthCompletionRaceFixture = null;
-          await stopWebRemoteControlAuthGateFixture?.();
-          stopWebRemoteControlAuthGateFixture = null;
           await stopAccessToken401Fixture?.();
           stopAccessToken401Fixture = null;
           await stopPluginCdnZipFixture();

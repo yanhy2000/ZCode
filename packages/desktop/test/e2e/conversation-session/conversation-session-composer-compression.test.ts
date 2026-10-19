@@ -3,11 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { NodePersonalProviderConfigRepository } from "@zcode/provider-node";
 import { ZCODE_CUA_OFFICIAL_PLUGIN_ID } from "@zcode/shared";
-import {
-  TID_LOGIN_USE_API_KEY_BUTTON,
-  TID_TASK_SETTINGS_BUTTON,
-  TID_CHAT_MODEL_SELECT_TRIGGER,
-} from "@zcode/shared/test-ids";
+import { TID_TASK_SETTINGS_BUTTON, TID_CHAT_MODEL_SELECT_TRIGGER } from "@zcode/shared/test-ids";
 import {
   clearAppData,
   DEFAULT_WORKSPACE,
@@ -18,7 +14,6 @@ import {
 import { UPSTREAM_PROVIDER_ID, UPSTREAM_SECONDARY_MODEL } from "../helpers/upstream-provider.js";
 import {
   prepareV4ConversationE2E,
-  loginWithApiKey,
   switchV4Model,
   switchV4Mode,
 } from "../helpers/v4-conversation.js";
@@ -156,19 +151,16 @@ describe("Composer 五档压缩", () => {
     await browser.waitUntil(
       async () =>
         browser.execute(
-          (login, settings) =>
+          (settings) =>
             Boolean(
               document.querySelector(
-                `[data-testid="${login}"], [data-testid="${settings}"], [data-testid="onboarding-page"]`,
+                `[data-testid="${settings}"], [data-testid="onboarding-page"]`,
               ),
             ),
-          TID_LOGIN_USE_API_KEY_BUTTON,
           TID_TASK_SETTINGS_BUTTON,
         ),
       { timeout: 30000 },
     );
-    if (await $(`[data-testid="${TID_LOGIN_USE_API_KEY_BUTTON}"]`).isExisting())
-      await loginWithApiKey();
     await skipOccupationOnboardingIfPresent();
   });
   after(async () => {

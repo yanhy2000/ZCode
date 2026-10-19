@@ -64,6 +64,9 @@ it("BOT-E2E-RW-02 legacy 与 stable Bot 通过同一 Source 身份完成任务�
       settings = appSettingsSchema.parse({ ...settings, ...patch });
     },
     updateDataBaseDir: async () => {},
+    // 3.16 起 ISettingService 增加了默认项目兜底；此用例只关心 remote workspace identity，
+    // 默认项目由真实 Host 负责，这里保持空实现。
+    ensureDefaultProject: async (homedir) => ({ path: homedir, created: false }),
   };
   const credentials = { load: async () => null, save: async () => {}, delete: async () => {} };
   const directory = new SourceServerDirectory({ settingService, credentialService: credentials });
