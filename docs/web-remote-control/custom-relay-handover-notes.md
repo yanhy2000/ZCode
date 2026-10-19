@@ -45,3 +45,11 @@
 
 - 状态所有者遵循单一写入原则，由 `ISettingService` 统一管理设置落盘与同步，无冗余 store 或竞态条件。
 - 若另一个并行任务有合并到 `dev` 分支，提交前请执行 `git fetch origin dev` 与 `git pull --rebase origin dev`，确保无代码冲突后再行推送。
+
+## 5. 提交与 CI 构建状态
+
+- **Commit ID**：`2c8dd8f2` (`feat(web-remote-control): support custom server endpoint setting in desktop client`)
+- **分支**：`dev`
+- **CI 自动化流水线**：[Run #39222258405](https://github.com/yanhy2000/ZCode/actions/runs/39222258405) (Push 触发)
+- **Windows 编译与打包流水线**：[Run #39222322546](https://github.com/yanhy2000/ZCode/actions/runs/39222322546) (手动 workflow_dispatch 触发)
+
