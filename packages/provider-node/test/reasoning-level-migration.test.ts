@@ -6,7 +6,6 @@ import {
   ModelOptionSpecsConfig,
   ProviderConfigMap,
   ProviderConfigResolver,
-  ProviderApiConfig,
   ProviderConfig,
   ZhipuAccountAccessConfig,
   createRegistryModelConfig,
@@ -30,36 +29,20 @@ beforeAll(async () => {
 });
 afterAll(() => source.dispose());
 
-function view(modelId: string, level: string, personalModels = ModelConfigRules.empty()) {
-  const providerId = "account:bigmodel-individual-coding-plan";
-  // 账号商业面删除后，正式内置配置不再声明 account:* Provider，而 Resolver 只发布
-  // 同时出现在内置 Provider 名单里的账号覆盖。这里补一份与历史同形的基座
-  // （api/baseUrl 与旧 account:bigmodel-individual-coding-plan 完全一致），
-  // 继续验证仍是生产代码的「来源限定只读关闭档位改名」，不改动任何断言。
-  const builtinProviders = builtin.providers.set(
-    providerId,
-    new ProviderConfig({
-      group: "bigmodel-family",
-      api: new ProviderApiConfig({
-        type: "anthropic-messages",
-        baseUrl: "https://open.bigmodel.cn/api/anthropic",
-      }),
-      access: new ZhipuAccountAccessConfig({
-        accountType: "bigmodel",
-        mode: "individual-coding-plan",
-        entitled: false,
-      }),
-      builtinModelIds: ["GLM-5.2"],
-    }),
-  );
+function view(
+  modelId: string,
+  level: string,
+  personalModels = ModelConfigRules.empty(),
+  modelRules = builtin.models,
+) {
   const config = {
     revision: "c",
     zcodeBuiltinRevision: "b",
     personalRevision: "p",
-    zcodeBuiltinProviders: builtinProviders,
-    zcodeBuiltinProviderTemplates: builtin.providerTemplates,
+    zcodeBuiltinProviders: builtin.providers,
+    zcodeBuiltinProviderTemplates: builtin.templates,
     personalProviders: ProviderConfigMap.empty(),
-    zcodeBuiltinModelRules: builtin.models,
+    zcodeBuiltinModelRules: modelRules,
     personalModels,
   };
   const account = {
@@ -67,12 +50,12 @@ function view(modelId: string, level: string, personalModels = ModelConfigRules.
     basedOnZCodeBuiltinRevision: "b",
     providers: new ProviderConfigMap([
       [
-        providerId,
+        "account:bigmodel-individual-coding-plan",
         new ProviderConfig({ access: new ZhipuAccountAccessConfig({ entitled: true }) }),
       ],
     ]),
     states: {
-      [providerId]: {
+      "account:bigmodel-individual-coding-plan": {
         availability: "available" as const,
         entitled: true,
         current: true,
@@ -85,8 +68,9 @@ function view(modelId: string, level: string, personalModels = ModelConfigRules.
     accountProviders: account.providers,
     accountStates: account.states,
   });
+  const providerId = "account:bigmodel-individual-coding-plan";
   const providerConfig = resolution.effectiveProviders.get(providerId)!;
-  const modelConfig = ModelConfigRules.composeEffective(builtin.models, personalModels).resolve({
+  const modelConfig = ModelConfigRules.composeEffective(modelRules, personalModels).resolve({
     providerId,
     modelId,
     apiType: providerConfig.api?.type,
@@ -135,7 +119,12 @@ describe("Todo95C 来源限定的只读关闭档位改名", () => {
     for (const entry of legacyReasoningLevelRenames) {
       const rule = builtin.models
         .rules()
-        .find((rule) => rule.type === "model" && rule.modelMatch === entry.modelMatch);
+        .find(
+          (rule) =>
+            rule.type === "model" &&
+            (rule.modelMatch === entry.modelMatch ||
+              rule.modelMatch === entry.simplifiedModelMatch),
+        );
       expect(rule?.config.optionSpecs?.reasoningLevel?.values).not.toContain(entry.oldLevel);
       // 仅测试生成代表型号；实际迁移从不从正则反推名字。
       const modelId = entry.modelMatch.slice(2).split("(?:")[0]!.replaceAll("\\.", ".");
@@ -171,8 +160,26 @@ describe("Todo95C 来源限定的只读关闭档位改名", () => {
     ["GLM-5.2", "off"],
     ["GLM-5.3", "none"],
     ["GLM-5.3", "typo"],
+    ["GLM-5.2_custom", "nothink"],
   ])("不猜 %s / %s", (id, old) => {
     expect(view(id!, old!).result.selectionIssue).toBe("reasoning-level-not-supported");
+  });
+  it("旧缓存仍使用原 matcher 时也能恢复历史关闭选择", () => {
+    const oldRules = new ModelConfigRules(
+      builtin.models.rules().map((rule) => {
+        const rename =
+          rule.type === "model"
+            ? legacyReasoningLevelRenames.find(
+                (entry) => entry.simplifiedModelMatch === rule.modelMatch,
+              )
+            : undefined;
+        return rename ? { ...rule, modelMatch: rename.modelMatch } : rule;
+      }),
+    );
+    expect(
+      view("GLM-5.2", "nothink", ModelConfigRules.empty(), oldRules).result.effectiveSelection
+        ?.options?.reasoningLevel,
+    ).toBe("disabled");
   });
   it("后续 Built-in values 覆盖旧规则时不恢复被覆盖的关闭值", () => {
     expect(view("GLM-5.3-Flash", "off").result.selectionIssue).toBe(

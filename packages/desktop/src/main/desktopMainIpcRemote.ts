@@ -1,13 +1,26 @@
-/* eslint-disable max-lines -- 远程连接、OAuth 回调和通知 IPC 共用窗口级上下文，集中注册避免跨文件状态漂移。 */
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { normalizeRemoteConnectionError } from "@zcode/shared";
+/* eslint-disable max-lines -- 远程连接、OAuth 回调、遥测和通知 IPC 共用窗口级上下文，集中注册避免跨文件状态漂移。 */
+import { app, BrowserWindow, ipcMain, shell, type WebContents } from "electron";
+import armsRum from "@arms/rum-electron";
 import {
+  armsCustomEventPayloadSchema,
+  buildRemoteWorkspaceConnectResultTelemetry,
+  classifyRemoteUsageError,
   formatZodError,
+  hostRemoteWorkspaceConnectFailedResponseSchema,
   normalizeUnknownError,
   InternalChannels,
+  isPublicZCodeErrorCode,
   isTrustedCodingPlanWebviewOrigin,
   PlatformChannels,
   remoteTargetSchema,
+  rendererTelemetryEventPayloadSchema,
+  type ArmsRumEnv,
+  type BindRemoteWorkspaceSessionContextIpcResult,
   type RemoteTarget,
+  type WindowHostRemoteWorkspaceDescriptor,
+  type BindRemoteWorkspaceSessionContextResult,
+  type TelemetryEventPayload,
 } from "@zcode/shared";
 import { dispatchTaskNotification } from "./desktopNotifications.js";
 import {
@@ -17,10 +30,42 @@ import {
   registerOAuthState,
 } from "./desktopOAuthDeepLink.js";
 import {
+  dispatchFinalArmsCustomEvent,
+  enableSharedFinalArmsCustomEventE2EController,
+} from "./desktopArmsCustomEvent.js";
+import {
+  configureRemoteUsageArmsTelemetry,
+  reportRemoteConnectResultToArms,
+  type RemoteConnectionStats,
+} from "./desktopRemoteUsageArmsTelemetry.js";
+import {
   registerWebRemoteControlIpcHandlers,
   type WebRemoteControlIpcManager,
 } from "./desktopWebRemoteControlIpc.js";
 import { openFileUrlInDefaultApp, openPathInDefaultApp } from "./desktopMainIpcHelpers.js";
+
+function isPublicRemoteReasonCode(code: string | undefined): code is string {
+  // Bug 原因：前缀 OR 形成第二份公开码真源，任何内部 source-server-* 字符串都会穿透
+  // Main 暴露给 Renderer。公开边界只消费 shared 登记表，新增码必须先进入统一合同。
+  return isPublicZCodeErrorCode(code);
+}
+
+function readRetryable(error: unknown): boolean | undefined {
+  if (!error || typeof error !== "object" || !("retryable" in error)) return undefined;
+  return typeof error.retryable === "boolean" ? error.retryable : undefined;
+}
+
+function toBindIpcFailure(error: unknown): BindRemoteWorkspaceSessionContextIpcResult {
+  const normalized = normalizeUnknownError(error);
+  const reasonCode = isPublicRemoteReasonCode(normalized.code) ? normalized.code : undefined;
+  const retryable = reasonCode ? readRetryable(error) : undefined;
+  return {
+    success: false,
+    error: normalized.message,
+    ...(reasonCode ? { reasonCode } : {}),
+    ...(retryable !== undefined ? { retryable } : {}),
+  };
+}
 
 export function isAllowedExternalOpenUrl(value: string): boolean {
   try {
@@ -135,13 +180,41 @@ export function registerRemoteIpcHandlers(options: {
     warn: (...args: unknown[]) => void;
     error: (...args: unknown[]) => void;
   };
+  appTelemetryRuntime: {
+    onRendererReady(payload: { hasPendingOAuthCallback: boolean; rendererId: number }): void;
+    syncRendererContext(payload: { rendererId: number; context: unknown }): void;
+    onOAuthCallbackHandled(payload: { rendererId: number }): void;
+  };
+  /** OAuth 回调处理完成后的额外副作用（如刷新 ARMS user.id）；不影响既有 runtime 流程 */
+  onOAuthCallbackHandledSideEffect?: () => void;
+  appTelemetryCore: {
+    reportEvent(payload: unknown): Promise<void>;
+  };
+  reportRemoteUsageEvent: (rendererId: number, event: TelemetryEventPayload) => void;
+  armsCustomContext: {
+    deviceMid: string;
+    platform: NodeJS.Platform;
+    appVersion: string;
+    armsEnv: ArmsRumEnv;
+  };
+  /** 仅由 VITE_ZCODE_E2E_STORE_BRIDGE + test runner 双门禁打开。 */
+  finalArmsCustomEventE2EEnabled?: boolean;
   webRemoteControlManager: WebRemoteControlIpcManager;
   createRemoteWorkspaceSession: (
     win: BrowserWindow,
     target: RemoteTarget,
     requestId?: string,
-    context?: { workspacePath: string; workspaceIdentity?: string },
+    context?: {
+      workspacePath?: string;
+      workspaceIdentity?: string;
+      confirmSourceServerInstall?: boolean;
+    },
+    lifecycle?: {
+      remoteUsageTelemetryEligible?: boolean;
+      onConnected?: (descriptor: WindowHostRemoteWorkspaceDescriptor) => void;
+    },
   ) => Promise<string>;
+  getRemoteConnectionStats: () => RemoteConnectionStats;
   disposeRemoteWorkspaceSession: (
     sessionId: string,
     reason: string,
@@ -154,29 +227,92 @@ export function registerRemoteIpcHandlers(options: {
   ) => void;
   bindRemoteWorkspaceSessionContext: (
     sessionId: string,
-    context: { workspacePath: string; workspaceIdentity?: string },
+    context: {
+      workspacePath: string;
+      workspaceIdentity?: string;
+      workspacePurpose?: import("@zcode/shared").WorkspacePurpose;
+    },
     expectedWebContentsId?: number,
-  ) => Promise<void>;
+  ) => Promise<BindRemoteWorkspaceSessionContextResult>;
   confirmRendererAttachmentReady: (
     webContentsId: number,
     payload: { sessionId: string; attachmentId: string },
   ) => void;
+  attachSourceSettings?: (sender: WebContents, sourceServerId: string) => { attachmentId: string };
   isDockerDaemonAvailable: () => Promise<boolean>;
   listAvailableWSLDistros: () => Promise<unknown[]>;
   listAvailableDockerContainers: () => Promise<unknown[]>;
   listSSHConfigAliases: () => Promise<unknown[]>;
 }) {
+  function reportRemoteUsageEvent(rendererId: number, event: TelemetryEventPayload): void {
+    try {
+      options.reportRemoteUsageEvent(rendererId, event);
+    } catch (error) {
+      // 埋点是旁路能力，不能把已成功的远程连接改写成业务失败。
+      options.logger.warn("[remote-usage-telemetry] dispatch failed", {
+        elementName: event.elementName,
+        error,
+      });
+    }
+  }
+
+  const finalArmsCustomEventE2E = options.finalArmsCustomEventE2EEnabled
+    ? enableSharedFinalArmsCustomEventE2EController()
+    : null;
+
+  configureRemoteUsageArmsTelemetry({
+    armsCustomContext: options.armsCustomContext,
+    getRemoteConnectionStats: options.getRemoteConnectionStats,
+    sendCustom: (payload) =>
+      armsRum.sendCustom(payload as Parameters<typeof armsRum.sendCustom>[0]),
+    e2eController: finalArmsCustomEventE2E,
+    logger: options.logger,
+  });
+
+  function reportRemoteConnectResultToArmsSafely(
+    params: Parameters<typeof reportRemoteConnectResultToArms>[0],
+  ): void {
+    try {
+      reportRemoteConnectResultToArms(params);
+    } catch (error) {
+      options.logger.warn("[remote-usage-arms] connect result reporter failed", { error });
+    }
+  }
+
   ipcMain.on(InternalChannels.ScopedServicePortReady, (event, rawPayload: unknown) => {
     if (!rawPayload || typeof rawPayload !== "object") return;
-    const payload = rawPayload as { sessionId?: unknown; attachmentId?: unknown };
+    const payload = rawPayload as {
+      sessionId?: unknown;
+      attachmentId?: unknown;
+    };
     const sessionId = typeof payload.sessionId === "string" ? payload.sessionId.trim() : "";
     const attachmentId =
       typeof payload.attachmentId === "string" ? payload.attachmentId.trim() : "";
     if (!sessionId || !attachmentId) return;
-    options.confirmRendererAttachmentReady(event.sender.id, { sessionId, attachmentId });
+    options.confirmRendererAttachmentReady(event.sender.id, {
+      sessionId,
+      attachmentId,
+    });
   });
+  if (finalArmsCustomEventE2E) {
+    ipcMain.handle(PlatformChannels.ReadFinalArmsCustomEventsE2E, () =>
+      finalArmsCustomEventE2E.read(),
+    );
+    ipcMain.handle(PlatformChannels.ClearFinalArmsCustomEventsE2E, () => {
+      finalArmsCustomEventE2E.clear();
+    });
+    ipcMain.handle(
+      PlatformChannels.ConfigureFinalArmsCustomEventsE2E,
+      (_event, request: unknown) => {
+        finalArmsCustomEventE2E.configure(
+          request as Parameters<typeof finalArmsCustomEventE2E.configure>[0],
+        );
+      },
+    );
+  }
+
   registerWebRemoteControlIpcHandlers({
-    reportRemoteUsageEvent: () => {},
+    reportRemoteUsageEvent,
     webRemoteControlManager: options.webRemoteControlManager,
   });
 
@@ -237,16 +373,70 @@ export function registerRemoteIpcHandlers(options: {
   );
 
   ipcMain.on(PlatformChannels.RendererReady, (event) => {
-    deliverPendingDeepLink(event.sender);
+    const hasPendingOAuthCallback = deliverPendingDeepLink(event.sender);
+    options.appTelemetryRuntime.onRendererReady({
+      hasPendingOAuthCallback,
+      rendererId: event.sender.id,
+    });
   });
 
-  ipcMain.on(PlatformChannels.SyncTelemetryContext, () => {
-    // 自维护构建不保存渲染进程遥测上下文。
+  ipcMain.on(PlatformChannels.SyncTelemetryContext, (event, context) => {
+    options.appTelemetryRuntime.syncRendererContext({
+      rendererId: event.sender.id,
+      context,
+    });
   });
 
-  ipcMain.handle(PlatformChannels.ReportTelemetryEvent, () => undefined);
+  ipcMain.handle(PlatformChannels.ReportTelemetryEvent, async (_event, payload: unknown) => {
+    const result = rendererTelemetryEventPayloadSchema.safeParse(payload);
+    if (!result.success) {
+      options.logger.warn(
+        "[report-telemetry-event] invalid payload:",
+        formatZodError(result.error),
+      );
+      return;
+    }
 
-  ipcMain.handle(PlatformChannels.ReportArmsCustomEvent, () => undefined);
+    await options.appTelemetryCore.reportEvent(result.data);
+  });
+
+  ipcMain.handle(PlatformChannels.ReportArmsCustomEvent, async (event, payload: unknown) => {
+    const result = armsCustomEventPayloadSchema.safeParse(payload);
+    if (!result.success) {
+      options.logger.warn(
+        "[report-arms-custom-event] invalid payload:",
+        formatZodError(result.error),
+      );
+      return;
+    }
+
+    try {
+      dispatchFinalArmsCustomEvent({
+        payload: result.data,
+        context: {
+          ...options.armsCustomContext,
+          rendererId: event.sender.id,
+        },
+        e2eController: finalArmsCustomEventE2E,
+        // FinalArmsCustomEventPayload 是 SDK RumCustomEvent 的收窄子集；SDK 额外要求
+        // BaseObject 索引签名，但这里不会动态追加未声明字段。
+        sendCustom: (payload) =>
+          armsRum.sendCustom(payload as Parameters<typeof armsRum.sendCustom>[0]),
+      });
+    } catch (error) {
+      options.logger.warn(
+        "[report-arms-custom-event] sendCustom failed:",
+        normalizeUnknownError(error).message,
+      );
+    }
+  });
+
+  ipcMain.on(PlatformChannels.OAuthCallbackHandled, (event) => {
+    options.appTelemetryRuntime.onOAuthCallbackHandled({
+      rendererId: event.sender.id,
+    });
+    options.onOAuthCallbackHandledSideEffect?.();
+  });
 
   ipcMain.on(PlatformChannels.ShowTaskNotification, (event, payload: unknown) => {
     dispatchTaskNotification({ event, payload, logger: options.logger });
@@ -272,6 +462,7 @@ export function registerRemoteIpcHandlers(options: {
       workspacePath?: unknown;
       workspaceIdentity?: unknown;
       connectTrigger?: unknown;
+      confirmSourceServerInstall?: unknown;
     } =
       rawPayload && typeof rawPayload === "object" && "target" in rawPayload
         ? (rawPayload as {
@@ -280,6 +471,7 @@ export function registerRemoteIpcHandlers(options: {
             workspacePath?: unknown;
             workspaceIdentity?: unknown;
             connectTrigger?: unknown;
+            confirmSourceServerInstall?: unknown;
           })
         : { target: rawPayload, requestId: undefined };
     const result = remoteTargetSchema.safeParse(wrappedPayload.target);
@@ -302,6 +494,12 @@ export function registerRemoteIpcHandlers(options: {
       wrappedPayload.workspaceIdentity.trim().length > 0
         ? wrappedPayload.workspaceIdentity
         : undefined;
+    const connectTriggerValue = wrappedPayload.connectTrigger;
+    const connectTrigger =
+      connectTriggerValue === "reconnect" || connectTriggerValue === "restore"
+        ? connectTriggerValue
+        : "new";
+    const confirmSourceServerInstall = wrappedPayload.confirmSourceServerInstall === true;
 
     try {
       const win = BrowserWindow.fromWebContents(event.sender);
@@ -309,24 +507,121 @@ export function registerRemoteIpcHandlers(options: {
         throw new Error("未找到当前窗口，无法创建远程 session");
       }
 
+      let reusedConnectionTarget: RemoteTarget | undefined;
       const sessionId = await options.createRemoteWorkspaceSession(
         win,
         result.data,
         requestId,
-        workspacePath ? { workspacePath, workspaceIdentity } : undefined,
+        workspacePath || confirmSourceServerInstall
+          ? {
+              workspacePath,
+              workspaceIdentity,
+              ...(confirmSourceServerInstall ? { confirmSourceServerInstall: true } : {}),
+            }
+          : undefined,
+        {
+          remoteUsageTelemetryEligible: true,
+          onConnected: (descriptor) => {
+            reusedConnectionTarget = descriptor.reusedConnectionTarget;
+          },
+        },
       );
-      return { success: true, sessionId };
+      reportRemoteUsageEvent(
+        event.sender.id,
+        buildRemoteWorkspaceConnectResultTelemetry({
+          result: "success",
+          remoteKind: result.data.kind,
+          connectTrigger,
+        }),
+      );
+      reportRemoteConnectResultToArmsSafely({
+        rendererId: event.sender.id,
+        result: "success",
+        remoteKind: result.data.kind,
+        connectTrigger,
+      });
+      return {
+        success: true,
+        sessionId,
+        ...(reusedConnectionTarget ? { reusedConnectionTarget } : {}),
+      };
     } catch (error) {
-      const normalizedError = normalizeUnknownError(error);
+      const normalizedError = normalizeRemoteConnectionError(error);
+      const errorCategory = classifyRemoteUsageError(error);
       // 这里之前直接把 Error 对象交给 logger，落盘时会被 JSON.stringify 压成 `{}`。
       // 改成显式展开 message/code/stack，保证远程建连失败时主进程日志里能看到真实上下文。
       options.logger.error("[connect-remote] caught error:", {
+        requestId,
+        confirmSourceServerInstall,
         message: normalizedError.message,
         code: normalizedError.code,
         stack: error instanceof Error ? error.stack : undefined,
       });
-      return { success: false, error: normalizedError.message };
+      reportRemoteUsageEvent(
+        event.sender.id,
+        buildRemoteWorkspaceConnectResultTelemetry({
+          result: "failure",
+          remoteKind: result.data.kind,
+          connectTrigger,
+          errorCategory,
+        }),
+      );
+      reportRemoteConnectResultToArmsSafely({
+        rendererId: event.sender.id,
+        result: "failure",
+        remoteKind: result.data.kind,
+        connectTrigger,
+        errorCategory,
+      });
+      const reasonCode = isPublicRemoteReasonCode(normalizedError.code)
+        ? normalizedError.code
+        : undefined;
+      const retryable = reasonCode ? readRetryable(error) : undefined;
+      const profileId = hostRemoteWorkspaceConnectFailedResponseSchema.shape.profileId.safeParse(
+        (reasonCode === "source-server-upgrade-required" ||
+          reasonCode === "source-server-install-required") &&
+          error &&
+          typeof error === "object" &&
+          "profileId" in error
+          ? error.profileId
+          : undefined,
+      );
+      const resolvedWslTarget =
+        hostRemoteWorkspaceConnectFailedResponseSchema.shape.resolvedWslTarget.safeParse(
+          (reasonCode === "source-server-install-required" ||
+            reasonCode === "source-server-upgrade-required") &&
+            error &&
+            typeof error === "object" &&
+            "resolvedWslTarget" in error
+            ? error.resolvedWslTarget
+            : undefined,
+        );
+      return {
+        success: false,
+        error: normalizedError.message,
+        ...(reasonCode ? { reasonCode } : {}),
+        ...(retryable !== undefined ? { retryable } : {}),
+        ...(profileId.success && profileId.data ? { profileId: profileId.data } : {}),
+        ...(resolvedWslTarget.success && resolvedWslTarget.data
+          ? { resolvedWslTarget: resolvedWslTarget.data }
+          : {}),
+      };
     }
+  });
+
+  ipcMain.handle(PlatformChannels.RequestSourceSettingsAttachment, (event, rawPayload: unknown) => {
+    const sourceServerId =
+      rawPayload &&
+      typeof rawPayload === "object" &&
+      "sourceServerId" in rawPayload &&
+      typeof rawPayload.sourceServerId === "string"
+        ? rawPayload.sourceServerId.trim()
+        : "";
+    if (!sourceServerId) throw new Error("sourceServerId is required");
+    if (!options.attachSourceSettings) {
+      throw new Error("Source settings attachment is unavailable");
+    }
+    return options.attachSourceSettings(event.sender, sourceServerId);
   });
 
   ipcMain.handle(
@@ -351,31 +646,43 @@ export function registerRemoteIpcHandlers(options: {
 
   ipcMain.handle(
     PlatformChannels.BindRemoteWorkspaceSessionContext,
-    async (event, rawPayload: unknown) => {
-      if (!rawPayload || typeof rawPayload !== "object") {
-        throw new Error("远程 workspace context payload 无效");
+    async (event, rawPayload: unknown): Promise<BindRemoteWorkspaceSessionContextIpcResult> => {
+      try {
+        if (!rawPayload || typeof rawPayload !== "object") {
+          throw new Error("远程 workspace context payload 无效");
+        }
+        const payload = rawPayload as {
+          remoteSessionId?: unknown;
+          workspacePath?: unknown;
+          workspaceIdentity?: unknown;
+          workspacePurpose?: unknown;
+        };
+        const remoteSessionId =
+          typeof payload.remoteSessionId === "string" ? payload.remoteSessionId.trim() : "";
+        const workspacePath =
+          typeof payload.workspacePath === "string" ? payload.workspacePath : "";
+        const workspaceIdentity =
+          typeof payload.workspaceIdentity === "string" ? payload.workspaceIdentity.trim() : "";
+        const workspacePurpose =
+          payload.workspacePurpose === "project" || payload.workspacePurpose === "conversation"
+            ? payload.workspacePurpose
+            : undefined;
+        if (!remoteSessionId || !workspacePath.trim()) {
+          throw new Error("远程 workspace context 缺少 sessionId 或 workspacePath");
+        }
+        const result = await options.bindRemoteWorkspaceSessionContext(
+          remoteSessionId,
+          {
+            workspacePath,
+            ...(workspaceIdentity ? { workspaceIdentity } : {}),
+            ...(workspacePurpose ? { workspacePurpose } : {}),
+          },
+          event.sender.id,
+        );
+        return { success: true, result };
+      } catch (error) {
+        return toBindIpcFailure(error);
       }
-      const payload = rawPayload as {
-        remoteSessionId?: unknown;
-        workspacePath?: unknown;
-        workspaceIdentity?: unknown;
-      };
-      const remoteSessionId =
-        typeof payload.remoteSessionId === "string" ? payload.remoteSessionId.trim() : "";
-      const workspacePath = typeof payload.workspacePath === "string" ? payload.workspacePath : "";
-      const workspaceIdentity =
-        typeof payload.workspaceIdentity === "string" ? payload.workspaceIdentity.trim() : "";
-      if (!remoteSessionId || !workspacePath.trim()) {
-        throw new Error("远程 workspace context 缺少 sessionId 或 workspacePath");
-      }
-      await options.bindRemoteWorkspaceSessionContext(
-        remoteSessionId,
-        {
-          workspacePath,
-          ...(workspaceIdentity ? { workspaceIdentity } : {}),
-        },
-        event.sender.id,
-      );
     },
   );
 

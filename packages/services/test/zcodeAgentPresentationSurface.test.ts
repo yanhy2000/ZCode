@@ -10,6 +10,23 @@ describe("resolveZCodeAgentPresentationSurface", () => {
     ).toBe("desktop");
   });
 
+  it("服务端灰度关闭时不注入 Desktop 呈现面", () => {
+    expect(
+      resolveZCodeAgentPresentationSurface({
+        runtimeSurface: "desktop_local_host",
+        desktopContextPromptEnabled: false,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("从 Desktop-attached remote authority 推导 Desktop 呈现面", () => {
+    expect(
+      resolveZCodeAgentPresentationSurface({
+        serviceAuthorityMode: "desktop-attached-remote",
+      }),
+    ).toBe("desktop");
+  });
+
   it("不把普通 remote runtime 或无宿主事实的 Server 推导成 Desktop", () => {
     expect(
       resolveZCodeAgentPresentationSurface({

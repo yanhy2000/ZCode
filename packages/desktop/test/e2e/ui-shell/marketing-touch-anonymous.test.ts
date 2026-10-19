@@ -3,13 +3,14 @@ import {
   TID_CONFIRM_DIALOG_CONFIRM,
   TID_LOGIN_TRIGGER,
   TID_LOGOUT_BUTTON,
-  TID_WELCOME_START_BUTTON,
-} from "@zcode/shared";
+  TID_LOGIN_USE_API_KEY_BUTTON,
+  TID_LOGIN_API_KEY_SKIP_BUTTON,
+} from "@zcode/shared/test-ids";
 import {
   clearAppData,
   getE2EAppDataPaths,
   waitForDefaultWorkspaceReady,
-} from "../helpers/desktop-app.js";
+} from "#e2e/helpers/desktop-app";
 
 const byId = (id: string) => $(`[data-testid="${id}"]`);
 function origin() {
@@ -70,11 +71,12 @@ describe("Marketing Touch anonymous boundaries", () => {
     await browser.waitUntil(
       async () =>
         (await byId(TID_LOGIN_TRIGGER).isExisting()) ||
-        (await byId(TID_WELCOME_START_BUTTON).isExisting()),
+        (await byId(TID_LOGIN_USE_API_KEY_BUTTON).isExisting()),
       { timeout: 30_000 },
     );
-    if (await byId(TID_WELCOME_START_BUTTON).isExisting()) {
-      await byId(TID_WELCOME_START_BUTTON).click();
+    if (await byId(TID_LOGIN_USE_API_KEY_BUTTON).isExisting()) {
+      await byId(TID_LOGIN_USE_API_KEY_BUTTON).click();
+      await byId(TID_LOGIN_API_KEY_SKIP_BUTTON).click();
     }
     await waitForDefaultWorkspaceReady();
     await expectAnonymous();
@@ -105,7 +107,8 @@ describe("Marketing Touch anonymous boundaries", () => {
   it("MTE-05 anonymous banner: closes normally and opens login instead of submitting a claim", async () => {
     const banner = byId("marketing-banner");
     await banner.waitForDisplayed({ timeout: 15_000 });
-    await banner.$('button[aria-label="Close"]').click();
+    // 空文案 fixture 使用 App 的本地化回退名称，不能只匹配英文。
+    await banner.$('button[aria-label="Close"], button[aria-label="关闭"]').click();
     await banner.waitForExist({ reverse: true });
     await browser.waitUntil(async () => (await state()).events.length === 1);
     const closed = await state();
@@ -118,8 +121,8 @@ describe("Marketing Touch anonymous boundaries", () => {
     await fetch(`${origin()}/__e2e/marketing/redeliver-banner`, { method: "POST" });
     await browser.execute(() => window.dispatchEvent(new Event("online")));
     await banner.waitForDisplayed({ timeout: 15_000 });
-    await banner.$('button[aria-label="Open"]').click();
-    await byId(TID_WELCOME_START_BUTTON).waitForDisplayed({ timeout: 15_000 });
+    await banner.$('button[aria-label="Open"], button[aria-label="打开"]').click();
+    await byId(TID_LOGIN_USE_API_KEY_BUTTON).waitForDisplayed({ timeout: 15_000 });
     const after = await state();
     expect(after.events).toEqual(closed.events);
     expect(

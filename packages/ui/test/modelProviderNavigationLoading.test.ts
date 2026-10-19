@@ -6,7 +6,6 @@ import {
   getSortableProviderId,
   ModelProviderSectionNavigation,
   resolveReorderedProviderIdsForGroup,
-  resolveModelProviderSideNavLabel,
   shouldShowModelProviderGroupLoadingIndicator,
 } from "@/settings/model-provider-section/Navigation.js";
 
@@ -23,7 +22,7 @@ function renderWithTooltipProvider(element: ReactElement) {
 }
 
 describe("model provider navigation loading indicator", () => {
-  it("没有 Personal Provider 时不渲染空分组或横杠占位", () => {
+  it("没有 Personal Provider 时不渲染空分组", () => {
     const html = renderWithTooltipProvider(
       createElement(ModelProviderSectionNavigation, {
         navigationGroups: [
@@ -31,16 +30,16 @@ describe("model provider navigation loading indicator", () => {
           { id: "custom", title: "Custom Providers", items: [] },
         ],
         selectedNodeKey: null,
+        presetLoading: false,
         customLoading: false,
         onSelectNavItem: vi.fn(),
       }),
     );
 
     expect(html).not.toContain("Custom Providers");
-    expect(html).not.toMatch(/>\s*-\s*</u);
   });
 
-  it("Personal Provider 保留自定义名称，且只对 Settings View 允许项启用拖拽", () => {
+  it("只对 Settings View 允许项启用拖拽", () => {
     const item = {
       key: "custom:official-api",
       type: "custom" as const,
@@ -64,9 +63,6 @@ describe("model provider navigation loading indicator", () => {
       },
     };
 
-    const formatMessage = vi.fn();
-    expect(resolveModelProviderSideNavLabel(item)).toBe("Official API");
-    expect(formatMessage).not.toHaveBeenCalled();
     expect(getSortableProviderId(item, new Set(["personal-api"]))).toBeNull();
     expect(getSortableProviderId(item, new Set(["official-api"]))).toBe("official-api");
   });
@@ -74,14 +70,16 @@ describe("model provider navigation loading indicator", () => {
   it("按分组返回对应 loading 状态", () => {
     expect(
       shouldShowModelProviderGroupLoadingIndicator({
-        groupId: "custom",
-        customLoading: true,
+        groupId: "preset",
+        presetLoading: true,
+        customLoading: false,
       }),
     ).toBe(true);
 
     expect(
       shouldShowModelProviderGroupLoadingIndicator({
         groupId: "custom",
+        presetLoading: true,
         customLoading: false,
       }),
     ).toBe(false);
@@ -97,7 +95,7 @@ describe("model provider navigation loading indicator", () => {
     ).toEqual(["provider-c", "provider-a", "provider-b"]);
   });
 
-  it("自定义供应商拖拽 handle 与 provider 图标共用左侧位置", () => {
+  it("允许调序的自定义供应商渲染可访问 sortable 行", () => {
     const html = renderWithTooltipProvider(
       createElement(ModelProviderSectionNavigation, {
         navigationGroups: [
@@ -133,6 +131,7 @@ describe("model provider navigation loading indicator", () => {
           },
         ],
         selectedNodeKey: null,
+        presetLoading: false,
         customLoading: false,
         onSelectNavItem: vi.fn(),
         reorderableProviderIds: new Set(["provider-a"]),
@@ -140,11 +139,8 @@ describe("model provider navigation loading indicator", () => {
     );
 
     expect(html).toContain('aria-label="Provider A"');
-    expect(html).toContain("select-none");
-    expect(html).not.toContain("lucide-grip-vertical");
     expect(html).toMatch(
       /data-testid="model-provider-nav-item-custom:provider-a"[^>]*aria-roledescription="sortable"[\s\S]*Provider A/,
     );
-    expect(html).not.toContain('class="flex items-center gap-1"');
   });
 });

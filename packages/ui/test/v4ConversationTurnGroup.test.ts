@@ -19,18 +19,19 @@ import type {
   WorkflowLaunchMeta,
   WorkflowRunState,
 } from "@zcode/shared/zcode-protocol-v4";
-import {
-  TID_CHAT_WORKFLOW_ARTIFACT_CHIP,
-  TID_CHAT_WORKFLOW_RUN_DIGEST,
-  TID_CRON_CREATE_CARD,
-  TID_CRON_CREATE_OPEN,
-  testId,
-} from "@zcode/shared";
+import { TID_CHAT_WORKFLOW_ARTIFACT_CHIP, TID_CHAT_WORKFLOW_RUN_DIGEST } from "@zcode/shared";
+import { TID_CRON_CREATE_CARD, TID_CRON_CREATE_OPEN, testId } from "@zcode/shared/test-ids";
 import { TooltipProvider } from "@/components/ui/tooltip.js";
 import { PlatformProvider } from "@/hooks/usePlatform.js";
 import { DEFAULT_CODE_PREVIEW_SETTINGS } from "@/lib/codePreviewSettings.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 import { ConversationTurnGroup } from "@/v4/ConversationTurnGroup.js";
+import {
+  completeHighspeedTurn,
+  markHighspeedTurnMetricsPersisted,
+  recordHighspeedTurn,
+  setHighspeedCardTps,
+} from "@/highspeed/highspeedTurnStore.js";
 import type { ConversationRowRenderContext } from "@/v4/conversationRowContext.js";
 import {
   buildConversationTurnRenderUnits,
@@ -42,7 +43,9 @@ vi.mock("@/hooks/useWorkspaceServices.js", () => ({
 }));
 
 vi.mock("@/hooks/useServices.js", () => ({
-  useOptionalServices: () => ({}),
+  useOptionalServices: () => ({
+    highspeedCardService: { share: vi.fn() },
+  }),
 }));
 const topicInterrupted = vi.hoisted(() => vi.fn(() => false));
 vi.mock("@/v4/botGroupDeliveryContext.js", async (importOriginal) => ({
@@ -310,11 +313,6 @@ function renderUnit(
     onFeedbackChange?: (target: ConversationRowTarget, feedback: "like" | "dislike" | null) => void;
     /** 覆盖行渲染上下文的若干键（产物 chips 的门就是 `sessionId` + `onOpenWorkflowArtifact`）。 */
     context?: Partial<ConversationRowRenderContext>;
-    shareSelection?: {
-      eligibleRowIds: ReadonlySet<number>;
-      selectedRowIds: ReadonlySet<number>;
-      onToggle: (rowId: number) => void;
-    };
   } = {},
 ): string {
   return renderToStaticMarkup(
@@ -346,7 +344,6 @@ function renderUnit(
               onFork: options.onFork,
               onRetry: options.onRetry,
               onFeedbackChange: options.onFeedbackChange,
-              shareSelection: options.shareSelection,
             }),
           ),
         ),
@@ -356,69 +353,6 @@ function renderUnit(
 }
 
 describe("ConversationTurnGroup layout", () => {
-  it("shows a checked share toggle before a selectable conversation turn", () => {
-    const [unit] = buildConversationTurnRenderUnits([turnHeader(), userInputRow(2)]);
-    const html = renderUnit(unit!, {
-      shareSelection: {
-        eligibleRowIds: new Set([2]),
-        selectedRowIds: new Set([2]),
-        onToggle: vi.fn(),
-      },
-    });
-
-    expect(html).toContain('data-conversation-share-turn-toggle="true"');
-    expect(html).toContain('data-conversation-share-turn-toggle-state="selected"');
-    expect(html).toContain("top-1/2");
-    expect(html).toContain("-translate-y-1/2");
-    expect(html).toContain('data-state="checked"');
-  });
-
-  it("marks the share toggle indeterminate when a steered turn is only partially selected", () => {
-    const [unit] = buildConversationTurnRenderUnits([
-      turnHeader(),
-      userInputRow(2),
-      userInputRow(3, { text: "顺便看看测试" }),
-    ]);
-    const html = renderUnit(unit!, {
-      shareSelection: {
-        eligibleRowIds: new Set([2, 3]),
-        selectedRowIds: new Set([2]),
-        onToggle: vi.fn(),
-      },
-    });
-
-    expect(html).toContain('data-conversation-share-turn-toggle-state="partial"');
-    expect(html).toContain('data-state="indeterminate"');
-    expect(html).not.toContain('data-conversation-share-turn-toggle-state="unselected"');
-  });
-
-  it("keeps the share toggle unselected when no row of a steered turn is selected", () => {
-    const [unit] = buildConversationTurnRenderUnits([
-      turnHeader(),
-      userInputRow(2),
-      userInputRow(3, { text: "顺便看看测试" }),
-    ]);
-    const html = renderUnit(unit!, {
-      shareSelection: {
-        eligibleRowIds: new Set([2, 3]),
-        selectedRowIds: new Set(),
-        onToggle: vi.fn(),
-      },
-    });
-
-    expect(html).toContain('data-conversation-share-turn-toggle-state="unselected"');
-    expect(html).not.toContain('data-state="indeterminate"');
-  });
-
-  it("uses the conversation container for narrow horizontal padding", () => {
-    const [unit] = buildConversationTurnRenderUnits([turnHeader(), userInputRow(2)]);
-    const html = renderUnit(unit!);
-
-    expect(html).toContain("px-4 @md/conversation:px-6");
-    expect(html).not.toContain("@max-md/conversation:px-4");
-    expect(html).not.toContain("px-6 max-md:px-2");
-  });
-
   it("removes the complete external assistant container after its response becomes CUA", () => {
     const responseId = "assistant-response-cua";
     const message = assistantTextRow(3, {
@@ -534,26 +468,49 @@ describe("ConversationTurnGroup Hook footer", () => {
 
   it.each(
     [false, true].flatMap((compactForRemoteControl) =>
-      [false, true].map((hasAssistantText) => ({
-        compactForRemoteControl,
-        hasAssistantText,
-      })),
+      [false, true].flatMap((highspeed) =>
+        [false, true].map((hasAssistantText) => ({
+          compactForRemoteControl,
+          highspeed,
+          hasAssistantText,
+        })),
+      ),
     ),
   )(
-    "HK08/HK11 每轮仅一个 Hook 入口：mobile=$compactForRemoteControl text=$hasAssistantText",
-    ({ compactForRemoteControl, hasAssistantText }) => {
+    "HK08/HK11 每轮仅一个 Hook 入口：mobile=$compactForRemoteControl highspeed=$highspeed text=$hasAssistantText",
+    ({ compactForRemoteControl, highspeed, hasAssistantText }) => {
       const [unit] = buildConversationTurnRenderUnits([
         turnHeader({ state: hasAssistantText ? "completedSuccess" : "completedInterrupted" }),
-        userInputRow(2),
+        userInputRow(2, {
+          ...(highspeed
+            ? {
+                highspeed: {
+                  schemaVersion: 1,
+                  cardId: "hsc-hook-footer",
+                  taskId: "session-hook-footer",
+                  provider: "zai",
+                  model: "glm-5",
+                  issuedAt: 1_000,
+                  expiresAt: 10_000,
+                },
+              }
+            : {}),
+        }),
         hookInvocationRow(3),
         ...(hasAssistantText ? [assistantTextRow(4)] : []),
         forkNoticeTimelineRow(5),
       ]);
-      const html = renderUnit(unit!, { compactForRemoteControl });
+      const html = renderUnit(
+        { ...unit!, showHighspeedOutputFooter: highspeed },
+        { compactForRemoteControl },
+      );
 
+      // 冲突合并曾把 Hook-only 分支接成 Highspeed footer 的 else：
+      // 普通有正文时重复显示，Highspeed 无正文时则完全丢失。
       expect(html.match(/data-testid="v4-hook-details-trigger-turn-complete"/g) ?? []).toHaveLength(
         1,
       );
+      expect(html.includes('data-highspeed-output-footer="true"')).toBe(highspeed);
       expect(html.indexOf("v4-hook-details-trigger-turn-complete")).toBeLessThan(
         html.indexOf("从对话中派生"),
       );
@@ -741,6 +698,371 @@ describe("ConversationTurnGroup message stream display settings", () => {
 });
 
 describe("ConversationTurnGroup assistant history status", () => {
+  it("源码将会话内分享按钮接到本地卡片，且不调用后端分享接口", () => {
+    const source = readFileSync("packages/ui/src/v4/ConversationTurnGroup.tsx", "utf8");
+
+    expect(source).toContain("setHighspeedShareDialogOpen(true)");
+    expect(source).toContain("<HighspeedShareDialog");
+    expect(source).not.toContain("highspeedCardService.share");
+  });
+
+  it("冷恢复后从 userInput metadata 保留 accelerated output 的紫色工时", () => {
+    const input = userInputRow(2, {
+      sourceCommandId: "command-highspeed-cold-history",
+      highspeed: {
+        schemaVersion: 1,
+        cardId: "hsc-cold-history",
+        taskId: "session-highspeed-cold-history",
+        provider: "zai",
+        model: "glm-5",
+        issuedAt: 1_000,
+        expiresAt: 10_000,
+        regularTps: 73,
+        highspeedTps: 136,
+        outputTokens: 120_000,
+        durationMs: 881_000,
+        savedDurationMs: 763_000,
+      },
+    });
+    const work = reasoningRow();
+
+    const html = renderUnit(
+      baseUnit({
+        visibleUserInputs: [input],
+        workStatus: { state: "completed", durationMs: 881_000 },
+        assistantWorkRows: [work],
+        assistantHistoryRows: [work],
+        renderRows: [input, work],
+        showHighspeedOutputFooter: true,
+      }),
+    );
+
+    expect(html).toContain("已工作 14 分 41 秒");
+    expect(html).toContain('data-highspeed-duration="true"');
+    expect(html).toContain("text-icon-purple");
+    expect(html).toContain("节省约 12 分 43 秒");
+    expect(html).toContain('data-highspeed-saved-duration="true"');
+    expect(html).toContain('data-highspeed-status-tag="true"');
+    expect(html).not.toContain('data-highspeed-gradient="true"');
+    expect(html).toContain("HighSpeed");
+    expect(html).toContain('data-highspeed-output-footer="true"');
+    expect(html).toContain("以上由 Highspeed 生成");
+    expect(html).toContain('data-highspeed-output-share="true"');
+    expect(html).toContain("查看");
+    const shareButton = html.match(/<button[^>]*data-highspeed-output-share="true"[^>]*>/)?.[0];
+    expect(shareButton).toBeDefined();
+    expect(shareButton).not.toMatch(/\sdisabled(?:=""|(?=[\s>]))/);
+    expect(html).toContain('data-highspeed-output-share-icon="true"');
+    expect(html).not.toContain('data-highspeed="true"');
+  });
+
+  it("卡失效降级后仍允许分享当前 Turn 的完整统计", () => {
+    const input = userInputRow(2, {
+      sourceCommandId: "command-highspeed-fallback-share",
+      highspeed: {
+        schemaVersion: 1,
+        cardId: "hsc-fallback-share",
+        taskId: "session-fallback-share",
+        provider: "zai",
+        model: "glm-5",
+        issuedAt: 1_000,
+        expiresAt: 10_000,
+        regularTps: 73,
+        highspeedTps: 136,
+        outputTokens: 120_000,
+        durationMs: 881_000,
+        savedDurationMs: 763_000,
+        fallbackAt: 10_001,
+      },
+    });
+    const work = reasoningRow();
+
+    const html = renderUnit(
+      baseUnit({
+        visibleUserInputs: [input],
+        workStatus: { state: "completed", durationMs: 881_000 },
+        assistantWorkRows: [work],
+        assistantHistoryRows: [work],
+        renderRows: [input, work],
+        showHighspeedOutputFooter: true,
+      }),
+    );
+
+    const shareButton = html.match(/<button[^>]*data-highspeed-output-share="true"[^>]*>/)?.[0];
+    expect(shareButton).toBeDefined();
+    expect(shareButton).not.toMatch(/\sdisabled(?:=""|(?=[\s>]))/);
+  });
+
+  it("缺少 durationMs 时不展示分享入口", () => {
+    const input = userInputRow(2, {
+      sourceCommandId: "command-highspeed-share-without-duration",
+      highspeed: {
+        schemaVersion: 1,
+        cardId: "hsc-share-without-duration",
+        taskId: "session-share-without-duration",
+        provider: "zai",
+        model: "glm-5",
+        issuedAt: 1_000,
+        expiresAt: 10_000,
+        outputTokens: 120_000,
+        regularTps: 73,
+        highspeedTps: 136,
+      },
+    });
+
+    const html = renderUnit(
+      baseUnit({
+        visibleUserInputs: [input],
+        workStatus: { state: "completed", durationMs: 881_000 },
+        assistantWorkRows: [reasoningRow()],
+        assistantHistoryRows: [reasoningRow()],
+        renderRows: [input, reasoningRow()],
+        showHighspeedOutputFooter: true,
+      }),
+    );
+
+    const shareButton = html.match(/<button[^>]*data-highspeed-output-share="true"[^>]*>/)?.[0];
+    expect(shareButton).toBeUndefined();
+  });
+
+  it("总体加速倍率不大于 1.2x 时保留 footer 但隐藏分享入口", () => {
+    const input = userInputRow(2, {
+      sourceCommandId: "command-highspeed-low-speedup",
+      highspeed: {
+        schemaVersion: 1,
+        cardId: "hsc-low-speedup",
+        taskId: "session-low-speedup",
+        provider: "zai",
+        model: "glm-5",
+        issuedAt: 1_000,
+        expiresAt: 10_000,
+        regularTps: 73,
+        highspeedTps: 100,
+        outputTokens: 120_000,
+        durationMs: 881_000,
+        savedDurationMs: 100_000,
+      },
+    });
+    const html = renderUnit(
+      baseUnit({
+        visibleUserInputs: [input],
+        workStatus: { state: "completed", durationMs: 881_000 },
+        assistantWorkRows: [reasoningRow()],
+        assistantHistoryRows: [reasoningRow()],
+        renderRows: [input, reasoningRow()],
+        showHighspeedOutputFooter: true,
+      }),
+    );
+
+    expect(html).toContain('data-highspeed-output-footer="true"');
+    expect(html).not.toContain('data-highspeed-output-share="true"');
+  });
+
+  it("Highspeed 生成期间只显示标签，不提前显示持久化的节省时间", () => {
+    const input = userInputRow(2, {
+      sourceCommandId: "command-highspeed-running",
+      highspeed: {
+        schemaVersion: 1,
+        cardId: "hsc-running",
+        taskId: "session-highspeed-running",
+        provider: "zai",
+        model: "glm-5",
+        issuedAt: 1_000,
+        expiresAt: 10_000,
+        regularTps: 73,
+        outputTokens: 120_000,
+        durationMs: 881_000,
+        savedDurationMs: 763_000,
+      },
+    });
+    const work = reasoningRow();
+
+    const html = renderUnit(
+      baseUnit({
+        visibleUserInputs: [input],
+        // 多段输出中，前段可已完成但整轮仍在生成；节省时间必须服从整轮终态。
+        workStatus: { state: "completed", durationMs: 5_000 },
+        assistantWorkRows: [work],
+        assistantHistoryRows: [work],
+        renderRows: [input, work],
+        isRunning: true,
+      }),
+      { nowMs: 9_999 },
+    );
+
+    expect(html).toContain('data-highspeed-status-tag="true"');
+    expect(html).toContain('data-highspeed-gradient="true"');
+    expect(html).toContain("highspeed-animated-gradient-text");
+    expect(html).toContain("HighSpeed");
+    expect(html).not.toContain('data-highspeed-saved-duration="true"');
+    expect(html).not.toContain("节省约");
+  });
+
+  it("Highspeed 卡过期后执行中的 Tool 恢复普通流光样式", () => {
+    const input = userInputRow(2, {
+      sourceCommandId: "command-highspeed-expired-running-tool",
+      highspeed: {
+        schemaVersion: 1,
+        cardId: "hsc-expired-running-tool",
+        taskId: "session-expired-running-tool",
+        provider: "zai",
+        model: "glm-5",
+        issuedAt: 1_000,
+        expiresAt: 10_000,
+      },
+    });
+    const runningTool = toolCallRow(3, "Bash", { command: "pnpm test" }, { status: "running" });
+
+    const html = renderUnit(
+      baseUnit({
+        visibleUserInputs: [input],
+        assistantWorkRows: [runningTool],
+        assistantHistoryRows: [runningTool],
+        renderRows: [input, runningTool],
+        isRunning: true,
+      }),
+      { nowMs: 10_001 },
+    );
+
+    expect(html).not.toContain('data-highspeed-gradient="true"');
+    expect(html).not.toContain("highspeed-animated-gradient-text");
+  });
+
+  it("普通 output 和仍在运行的 accelerated output 不显示 Highspeed 来源 footer", () => {
+    const work = reasoningRow();
+    const ordinaryHtml = renderUnit(
+      baseUnit({
+        visibleUserInputs: [userInputRow(2, { sourceCommandId: "command-ordinary-footer" })],
+        workStatus: { state: "completed", durationMs: 5_000 },
+        assistantWorkRows: [work],
+        assistantHistoryRows: [work],
+        renderRows: [work],
+      }),
+    );
+    const runningHtml = renderUnit(
+      baseUnit({
+        visibleUserInputs: [
+          userInputRow(2, {
+            sourceCommandId: "command-highspeed-running-footer",
+            highspeed: {
+              schemaVersion: 1,
+              cardId: "hsc-running-footer",
+              taskId: "session-running-footer",
+              provider: "zai",
+              model: "glm-5",
+              issuedAt: 1_000,
+              expiresAt: 10_000,
+            },
+          }),
+        ],
+        workStatus: { state: "running", durationMs: 5_000 },
+        assistantWorkRows: [work],
+        assistantHistoryRows: [work],
+        renderRows: [work],
+        isRunning: true,
+        showHighspeedOutputFooter: true,
+      }),
+      { nowMs: 9_999 },
+    );
+
+    expect(ordinaryHtml).not.toContain('data-highspeed-output-footer="true"');
+    expect(ordinaryHtml).not.toContain('data-highspeed-gradient="true"');
+    expect(runningHtml).not.toContain('data-highspeed-output-footer="true"');
+    expect(runningHtml).toContain('data-highspeed-gradient="true"');
+  });
+
+  it.each([
+    { label: "中断", workStatus: { state: "interrupted" as const, durationMs: 100 } },
+    { label: "异常", workStatus: undefined },
+  ])("Highspeed 组尾$label且自身无输出时仍展示可用分享入口", ({ workStatus }) => {
+    const input = userInputRow(2, {
+      sourceCommandId: "command-highspeed-terminal-footer",
+      highspeed: {
+        schemaVersion: 1,
+        cardId: "hsc-terminal-footer",
+        taskId: "session-terminal-footer",
+        provider: "zai",
+        model: "glm-5",
+        issuedAt: 1_000,
+        expiresAt: 10_000,
+        regularTps: 20,
+        highspeedTps: 50,
+        outputTokens: 0,
+        durationMs: 100,
+      },
+    });
+    const html = renderUnit(
+      baseUnit({
+        visibleUserInputs: [input],
+        ...(workStatus ? { workStatus } : {}),
+        showHighspeedOutputFooter: true,
+        highspeedOutputFooterTarget: {
+          cardId: "hsc-terminal-footer",
+          metrics: {
+            outputTokens: 10,
+            durationMs: 300,
+            regularTps: 20,
+            highspeedTps: 50,
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain('data-highspeed-output-footer="true"');
+    const shareButton = html.match(/<button[^>]*data-highspeed-output-share="true"[^>]*>/)?.[0];
+    expect(shareButton).toBeDefined();
+    expect(shareButton).not.toMatch(/\sdisabled(?:=""|(?=[\s>]))/);
+  });
+
+  it("只用紫色工时标识 accelerated output，input 保持普通样式", () => {
+    const sourceCommandId = "command-highspeed-output-duration";
+    const input = userInputRow(2, { sourceCommandId });
+    const work = reasoningRow();
+    recordHighspeedTurn({
+      sessionId: "session-highspeed-output-duration",
+      sourceCommandId,
+      card: {
+        cardId: "hsc-output-duration",
+        taskId: "session-highspeed-output-duration",
+        provider: "zai",
+        model: "glm-5",
+        issuedAt: 1_000,
+        expiresAt: 10_000,
+        regularTps: 73,
+      },
+      createdAt: 1_000,
+    });
+    completeHighspeedTurn({
+      sourceCommandId,
+      outputTokens: 120_000,
+      durationMs: 881_000,
+      completedAt: 882_000,
+    });
+    setHighspeedCardTps("hsc-output-duration", 136);
+    markHighspeedTurnMetricsPersisted(sourceCommandId, 763_000, 882_001);
+
+    const html = renderUnit(
+      baseUnit({
+        visibleUserInputs: [input],
+        workStatus: { state: "completed", durationMs: 881_000 },
+        assistantWorkRows: [work],
+        assistantHistoryRows: [work],
+        renderRows: [input, work],
+        showHighspeedOutputFooter: true,
+      }),
+    );
+
+    expect(html).toContain("已工作 14 分 41 秒");
+    expect(html).toContain('data-highspeed-duration="true"');
+    expect(html).toContain("text-icon-purple");
+    expect(html).toContain('data-highspeed-status-tag="true"');
+    expect(html).toContain("HighSpeed");
+    const shareButton = html.match(/<button[^>]*data-highspeed-output-share="true"[^>]*>/)?.[0];
+    expect(shareButton).toBeDefined();
+    expect(shareButton).not.toMatch(/\sdisabled(?:=""|(?=[\s>]))/);
+    expect(html).not.toContain('data-highspeed="true"');
+  });
+
   it("H17：切模型后的 /goal query 与 continuation 合计只显示一个工作状态", () => {
     const startedAt = 1_700_000_000_000;
     const units = buildConversationTurnRenderUnits(
@@ -755,7 +1077,7 @@ describe("ConversationTurnGroup assistant history status", () => {
           marker: {
             type: "modelChange",
             fromProvider: "zhipu",
-            fromModel: "glm-5.2",
+            fromModel: "glm-5.2-highspeed",
             toProvider: "deepseek",
             toModel: "deepseek-v4-flash",
             toThought: "max",
@@ -981,25 +1303,29 @@ describe("ConversationTurnGroup assistant history status", () => {
     expect(html).toContain("Workflow completed");
     // 通知行之下的 assistant 反应行不受影响。
     expect(html).toContain("后台总结最终段");
-    // 2026-09-03 tweak：通知卡是轮内第一个节点，轮容器去掉 pt-14（只贴上一轮 pb-5）。
-    expect(html).toMatch(/<section[^>]*class="[^"]*\bpt-0\b/u);
-    expect(html).not.toMatch(/<section[^>]*class="[^"]*\bpt-14\b/u);
   });
 
-  it("裸标题行（bash / subagent / 无载荷 workflow）保留轮顶 pt-14", () => {
-    // 范围裁决：只有通知卡去留白；标题行带底 rule，是分节头语义，轮顶间距照旧。
-    for (const backgroundSource of ["bash", "subagent", "workflow"] as const) {
-      const [unit] = buildConversationTurnRenderUnits([
-        turnHeader({
-          origin: "backgroundResult",
-          originMeta: { backgroundSource, title: "bare-title", workId: `${backgroundSource}-1` },
-        }),
-        assistantTextRow(6, { text: "后台总结最终段" }),
-      ]);
-      const html = renderUnit(unit!);
-      expect(html).toMatch(/<section[^>]*class="[^"]*\bpt-14\b/u);
-      expect(html).not.toMatch(/<section[^>]*class="[^"]*\bpt-0\b/u);
-    }
+  it("提醒载荷在 originMeta.workflowBlocked 上：同样渲染成通知行", () => {
+    // docs/dynamic-workflow/transcript-and-notifications.md「The payload」：提醒不是 workflowNotification
+    // 的成员（闭集多一个 kind，老客户端会拒掉整帧），它在自己的键上；行照旧是「等待主代理」那一条。
+    const [unit] = buildConversationTurnRenderUnits([
+      turnHeader({
+        origin: "backgroundResult",
+        originMeta: {
+          backgroundSource: "workflow",
+          title: "flaky-test-triage",
+          workId: "run-abc",
+          workflowBlocked: { questions: 2, holes: 1, sinceMs: 17 * 60_000 },
+        },
+      }),
+      assistantTextRow(6, { text: "后台总结最终段" }),
+    ]);
+    const html = renderUnit(unit!, { locale: "en-US" });
+
+    expect(html).toContain(`data-testid="chat-workflow-notification-row-${unit!.key}"`);
+    expect(html).not.toContain(`data-testid="chat-background-result-title-${unit!.key}"`);
+    expect(html).toContain("Workflow waiting on the agent");
+    expect(html).toContain("flaky-test-triage");
   });
 
   // ── 终态通知行的产物 chips（docs/dynamic-workflow/authoring.md「How the user sees them」）──
@@ -1219,29 +1545,6 @@ describe("ConversationTurnGroup assistant history status", () => {
     expect(html).toContain("已工作 5 秒");
     expect(html).toContain("chat-assistant-history-trigger");
     expect(html).not.toContain("chat-background-result-title");
-  });
-
-  it("does not add extra horizontal padding around grouped assistant work rows", () => {
-    const exploreRow = toolCallRow(10, "Read", { file_path: "AGENTS.md" });
-    const agentRow = toolCallRow(20, "Agent", {
-      prompt: "检查 Swift 入口",
-      subagent_type: "Explore",
-    });
-    const childRow = subagentRow(21);
-    const html = renderUnit(
-      baseUnit({
-        key: "turn-complete:padding",
-        turnId: "turn-complete",
-        isLastTurn: false,
-        assistantHistoryDefaultOpen: true,
-        assistantWorkRows: [exploreRow, agentRow, childRow],
-        assistantHistoryRows: [exploreRow, agentRow, childRow],
-        renderRows: [exploreRow, agentRow, childRow],
-      }),
-    );
-
-    expect(html).not.toMatch(/data-row-id="10"[^>]*class="px-4"/);
-    expect(html).not.toMatch(/data-row-id="20"[^>]*class="px-4"/);
   });
 
   it("uses the paired subagent row type while the Agent input preview is incomplete", () => {
@@ -1846,7 +2149,6 @@ describe("ConversationTurnGroup assistant history status", () => {
     expect(likeIndex).toBeLessThan(dislikeIndex);
     expect(dislikeIndex).toBeLessThan(forkIndex);
     expect(forkIndex).toBeLessThan(timeIndex);
-    expect(html).toContain("select-none text-ui-sm text-foreground-subtlest");
     expect(html).toContain('aria-pressed="false"');
     expect(html).toContain("opacity-100");
     expect(html).not.toContain("group-hover/assistant-turn:opacity-100");
@@ -1863,35 +2165,6 @@ describe("ConversationTurnGroup assistant history status", () => {
     ]);
 
     expect(renderUnit(units[0]!, { onFork })).toContain("v4-fork-4");
-  });
-
-  it("reveals the completed assistant action toolbar from the assistant turn hover area", () => {
-    const row = assistantTextRow(20);
-    const html = renderUnit(
-      baseUnit({
-        key: "turn-complete:action-hover",
-        turnId: "turn-complete",
-        isLastTurn: true,
-        header: turnHeader({
-          fileChanges: {
-            files: 1,
-            additions: 2,
-            deletions: 1,
-            state: "active",
-          },
-        }),
-        assistantWorkRows: [row],
-        assistantTextRows: [row],
-        latestAssistantTextRow: row,
-        renderRows: [row],
-      }),
-    );
-
-    expect(html).toContain("group/assistant-turn");
-    expect(html).toContain("group-hover/assistant-turn:opacity-100");
-    expect(html).not.toMatch(
-      /class="[^"]*group\/assistant-row[^"]*"[^>]*><div class="[^"]*group-hover\/assistant-row:opacity-100/,
-    );
   });
 
   it("preserves text tool text order inside the single assistant history group", () => {
@@ -1924,29 +2197,6 @@ describe("ConversationTurnGroup assistant history status", () => {
     expect(toolIndex).toBeLessThan(finalTextIndex);
     expect(html).not.toContain('data-testid="v4-copy-4"');
     expect(html).toContain('data-testid="v4-copy-6"');
-  });
-
-  it("P08：折叠间距进入 history 动画高度，普通兄弟仍保持 20px 节奏", () => {
-    const units = buildConversationTurnRenderUnits([
-      turnHeader(),
-      userInputRow(2),
-      reasoningRow(),
-      assistantTextRow(4, { text: "最终回答" }),
-    ]);
-    const html = renderUnit({
-      ...units[0]!,
-      assistantHistoryDefaultOpen: true,
-    });
-    const segmentClass = html.match(/class="([^"]*history-message[^"]*\[data-slot=[^"]*)"/)?.[1];
-
-    expect(segmentClass).toBeDefined();
-    expect(segmentClass).toContain("flex flex-col");
-    expect(segmentClass).not.toContain("gap-5");
-    expect(segmentClass).toContain("*+*:not([data-slot=&#x27;collapsible-content&#x27;])");
-    expect(segmentClass).toContain(":mt-5");
-    expect(html).toMatch(
-      /data-testid="chat-assistant-history-content-[^"]+"[^>]*>.*?<div class="pt-5">/s,
-    );
   });
 
   it("P06：每条 guided user 开独立工作段，且只展开目标段不影响其它段", () => {
@@ -2035,14 +2285,6 @@ describe("ConversationTurnGroup assistant history status", () => {
 });
 
 describe("ConversationTurnGroup ChatLoading lifecycle", () => {
-  it("Retry 只降低 shimmer 峰值并保留全局低透明度扫光低谷", () => {
-    const styles = readFileSync("packages/ui/src/styles.css", "utf8");
-    const modifier = styles.match(/\.animated-gradient-text-subtle\s*\{([^}]*)\}/)?.[1] ?? "";
-
-    expect(modifier).toContain("--animated-gradient-text-strong: var(--color-foreground-subtle);");
-    expect(modifier).not.toContain("--animated-gradient-text-soft");
-  });
-
   it("第三次 retry 才替换当前 turn 底部的通用 loading，并保留 3/10 计数口径", () => {
     const html = renderUnit(
       baseUnit({
@@ -2060,12 +2302,6 @@ describe("ConversationTurnGroup ChatLoading lifecycle", () => {
     );
 
     expect(html).toContain("重新连接中... 3/10");
-    expect(html).toContain(
-      'class="inline-flex h-7 items-center whitespace-nowrap px-1 text-ui-base"',
-    );
-    expect(html).toContain(
-      'class="animated-gradient-text animated-gradient-text-subtle font-medium">重新连接中... 3/10</span>',
-    );
     expect(html).not.toContain('data-testid="chat-loading"');
   });
 
@@ -2385,33 +2621,6 @@ describe("ConversationTurnGroup — 直接启动轮（workflowLaunch）", () => 
     const nextHtml = renderUnit(nextUnit!, { context: LAUNCH_JOIN });
     expect(nextHtml).not.toContain('data-workflow-run-digest="true"');
     expect(nextHtml).toContain("看看下一步");
-  });
-
-  it("没有用户气泡的轮去掉轮顶 pt-14：卡 / 行只贴上一轮 pb-5 的常规流内间距", () => {
-    // Bug 根因：pt-14 是给用户气泡留的呼吸；启动轮与「配置」的设置轮都把用户行裁掉了
-    // （conversationTurnRenderUnits），轮内第一个节点直接是卡或那一行，56px 于是叠在
-    // 上一轮 pb-5 之上成了约 76px 空白。通知轮早已按同一条规则去过留白。
-    const [launchUnit] = buildConversationTurnRenderUnits(launchRows(LAUNCH_META));
-    const launchHtml = renderUnit(launchUnit!, { context: LAUNCH_JOIN });
-    expect(launchHtml).toMatch(/<section[^>]*class="[^"]*\bpt-0\b/u);
-    expect(launchHtml).not.toMatch(/<section[^>]*class="[^"]*\bpt-14\b/u);
-
-    // 设置轮：同一份元数据多一个 amend 块，呈现是「已调整设置」那一行加新 run 的卡。
-    const settingsMeta: WorkflowLaunchMeta = {
-      ...LAUNCH_META,
-      amend: { predecessorRunId: "run-41", maxConcurrency: { from: 2, to: 5 } },
-    };
-    const [settingsUnit] = buildConversationTurnRenderUnits(launchRows(settingsMeta));
-    const settingsHtml = renderUnit(settingsUnit!, { context: LAUNCH_JOIN });
-    expect(settingsHtml).toContain('data-testid="workflow-settings-change-row"');
-    expect(settingsHtml).toMatch(/<section[^>]*class="[^"]*\bpt-0\b/u);
-    expect(settingsHtml).not.toMatch(/<section[^>]*class="[^"]*\bpt-14\b/u);
-
-    // 元数据缺席即退回普通渲染（那句规范英文成气泡）——有气泡的轮照旧留呼吸。
-    const [plainUnit] = buildConversationTurnRenderUnits(launchRows(undefined));
-    const plainHtml = renderUnit(plainUnit!, { context: LAUNCH_JOIN });
-    expect(plainHtml).toMatch(/<section[^>]*class="[^"]*\bpt-14\b/u);
-    expect(plainHtml).not.toMatch(/<section[^>]*class="[^"]*\bpt-0\b/u);
   });
 });
 

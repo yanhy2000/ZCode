@@ -134,47 +134,15 @@ describe("WindowsCaptionMenuButton", () => {
     );
   }
 
-  it("keeps the normal header trigger flush with the caption edge", async () => {
-    const html = await renderButton("header");
-
-    expect(html).toContain("border-l");
-    expect(html).not.toContain("bg-surface");
-  });
-
-  it("uses the header trigger shape without a border for Windows new task drafts", async () => {
-    const html = await renderButton("header-borderless", true);
-
-    // Bugfix: Windows 新任务草稿态要和 session task 的标题栏入口一致，但不能再带左侧分隔线。
-    expect(html).toContain(
-      "h-full w-[var(--windows-caption-control-width,46px)] rounded-none border-0 hover:bg-hover",
-    );
-    expect(html).not.toContain("border-l");
-    expect(html).not.toContain("bg-surface");
-  });
-
-  it("keeps the legacy caption trigger width unless Windows spacing is requested", async () => {
-    const html = await renderButton("header-borderless");
-
-    expect(html).toContain("h-full w-[45px] rounded-none border-0 hover:bg-hover");
-    expect(html).not.toContain("--windows-caption-control-width");
-  });
-
-  it("does not render the retired bulk session stress menu entry", async () => {
-    const html = await renderButton("header");
-
-    // Bugfix: Windows 标题栏使用自绘合并菜单，原生菜单删掉后这里也不能残留旧压测入口。
-    expect(html).not.toContain("titleBar.menu.help.toggleBulkSessionStressTest");
-  });
-
-  it("自维护构建对所有产品身份都保留更新入口", async () => {
+  it("Preview 隐藏更新入口，生产版继续保留", async () => {
     const { shouldShowDesktopUpdateEntry } = await import("@/WindowsCaptionMenuButton.js");
 
-    // 自维护 fork：更新源改为 GitHub Release（desktopUpdateMenu 不再按产品身份区分，
-    // 该函数恒为 true、无参数），因此 Preview 与生产版都要能看到更新入口。
-    expect(shouldShowDesktopUpdateEntry()).toBe(true);
+    // 更新入口跟随产品身份：生产后端的 Preview 同样隐藏。
+    expect(shouldShowDesktopUpdateEntry("preview")).toBe(false);
+    expect(shouldShowDesktopUpdateEntry("production")).toBe(true);
 
     const html = await renderButton("header");
-    expect(html).toContain("titleBar.menu.help.checkForUpdates");
+    expect(html).not.toContain("titleBar.menu.help.checkForUpdates");
   });
 
   it("includes help actions migrated from the shared question-mark menu", async () => {

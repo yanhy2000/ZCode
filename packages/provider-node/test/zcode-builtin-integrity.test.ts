@@ -4,13 +4,14 @@ import { fileURLToPath } from "node:url";
 import {
   ApiKeyAccessConfig,
   ModelConfigRules,
-  ProviderConfig,
   ProviderApiConfig,
+  ProviderConfig,
   ProviderConfigMap,
   ProviderConfigResolver,
+  ProviderRegistry,
   ZhipuAccountAccessConfig,
+  parseModelConfig,
 } from "@zcode/provider";
-import { BUILTIN_PROVIDER_TEMPLATE_IDS } from "@zcode/shared";
 import { describe, expect, it } from "vitest";
 import { NodeZCodeBuiltinProviderConfigSource } from "../src/index.js";
 
@@ -43,7 +44,7 @@ describe("ZCode Built-in Provider Config 完整性", () => {
           baseUrl: "https://unknown.example/v1",
         });
         expect(model.validateComplete()).toEqual([]);
-        expect(model.optionSpecs?.maxOutputTokens?.max).toBe(32_000);
+        expect(model.optionSpecs?.maxOutputTokens?.max).toBe(128_000);
         expect(model.optionSpecs?.reasoningLevel?.values).toEqual(["disabled", "enabled"]);
         expect(model.properties?.inputFormat.supportsImage).toBe(false);
         const result = new ProviderConfigResolver().resolve({
@@ -77,7 +78,7 @@ describe("ZCode Built-in Provider Config 完整性", () => {
       }
     },
   );
-  it("GLM-5.3-Flash 的媒体输入能力与 Zhipu 普通 API 模板保持明确", async () => {
+  it("GLM-5.3-Flash 的媒体输入能力及 GLM-5.3 的套餐桥接保持明确", async () => {
     const source = new NodeZCodeBuiltinProviderConfigSource({
       bundledFilePath: zcodeBuiltinProviderConfigFilePath,
       watch: false,
@@ -100,18 +101,95 @@ describe("ZCode Built-in Provider Config 完整性", () => {
       expect(snapshot.revision).toMatch(
         new RegExp(`^zcode-builtin:${rawRelease.revision}:[a-f0-9]{64}$`, "u"),
       );
-      // 账号商业面删除后只剩普通计费模板；模板 ID 从共享常量取，避免改名残留。
-      for (const templateId of Object.values(BUILTIN_PROVIDER_TEMPLATE_IDS)) {
+      const apiTemplateIds = [
+        "zai-api",
+        "bigmodel-api",
+        "zai-standard-api",
+        "bigmodel-standard-api",
+      ] as const;
+      const accountProviderIds = [
+        "account:zai-individual-coding-plan",
+        "account:zai-team-coding-plan",
+        "account:zai-start-plan",
+        "account:bigmodel-individual-coding-plan",
+        "account:bigmodel-team-coding-plan",
+        "account:bigmodel-start-plan",
+        "account:zai-offpeak-idle-plan",
+        "account:bigmodel-offpeak-idle-plan",
+      ] as const;
+      for (const templateId of apiTemplateIds) {
         const modelIds = snapshot.providerTemplates?.get(templateId)?.config.builtinModelIds ?? [];
         expect(modelIds, `${templateId} 必须同时提供 GLM-5.3 系列`).toEqual(
           expect.arrayContaining(["GLM-5.3", "GLM-5.3-Flash"]),
         );
       }
+      for (const providerId of accountProviderIds) {
+        const modelIds = snapshot.providers.get(providerId)?.builtinModelIds ?? [];
+        expect(modelIds, `${providerId} 必须提供 GLM-5.3-Flash`).toContain("GLM-5.3-Flash");
+      }
+
+      for (const providerId of [
+        "account:zai-individual-coding-plan",
+        "account:zai-team-coding-plan",
+        "account:bigmodel-individual-coding-plan",
+        "account:bigmodel-team-coding-plan",
+      ]) {
+        expect(snapshot.providers.get(providerId)?.builtinModelIds).toEqual([
+          "GLM-5.3",
+          "GLM-5.3-Flash",
+        ]);
+        const planModel = snapshot.models.resolve({
+          providerId,
+          modelId: "GLM-5.3",
+          apiType: "anthropic-messages",
+          baseUrl: snapshot.providers.get(providerId)?.api?.baseUrl,
+        });
+        expect(planModel.properties?.inputFormat.toJSON()).toMatchObject({
+          supportsImage: true,
+          supportsVideo: true,
+          supportsAudio: false,
+          supportsPdf: false,
+        });
+      }
+
+      // 加速卡换端点不换模型，能力事实必须与同 Family Coding Plan 站点逐项一致；
+      // 否则同一会话里普通轮与加速轮的 system 折叠、WebSearch 暴露和附件合法性会互相打脸。
+      for (const [highspeedProviderId, planProviderId] of [
+        ["account:zai-highspeed-card", "account:zai-individual-coding-plan"],
+        ["account:bigmodel-highspeed-card", "account:bigmodel-individual-coding-plan"],
+      ] as const) {
+        const resolveAt = (providerId: string, modelId: string) =>
+          snapshot.models.resolve({
+            providerId,
+            modelId,
+            apiType: "anthropic-messages",
+            baseUrl: snapshot.providers.get(providerId)?.api?.baseUrl,
+          });
+        expect(snapshot.providers.get(highspeedProviderId)?.builtinModelIds).toEqual(
+          snapshot.providers.get(planProviderId)?.builtinModelIds,
+        );
+        for (const modelId of snapshot.providers.get(highspeedProviderId)?.builtinModelIds ?? []) {
+          const highspeedModel = resolveAt(highspeedProviderId, modelId);
+          const planModel = resolveAt(planProviderId, modelId);
+          expect(
+            highspeedModel.properties?.inputFormat.toJSON(),
+            `${highspeedProviderId}/${modelId} 输入形态偏离 Coding Plan 站点`,
+          ).toEqual(planModel.properties?.inputFormat.toJSON());
+          expect(
+            highspeedModel.properties?.supportsMidConversationSystem,
+            `${highspeedProviderId}/${modelId} MCS 偏离 Coding Plan 站点`,
+          ).toBe(planModel.properties?.supportsMidConversationSystem);
+          expect(
+            highspeedModel.properties?.supportsNativeWebSearch,
+            `${highspeedProviderId}/${modelId} 原生搜索偏离 Coding Plan 站点`,
+          ).toBe(planModel.properties?.supportsNativeWebSearch);
+        }
+      }
 
       const resolve = (modelId: string) =>
         snapshot.models.resolve({
           providerId: "personal-zai",
-          templateId: BUILTIN_PROVIDER_TEMPLATE_IDS.zai,
+          templateId: "zai-api",
           modelId,
           apiType: "anthropic-messages",
           // 模型层自身能力与 §6.3.1 已批准的站点覆盖分开验证。
@@ -146,7 +224,7 @@ describe("ZCode Built-in Provider Config 完整性", () => {
       });
       const glm53FlashChat = snapshot.models.resolve({
         providerId: "personal-zai",
-        templateId: BUILTIN_PROVIDER_TEMPLATE_IDS.zai,
+        templateId: "zai-api",
         modelId: "glm-5.3-flash",
         apiType: "openai-chat-completions",
         baseUrl: "https://api.z.ai/api/anthropic",
@@ -447,7 +525,7 @@ describe("ZCode Built-in Provider Config 完整性", () => {
     }
   });
 
-  it("按产品分组声明 Zhipu 普通 API 模板与外部主流 Provider", async () => {
+  it("按产品分组声明 Zhipu 系统 Provider 与外部主流 Provider", async () => {
     const source = new NodeZCodeBuiltinProviderConfigSource({
       bundledFilePath: zcodeBuiltinProviderConfigFilePath,
       watch: false,
@@ -455,21 +533,41 @@ describe("ZCode Built-in Provider Config 完整性", () => {
 
     try {
       const snapshot = await source.read();
-      // 名单直接对齐当前发布文件，锁的是「解码后与文件一致」而不是会立刻过期的硬编码。
-      const rawRelease = JSON.parse(await readFile(zcodeBuiltinProviderConfigFilePath, "utf8")) as {
-        config: {
-          providerConfigRules: {
-            providerRules: readonly { providerId: string }[];
-            templateRules: readonly { templateId: string }[];
-          };
-        };
-      };
-      expect(snapshot.providers.keys()).toEqual(
-        rawRelease.config.providerConfigRules.providerRules.map((rule) => rule.providerId),
-      );
-      expect(snapshot.providerTemplates?.keys()).toEqual(
-        rawRelease.config.providerConfigRules.templateRules.map((rule) => rule.templateId),
-      );
+      expect(snapshot.providers.keys()).toEqual([
+        "account:zai-individual-coding-plan",
+        "account:zai-team-coding-plan",
+        "account:zai-start-plan",
+        "account:bigmodel-individual-coding-plan",
+        "account:bigmodel-team-coding-plan",
+        "account:bigmodel-start-plan",
+        "account:zai-offpeak-idle-plan",
+        "account:bigmodel-offpeak-idle-plan",
+        "account:zai-highspeed-card",
+        "account:bigmodel-highspeed-card",
+      ]);
+      expect(snapshot.providerTemplates?.keys()).toEqual([
+        "zai-api",
+        "zai-standard-api",
+        "bigmodel-api",
+        "bigmodel-standard-api",
+        "moonshot-kimi",
+        "minimax",
+        "deepseek",
+        "qwen-alibaba-model-studio-cn",
+        "qwen-alibaba-model-studio-intl",
+        "xiaomi-mimo",
+        "xiaomi-mimo-token-plan",
+        "openai",
+        "anthropic",
+        "xai",
+        "openrouter",
+        "opencode-go-chat",
+        "opencode-go-messages",
+        "opencode-go-responses",
+        "opencode-zen-responses",
+        "opencode-zen-messages",
+        "opencode-zen-chat",
+      ]);
       for (const [templateId, template] of snapshot.providerTemplates?.entries() ?? []) {
         expect(
           template.templateNameMap["zh-CN"]?.trim(),
@@ -546,50 +644,39 @@ describe("ZCode Built-in Provider Config 完整性", () => {
         },
         api: { type: "openai-responses", baseUrl: "https://api.x.ai/v1" },
       });
+      expect(snapshot.providerTemplates?.get("zai-api")?.config.toJSON()).toMatchObject({
+        access: { type: "zhipu-coding-plan-api-key" },
+      });
+      expect(snapshot.providerTemplates?.get("bigmodel-api")?.config.toJSON()).toMatchObject({
+        access: { type: "zhipu-coding-plan-api-key" },
+      });
     } finally {
       source.dispose();
     }
   });
 
-  it("按模型家族连续排列 Rule，且不保留语义等价的重复 matcher", async () => {
+  it("不保留语义等价的重复 matcher", async () => {
     const source = new NodeZCodeBuiltinProviderConfigSource({
       bundledFilePath: zcodeBuiltinProviderConfigFilePath,
       watch: false,
     });
 
     try {
-      const rules = (await source.read()).models.rules().filter((rule) => rule.type === "match");
+      // 三组 matcher 规则各自独立，但语义等价的 selector 不能跨组重复书写。
+      const rules = (await source.read()).models
+        .rules()
+        .filter(
+          (rule) =>
+            rule.type === "model" || rule.type === "model-api" || rule.type === "provider-site",
+        );
       const selectorKeys = rules.map((rule) =>
         JSON.stringify([
-          rule.providerMatch ?? "",
           rule.modelMatch.toLowerCase(),
-          rule.apiMatch ?? "",
-          rule.baseUrlMatch ?? "",
+          "apiTypeMatch" in rule ? (rule.apiTypeMatch ?? "") : "",
+          "baseUrlMatch" in rule ? rule.baseUrlMatch : "",
         ]),
       );
       expect(new Set(selectorKeys).size).toBe(selectorKeys.length);
-
-      // 分组后“模型家族连续”只约束 Model Rule 本组；把 Model/API/Site 三组拼起来会
-      // 人为制造重复家族，无法再验证原本想检查的书写顺序。
-      const rawRelease = JSON.parse(await readFile(zcodeBuiltinProviderConfigFilePath, "utf8")) as {
-        config: { modelConfigRules: { modelRules: readonly { modelMatch: string }[] } };
-      };
-      const modelRules = rawRelease.config.modelConfigRules.modelRules;
-      const familySequence = modelRules
-        .map((rule) => builtinRuleFamily(rule))
-        .filter((family, index, families) => family !== families[index - 1]);
-      expect(familySequence).toEqual([
-        "fallback",
-        "glm",
-        "gpt",
-        "claude",
-        "grok",
-        "kimi",
-        "minimax",
-        "deepseek",
-        "qwen",
-        "mimo",
-      ]);
     } finally {
       source.dispose();
     }
@@ -891,10 +978,38 @@ describe("ZCode Built-in Provider Config 完整性", () => {
       });
 
       expect(resolution.issues).toEqual([]);
-      // Registry 顺序 = 内置 Provider 成员（先 Family，再普通）+ 模板 Personal 成员；
-      // expectedModelIds 正是按同一遍历顺序建立的，直接复用它，名单漂移时自动对齐。
       expect(resolution.registryProviders.map(({ providerId }) => providerId)).toEqual([
-        ...expectedModelIds.keys(),
+        "account:zai-individual-coding-plan",
+        "account:zai-team-coding-plan",
+        "account:zai-start-plan",
+        "account:bigmodel-individual-coding-plan",
+        "account:bigmodel-team-coding-plan",
+        "account:bigmodel-start-plan",
+        "account:zai-offpeak-idle-plan",
+        "account:bigmodel-offpeak-idle-plan",
+        "account:zai-highspeed-card",
+        "account:bigmodel-highspeed-card",
+        "template:zai-api",
+        "template:zai-standard-api",
+        "template:bigmodel-api",
+        "template:bigmodel-standard-api",
+        "template:moonshot-kimi",
+        "template:minimax",
+        "template:deepseek",
+        "template:qwen-alibaba-model-studio-cn",
+        "template:qwen-alibaba-model-studio-intl",
+        "template:xiaomi-mimo",
+        "template:xiaomi-mimo-token-plan",
+        "template:openai",
+        "template:anthropic",
+        "template:xai",
+        "template:openrouter",
+        "template:opencode-go-chat",
+        "template:opencode-go-messages",
+        "template:opencode-go-responses",
+        "template:opencode-zen-responses",
+        "template:opencode-zen-messages",
+        "template:opencode-zen-chat",
       ]);
 
       for (const provider of resolution.registryProviders) {
@@ -911,6 +1026,117 @@ describe("ZCode Built-in Provider Config 完整性", () => {
               model.modelId,
             ]),
           ).toEqual([]);
+        }
+      }
+
+      for (const providerId of [
+        "account:zai-offpeak-idle-plan",
+        "account:bigmodel-offpeak-idle-plan",
+      ]) {
+        const offPeak = resolution.resolvedProviders.find(
+          (provider) => provider.providerId === providerId,
+        );
+        expect(offPeak?.models).not.toHaveLength(0);
+        for (const model of offPeak?.models ?? []) {
+          expect(model).toMatchObject({ executable: true, selectable: false });
+        }
+      }
+    } finally {
+      source.dispose();
+    }
+  });
+
+  it("完整兜底让任意未知模型 ID 在各 API type 与模板下完整并进入 Registry（R3A-B-03）", async () => {
+    const source = new NodeZCodeBuiltinProviderConfigSource({
+      bundledFilePath: zcodeBuiltinProviderConfigFilePath,
+      watch: false,
+    });
+
+    try {
+      const snapshot = await source.read();
+      const fallbackRule = snapshot.models
+        .rules()
+        .find((rule) => rule.type === "model" && rule.modelMatch === ".*");
+      const fallbackMax = fallbackRule?.config.optionSpecs?.maxOutputTokens?.max;
+      expect(fallbackMax, "兜底规则必须声明 maxOutputTokens.max").toEqual(expect.any(Number));
+
+      const unknownModelId = "b03-unknown-model-x";
+      const scenarios = [
+        { providerId: "custom-chat", apiType: "openai-chat-completions" as const },
+        { providerId: "custom-messages", apiType: "anthropic-messages" as const },
+        { providerId: "custom-responses", apiType: "openai-responses" as const },
+        {
+          providerId: "custom-deepseek",
+          templateId: "deepseek",
+          apiType: "openai-chat-completions" as const,
+          baseURL: "https://api.deepseek.com",
+          // 只能用目录默认启用的已知模型做探针：deepseek-v4-flash 已被 Built-in 目录标为
+          // enabled:false，稀疏 Personal 规则不会覆盖它，Registry 里自然取不到。
+          knownModelId: "deepseek-v4-pro",
+        },
+        {
+          providerId: "custom-zai",
+          templateId: "zai-api",
+          apiType: "anthropic-messages" as const,
+          baseURL: "https://api.z.ai/api/anthropic",
+          knownModelId: "glm-5.3",
+        },
+      ];
+      const personalProviders = scenarios.map((scenario) => ({
+        providerId: scenario.providerId,
+        ...(scenario.templateId ? { templateId: scenario.templateId } : {}),
+        config: new ProviderConfig({
+          group: "standard-personal",
+          access: new ApiKeyAccessConfig({ apiKey: `test-key-for-${scenario.providerId}` }),
+          api: new ProviderApiConfig({
+            type: scenario.apiType,
+            baseUrl: scenario.baseURL ?? "https://custom.example.com/v1",
+          }),
+          personalModelIds: [
+            unknownModelId,
+            ...(scenario.knownModelId ? [scenario.knownModelId] : []),
+          ],
+        }),
+      }));
+      // 设置页新增模型时 config-service 只写入 {enabled:true}，这里复用同一稀疏 Personal 规则。
+      const personalModels = new ModelConfigRules(
+        scenarios.map((scenario) => ({
+          type: "provider-model" as const,
+          providerId: scenario.providerId,
+          modelId: unknownModelId,
+          config: parseModelConfig({ enabled: true }),
+        })),
+      );
+      const resolution = new ProviderConfigResolver().resolve({
+        zcodeBuiltinProviders: ProviderConfigMap.empty(),
+        zcodeBuiltinProviderTemplates: snapshot.providerTemplates,
+        accountProviders: ProviderConfigMap.empty(),
+        personalProviders: new ProviderConfigMap(personalProviders),
+        zcodeBuiltinModelRules: snapshot.models,
+        personalModels,
+      });
+      const registry = new ProviderRegistry(resolution.registryProviders);
+
+      expect(resolution.issues).toEqual([]);
+      for (const scenario of scenarios) {
+        const unknown = registry.getModel(scenario.providerId, unknownModelId);
+        expect(unknown, `${scenario.providerId}/${unknownModelId} 应进入 Registry`).toBeDefined();
+        expect(unknown?.config.optionSpecs.maxOutputTokens).toEqual({
+          max: fallbackMax,
+          map: expect.any(String),
+        });
+        if (scenario.knownModelId) {
+          const known = registry.getModel(scenario.providerId, scenario.knownModelId);
+          expect(
+            known,
+            `${scenario.providerId}/${scenario.knownModelId} 应进入 Registry`,
+          ).toBeDefined();
+          expect(known?.config.optionSpecs.maxOutputTokens.max).toEqual(expect.any(Number));
+          // 新通用上限可与已知型号一致；已知型号仍由自身规则解析，不能以数值不同判断是否命中。
+          expect(known?.config.optionSpecs.reasoningLevel.values).not.toEqual([
+            "disabled",
+            "enabled",
+          ]);
         }
       }
     } finally {
@@ -944,42 +1170,6 @@ describe("ZCode Built-in Provider Config 完整性", () => {
     expect(keys).not.toContain("budgetTokens");
   });
 });
-
-function builtinRuleFamily(rule: {
-  readonly providerMatch?: string;
-  readonly modelMatch: string;
-  readonly apiMatch?: string;
-  readonly baseUrlMatch?: string;
-}): string {
-  const provider = rule.providerMatch?.toLowerCase() ?? "";
-  const baseUrl = rule.baseUrlMatch?.toLowerCase() ?? "";
-  const model = rule.modelMatch.toLowerCase();
-  if (!provider && !baseUrl && (model === ".*" || (!rule.apiMatch && model === ".*\\[1m\\]"))) {
-    return "fallback";
-  }
-  if (provider.includes("github-copilot") || model.includes("gpt")) return "gpt";
-  if (provider === "anthropic" || model.includes("claude")) return "claude";
-  if (model.includes("grok")) return "grok";
-  if (provider === "moonshot-kimi" || /(?:kimi|moonshot|k3)/.test(model)) return "kimi";
-  if (model.includes("minimax")) return "minimax";
-  if (provider === "deepseek" || model.includes("deepseek")) return "deepseek";
-  if (model.includes("qwen")) return "qwen";
-  if (model.includes("mimo")) return "mimo";
-  if (
-    model.includes("glm") ||
-    model.includes("ox-alpha") ||
-    model.includes("codegeex") ||
-    model.includes("emohaa") ||
-    provider.includes("zai") ||
-    provider.includes("bigmodel") ||
-    provider.includes("offpeak-idle-plan") ||
-    baseUrl.includes("z\\.ai") ||
-    baseUrl.includes("bigmodel\\.cn")
-  ) {
-    return "glm";
-  }
-  return "cross-model";
-}
 
 function collectObjectKeys(value: unknown): string[] {
   if (Array.isArray(value)) return value.flatMap(collectObjectKeys);

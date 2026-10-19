@@ -98,30 +98,37 @@ describe("DataRootLock", () => {
     const barrierFile = join(root, "go");
     const resultsFile = join(root, "results");
     const readyDir = join(root, "ready");
-    const releaseFile = join(root, "release");
     await mkdir(readyDir);
     await writeFile(lockFile, `${JSON.stringify({ pid: DEAD_PID, acquiredAt: 0 })}\n`, "utf8");
     // 根目录 Vitest 与 package 脚本的 cwd 不同，不能用 cwd 推导源码路径，否则子进程会导入不存在的 root/src/runtime/lock.ts。
     const moduleUrl = new URL("../src/runtime/lock.ts", import.meta.url).href;
     const childProgram = `
-      import { access, appendFile, writeFile } from "node:fs/promises";
+      import { access, appendFile, readFile, writeFile } from "node:fs/promises";
       import { setTimeout as delay } from "node:timers/promises";
       const { DataRootLock } = await import(process.env.ZCODE_TEST_LOCK_MODULE);
+      const results = process.env.ZCODE_TEST_LOCK_RESULTS;
+      const losers = Number(process.env.ZCODE_TEST_LOCK_LOSERS);
+      const countLocked = async () => {
+        const raw = await readFile(results, "utf8").catch(() => "");
+        return raw.split("\\n").filter((line) => line.startsWith("locked ")).length;
+      };
       await writeFile(process.env.ZCODE_TEST_LOCK_READY, "ready\\n");
       while (true) { try { await access(process.env.ZCODE_TEST_LOCK_BARRIER); break; } catch { await delay(5); } }
       const lock = new DataRootLock(process.env.ZCODE_TEST_LOCK_FILE);
       try {
         await lock.acquire();
-        await appendFile(process.env.ZCODE_TEST_LOCK_RESULTS, "success " + process.env.ZCODE_TEST_LOCK_CHILD + "\\n");
-        // 修复原因：原来固定持锁 1s，CI 满负载下慢启动的子进程会在释放之后才尝试抢锁，
-        // 于是出现第二个 success。改由测试「全部子进程都写出结果」后放行释放，去掉时序依赖。
-        while (true) { try { await access(process.env.ZCODE_TEST_LOCK_RELEASE); break; } catch { await delay(10); } }
+        await appendFile(results, "success " + process.env.ZCODE_TEST_LOCK_CHILD + "\\n");
+        // owner 必须持锁到所有竞争者都放弃为止：固定时长会在机器负载高时先于对方的重试
+        // 窗口结束，让慢的竞争者在释放后再次 acquire 成功，出现多个 success 的假失败。
+        const holdDeadline = Date.now() + 20_000;
+        while (Date.now() < holdDeadline && (await countLocked()) < losers) await delay(10);
         await lock.release();
       } catch {
-        await appendFile(process.env.ZCODE_TEST_LOCK_RESULTS, "locked " + process.env.ZCODE_TEST_LOCK_CHILD + "\\n");
+        await appendFile(results, "locked " + process.env.ZCODE_TEST_LOCK_CHILD + "\\n");
       }
     `;
-    const children = Array.from({ length: 8 }, (_, index) => new Promise<void>((resolve, reject) => {
+    const childCount = 8;
+    const children = Array.from({ length: childCount }, (_, index) => new Promise<void>((resolve, reject) => {
       const child = spawn(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", childProgram], {
         env: {
           ...process.env,
@@ -129,8 +136,8 @@ describe("DataRootLock", () => {
           ZCODE_TEST_LOCK_BARRIER: barrierFile,
           ZCODE_TEST_LOCK_FILE: lockFile,
           ZCODE_TEST_LOCK_READY: join(readyDir, String(index)),
-          ZCODE_TEST_LOCK_RELEASE: releaseFile,
           ZCODE_TEST_LOCK_RESULTS: resultsFile,
+          ZCODE_TEST_LOCK_LOSERS: String(childCount - 1),
           ZCODE_TEST_LOCK_CHILD: String(index),
         },
         stdio: ["ignore", "ignore", "pipe"],
@@ -152,22 +159,10 @@ describe("DataRootLock", () => {
       await new Promise<void>((resolve) => setTimeout(resolve, 10));
     }
     await writeFile(barrierFile, "go", "utf8");
-    // 等所有子进程都写出结果（赢家 success、其余 locked）后再放行释放：这样「只有一个 success」
-    // 不再依赖固定持锁时长，慢启动的子进程也不会在释放之后抢到锁。
-    const resultsDeadline = Date.now() + 15_000;
-    while (Date.now() < resultsDeadline) {
-      const lines = (await readFile(resultsFile, "utf8").catch(() => ""))
-        .trim()
-        .split("\n")
-        .filter(Boolean);
-      if (lines.length === children.length) break;
-      await new Promise<void>((resolve) => setTimeout(resolve, 10));
-    }
-    await writeFile(releaseFile, "release", "utf8");
     await Promise.all(children);
     const results = (await readFile(resultsFile, "utf8")).trim().split("\n");
     expect(allChildrenReady).toBe(true);
     expect(results.filter((result) => result.startsWith("success "))).toHaveLength(1);
-    expect(results.filter((result) => result.startsWith("locked "))).toHaveLength(7);
-  }, 60_000);
+    expect(results.filter((result) => result.startsWith("locked "))).toHaveLength(childCount - 1);
+  }, 30_000);
 });

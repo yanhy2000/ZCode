@@ -131,6 +131,25 @@ const prewarmHookInputs = vi.hoisted(() => ({
 }));
 
 const servicesMock = vi.hoisted(() => ({
+  projectService: {
+    resolveSessionDirectories: vi.fn(async (task) => ({
+      ...task,
+      projectId: null,
+      additionalDirectories: [],
+    })),
+  },
+  highspeedCardService: {
+    // 本文件使用会在用例结束后销毁的极简 DOM；保持无关 Highspeed 查询 pending，
+    // 避免其 Promise 回调在 window 清理后再次唤醒 React scheduler。
+    getSnapshot: vi.fn(() => new Promise(() => {})),
+    prepareTurn: vi.fn(async () => ({
+      kind: "fallback" as const,
+      reason: "draw-miss" as const,
+      nextDrawAt: null,
+    })),
+    healthy: vi.fn(),
+    share: vi.fn(),
+  },
   // 修复原因：readiness hook 将 service 作为 effect 依赖；每次 render 重建会导致无限重渲染直至 OOM。
   modelSelectionService: {
     getView: vi.fn(async () => ({
@@ -163,6 +182,9 @@ vi.mock("@/v4/BotGroupDeliveryAction.js", () => ({
 }));
 
 // Bugfix：本文件只验证 SessionPane 的 composer 连续性，隔离闲时入口对真实 TabStore 的依赖。
+vi.mock("@/v4/OffPeakNewTaskEntry.js", () => ({
+  OffPeakNewTaskEntry: () => null,
+}));
 
 // 同理隔离推荐提示词占位：本文件用的是只实现 createElement 的极简 DOM，
 // 渲染 lucide 图标会走 createElementNS 而直接崩掉，与 composer 连续性无关。
@@ -202,6 +224,7 @@ vi.mock("@/hooks/useSettingService.js", () => ({
 }));
 
 vi.mock("@/hooks/useServices.js", () => ({
+  useComposerClientNamespace: () => "desktop",
   useOptionalServices: () => null,
   useServices: () => servicesMock,
 }));
@@ -270,6 +293,13 @@ vi.mock("@/v4/composer/useDraftSessionPrewarm.js", () => ({
     prewarmHookInputs.current.push(params);
     return {
       binding: prewarmHookInputs.binding,
+      waitForSession: async () => {
+        if (prewarmHookInputs.binding) return prewarmHookInputs.binding;
+        const ack = (await params.dispatchCommand("createSession", {}, null)) as {
+          result: { sessionId: string };
+        };
+        return { sessionId: ack.result.sessionId, beginPromotion: () => true, promote: vi.fn() };
+      },
     };
   },
 }));
@@ -526,7 +556,12 @@ beforeEach(() => {
   conversationMock.lease.store.expectAcceptedInputProjection.mockClear();
   conversationMock.currentLayer = null;
   conversationMock.currentSendCommand = null;
-  conversationMock.sendCommand.mockClear();
+  conversationMock.sendCommand.mockReset();
+  conversationMock.sendCommand.mockImplementation(async (envelope) => ({
+    commandId: envelope.commandId,
+    revisionAtDecision: 1,
+    status: "accepted" as const,
+  }));
   prewarmHookInputs.current = [];
   scrollFocus.composerProps = null;
   scrollFocus.queueProps = null;
@@ -570,9 +605,9 @@ describe("SessionPane composer continuity", () => {
       await act(async () => {
         await scrollFocus.composerProps?.onSendText("create session");
       });
-      // 首发链路：无附件首发也走「空 createSession + sendText」两段式，与后续发送共用同一
-      // admission，因此首发 message_id 是 sendText 的 commandId（calls[1]），不是空创建
-      // 的 commandId（calls[0]）。埋点不变量仍成立：accepted 后只报一次。
+      // Highspeed 统一了首发链路：无附件首发也走「空 createSession + sendText」两段式，
+      // 好让抽卡 admission 拿到真实 sessionId，因此首发 message_id 是 sendText 的 commandId
+      // （calls[1]），不是空创建的 commandId（calls[0]）。埋点不变量仍成立：accepted 后只报一次。
       const firstSendCalls = conversationMock.sendCommand.mock.calls;
       expect(firstSendCalls).toHaveLength(2);
       expect(sessionCreateCapture.report).toHaveBeenCalledExactlyOnceWith(
@@ -879,7 +914,12 @@ describe("SessionPane composer continuity", () => {
       loadingOlder: false,
     };
     renderPane(root, "session-1");
-    conversationMock.sendCommand.mockClear();
+    conversationMock.sendCommand.mockReset();
+    conversationMock.sendCommand.mockImplementation(async (envelope) => ({
+      commandId: envelope.commandId,
+      revisionAtDecision: 1,
+      status: "accepted" as const,
+    }));
 
     await act(async () => {
       await scrollFocus.composerProps?.onSendText("立即执行", {
@@ -896,9 +936,6 @@ describe("SessionPane composer continuity", () => {
           requestedDelivery: "startNow",
         }),
       }),
-    );
-    expect(conversationMock.sendCommand).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: "sendQueuedNow" }),
     );
     expect(conversationMock.lease.store.expectAcceptedInputProjection).toHaveBeenCalledWith(
       conversationMock.sendCommand.mock.calls[0]?.[0].commandId,
@@ -954,7 +991,12 @@ describe("SessionPane composer continuity", () => {
       expect.objectContaining({ type: "compact", sessionId: "session-1" }),
     );
 
-    conversationMock.sendCommand.mockClear();
+    conversationMock.sendCommand.mockReset();
+    conversationMock.sendCommand.mockImplementation(async (envelope) => ({
+      commandId: envelope.commandId,
+      revisionAtDecision: 1,
+      status: "accepted" as const,
+    }));
     await act(async () => {
       await scrollFocus.composerProps?.onSendText("新消息", {
         heldQueueDisposition: "clearQueueAndSend",

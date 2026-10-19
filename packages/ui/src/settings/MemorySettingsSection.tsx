@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type IMemoryService, type ProjectMemoryWorkspaceSummary } from "@zcode/services";
-import { TID_SETTINGS_MEMORY_SWITCH } from "@zcode/shared";
-
+import { TID_SETTINGS_MEMORY_SWITCH } from "@zcode/shared/test-ids";
+import { runUserAction, runUserActionAsync } from "@/lib/userActionTelemetry.js";
 import { Switch } from "@/components/ui/switch.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import {
@@ -143,7 +143,12 @@ export function MemorySettingsSection({
   }, [displayWorkspaces, selectedWorkspaceId]);
 
   const handleRefresh = useCallback(async () => {
-    await refreshCatalog();
+    await runUserActionAsync({
+      input: { featureId: "settings.memory", action: "refresh_memory", trigger: "button" },
+      operation: refreshCatalog,
+      completed: { resultSource: "platform_result" },
+      failureStage: "catalog_refresh",
+    });
   }, [refreshCatalog]);
 
   return (
@@ -182,7 +187,18 @@ export function MemorySettingsSection({
           selectedWorkspace={selectedWorkspace}
           workspaces={displayWorkspaces}
           onRefresh={handleRefresh}
-          onScopeKeyChange={(workspaceId) => (() => setSelectedWorkspaceId(workspaceId))()}
+          onScopeKeyChange={(workspaceId) =>
+            runUserAction({
+              input: {
+                featureId: "settings.memory",
+                action: "change_memory_scope",
+                trigger: "select",
+              },
+              operation: () => setSelectedWorkspaceId(workspaceId),
+              completed: { resultSource: "local_commit" },
+              failureStage: "local_commit",
+            })
+          }
         />
       )}
     </div>
