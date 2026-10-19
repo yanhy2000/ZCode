@@ -917,7 +917,11 @@ describe("Supervisor lifecycle", () => {
       await supervisor.stop().catch(() => undefined);
       await rm(root, { recursive: true, force: true });
     }
-  }, 20_000);
+    // 这个用例刻意用真实计时器模拟「SIGKILL 后 3 秒才回收 Core」，再配合 100ms 轮询的状态文件
+    // 等待；共享 runner 上事件循环被其他测试文件挤占时，3 秒的模拟会被拉长到几十秒，
+    // 原来的 20 秒预算在 CI 上偶发超时（run 39300986231）。这里只放宽用例自身的超时预算，
+    // 断言（stop 必须在生产等待预算内观察到 stopped、锁文件必须消失）保持原样。
+  }, 60_000);
 
   it("clears Core-scoped state and ignores stale child or generation messages", async () => {
     const root = await mkdtemp(join(tmpdir(), "zcode-r2-generation-"));
