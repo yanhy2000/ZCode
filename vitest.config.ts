@@ -8,12 +8,11 @@ const processLifecycleTests = [
   "packages/services/test/zcodeAgentProcessManager.test.ts",
   "packages/services/test/zcodeStdioTransport.test.ts",
 ];
+const heavyIsolatedTests = [
+  "packages/services/test/botsService.messageFlow.test.ts",
+];
 const forkIsolatedTests = [
   ...processLifecycleTests,
-  // 修复原因：该文件 5200+ 行、75 个用例，在 CI 满负载的 threads 池里曾让 worker 直接崩溃
-  // （`[vitest-pool]: Worker threads emitted error`）：整文件 55 个用例的统计丢失、run 被判定失败，
-  // 且崩溃点无法归因。隔离到 fork 池后它单独串行执行，峰值内存下降且崩溃只会显式落在本文件。
-  "packages/services/test/botsService.messageFlow.test.ts",
   // electron-builder 下载 NSIS 时把进程 stdio 传给子进程，不能使用 threads 的虚拟 stdio。
   "packages/desktop/test/windowsInstallerCompile.test.ts",
   "packages/desktop/test/cdnPreloadScript.test.ts",
@@ -103,7 +102,7 @@ export default defineConfig({
             "scripts/assert-safe-cua-helper-zip.test.mjs",
             "scripts/ci/ci-telemetry-keyword-guard.test.mjs",
           ],
-          exclude: ["packages/desktop/test/e2e/**", ...forkIsolatedTests],
+          exclude: ["packages/desktop/test/e2e/**", ...forkIsolatedTests, ...heavyIsolatedTests],
           // Node 24/macOS 的 threads 全量运行可触发 V8 SIGSEGV；诊断时切换进程隔离，测试范围不变。
           pool: process.env.ZCODE_TEST_POOL === "forks" ? "forks" : "threads",
           maxWorkers: process.env.ZCODE_TEST_POOL === "forks" ? 2 : 4,
@@ -119,6 +118,22 @@ export default defineConfig({
           fileParallelism: false,
           maxWorkers: 1,
           sequence: { groupOrder: 1 },
+        },
+      },
+      {
+        extends: true,
+        test: {
+          // 修复原因：该文件 5200+ 行、85 个用例，是单测里最重的一个。放在 threads 池里曾让 worker 直接
+          // 崩溃（`[vitest-pool]: Worker threads emitted error`），整文件的统计丢失、run 被判失败且无法归因；
+          // 放进 fork-isolated 组又会改变进程生命周期用例的运行环境（CI 上出现过一次
+          // `runtime process tree cleanup incomplete` 假失败）。单独成组并排在最后：既不干扰其它用例，
+          // 崩溃也只会显式落在本文件。
+          name: "heavy-isolated",
+          include: heavyIsolatedTests,
+          pool: "forks",
+          fileParallelism: false,
+          maxWorkers: 1,
+          sequence: { groupOrder: 2 },
         },
       },
     ],
