@@ -43,9 +43,9 @@ jobs:
       - name: Verify version identity
         shell: pwsh
         run: |
-          node -e "const root=require('./package.json').version; const cli=require('./apps/zcode-cli/package.json').version; if (root !== '3.15.1') throw new Error('root version=' + root); if (cli !== root) throw new Error('cli version=' + cli + ' != root ' + root); console.log('[version] root=' + root + ' cli=' + cli)"
-          node -e "const { getBuildMetadata } = require('./packages/desktop/scripts/build-metadata.mjs'); const version = getBuildMetadata().appVersion; if (version !== '3.15.1') throw new Error('desktop build version=' + version); console.log('[version] desktop=' + version)"
-          node --input-type=module -e "import { readRootPackageVersion } from './apps/zcode-cli/packages/cli/scripts/build.mjs'; const version = await readRootPackageVersion(); if (version !== '3.15.1') throw new Error('cli bundle version=' + version); console.log('[version] cli-bundle=' + version)"
+          node -e "const root=require('./package.json').version; const cli=require('./apps/zcode-cli/package.json').version; if (!/^\d+\.\d+\.\d+(\+\d+\.\d+\.\d+)?$/.test(root)) throw new Error('root version=' + root); if (cli !== root) throw new Error('cli version=' + cli + ' != root ' + root); console.log('[version] root=' + root + ' cli=' + cli)"
+          node -e "const { getBuildMetadata } = require('./packages/desktop/scripts/build-metadata.mjs'); const root=require('./package.json').version; const version = getBuildMetadata().appVersion; if (version !== root) throw new Error('desktop build version=' + version); console.log('[version] desktop=' + version)"
+          node --input-type=module -e "import { readFile } from 'node:fs/promises'; import { readRootPackageVersion } from './apps/zcode-cli/packages/cli/scripts/build.mjs'; const root=JSON.parse(await readFile('./package.json','utf8')).version; const version = await readRootPackageVersion(); if (version !== root) throw new Error('cli bundle version=' + version); console.log('[version] cli-bundle=' + version)"
 
       - name: Typecheck
         run: pnpm typecheck
