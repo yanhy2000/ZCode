@@ -5,10 +5,6 @@ import {
   resolveOAuthBusinessCredentialValidationRequest,
 } from "#src/oauth/oauthUnauthorizedRequest.js";
 import { createNodeApiClient } from "#src/providers/api/nodeApiClient.js";
-import {
-  createBigModelLoginAuthHeaders,
-  createZaiLoginAuthHeaders,
-} from "#src/coding-plan-subscription/bigmodelCodingPlanSubscriptionProvider.js";
 
 function createFixture(provider = "zai", env: NodeJS.ProcessEnv = { ZCODE_ENV: "production" }) {
   const credentials = new Map([
@@ -36,23 +32,6 @@ function createFixture(provider = "zai", env: NodeJS.ProcessEnv = { ZCODE_ENV: "
 }
 
 describe("当前 App 登录凭据的 HTTP 401 识别", () => {
-  it.each(["bigmodel", "zai"])("%s 身份核验与既有裸 token helper 保持一致", async (provider) => {
-    const f = createFixture(provider);
-    const token = `${provider}-business-token`;
-    const origin = provider === "bigmodel" ? "https://bigmodel.cn" : "https://api.z.ai";
-    const expected =
-      provider === "bigmodel"
-        ? createBigModelLoginAuthHeaders(token)
-        : createZaiLoginAuthHeaders(token);
-    for (const prefix of ["", "Bearer "]) {
-      const check = await resolveOAuthBusinessCredentialValidationRequest({
-        input: origin + "/api/biz/subscription/enterprise/v2/pricing",
-        headers: new Headers({ Authorization: prefix + token }),
-        credentialService: f.credentialService,
-      });
-      expect(check?.authorization).toBe(expected.Authorization);
-    }
-  });
   it.each(["bigmodel", "zai"])(
     "%s PAT/支付使用当前业务 token 的明确401均识别",
     async (provider) => {

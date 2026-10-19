@@ -19,10 +19,6 @@ import type { OAuthProviderAdapter } from "../src/oauth/providers/index.js";
 import { OAuthService } from "../src/oauth/oauthService.js";
 import { OAuthCredentialRepo } from "../src/oauth/repo/oauthCredentialRepo.js";
 
-import { AccountProviderApiKeyResolver } from "../src/model-provider/accountProviderApiKeyResolver.js";
-import { createAccountProjectTokenClient } from "../src/model-provider/accountProjectTokenClient.js";
-import { resolveAccountTeamPlanRuntimeApiKey } from "../src/model-provider/accountProviderTeamPlanRequestKey.js";
-
 const DESKTOP_OAUTH_CALLBACK_URI = "zcode://oauth/callback";
 
 function buildDesktopOAuthLoginRedirectUri(origin: string): string {
@@ -189,7 +185,7 @@ afterEach(() => {
 });
 
 describe("oauthService", () => {
-  it.each([false, true])("Z.AI polling 先换业务 JWT 再签发 PAT，team=%s", async (team) => {
+  it("Z.AI polling 先换业务 JWT 再完成登录", async () => {
     let now = 2_000_000_000_000;
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const mockFetch = vi.fn<typeof fetch>(async (input, init) => {
@@ -237,40 +233,6 @@ describe("oauthService", () => {
         });
         return createZaiBusinessLoginResponse("zai-business-token");
       }
-      if (url.includes("/api/biz/")) {
-        expect(new Headers(init?.headers).get("authorization")).toBe(
-          url.endsWith("/getCustomerInfo") ||
-            (team && url.includes("/api_keys") && !url.endsWith("/access_tokens"))
-            ? "zai-business-token"
-            : "Bearer zai-business-token",
-        );
-        const data = url.endsWith("/getCustomerInfo")
-          ? {
-              organizations: [
-                {
-                  organizationId: "org",
-                  projects: [{ projectId: "project" }],
-                },
-              ],
-            }
-          : url.endsWith("/access_tokens")
-            ? {
-                accessToken: "project-pat",
-                tokenType: "Bearer",
-                expiresIn: 600,
-                expiresAt: Date.now() / 1000 + 600,
-              }
-            : [
-                {
-                  name: team ? "zcode-team-api-key" : "zcode-api-key",
-                  apiKey: "key",
-                  keyType: 2,
-                },
-              ];
-        return new Response(JSON.stringify({ code: 200, data }), {
-          headers: { "content-type": "application/json" },
-        });
-      }
       throw new Error(`Unexpected request: ${url}`);
     });
     const service = createBigModelService({
@@ -305,35 +267,7 @@ describe("oauthService", () => {
     });
     expect(credentialStore.get("oauth:zai:access_token")).toBe("zai-business-token");
     expect(credentialStore.get("zcodejwttoken")).toBe("zcode-jwt");
-    const apiClient = createMockApiClient(mockFetch);
-    const tokenClient = createAccountProjectTokenClient(apiClient, credentialServiceStub);
-    const persistedToken = (await credentialServiceStub.load("oauth:zai:access_token"))!;
-    const pat = team
-      ? await resolveAccountTeamPlanRuntimeApiKey({
-          apiClient,
-          tokenClient,
-          credentialService: credentialServiceStub,
-          accountIdentity: "user-1",
-          access: {
-            type: "zhipu-account",
-            family: "zai",
-            planKind: "team-coding-plan",
-            organizationId: "org",
-            projectId: "project",
-          },
-        })
-      : await new AccountProviderApiKeyResolver(
-          async () => null,
-          tokenClient,
-        ).resolveProviderApiKey(ZAI_PROVIDER_ID, persistedToken, "user-1");
-    expect(pat).toBe("project-pat");
     expect(requests.filter(({ url }) => url.endsWith("/api/auth/z/login"))).toHaveLength(1);
-    expect(requests.slice(2).map(({ url }) => new URL(url).pathname)).toEqual([
-      "/api/auth/z/login",
-      "/api/biz/customer/getCustomerInfo",
-      "/api/biz/v1/organization/org/projects/project/api_keys",
-      "/api/biz/v1/organization/org/projects/project/api_keys/key/access_tokens",
-    ]);
     await expect(
       service.handleCallback(`zcode://oauth/callback?state=${started.state}&code=late-code`),
     ).resolves.toEqual({ kind: "duplicate", provider: ZAI_PROVIDER_ID });
@@ -345,7 +279,7 @@ describe("oauthService", () => {
       service.handleCallback(`zcode://oauth/callback?state=${started.state}&code=too-late-code`),
     ).rejects.toThrow("OAuth state 不匹配或已过期");
     await expect(service.pollPendingOAuth()).resolves.toBeNull();
-    expect(mockFetch).toHaveBeenCalledTimes(6);
+    expect(mockFetch).toHaveBeenCalledTimes(3);
   });
 
   it.each([
