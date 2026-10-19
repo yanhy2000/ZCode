@@ -410,3 +410,59 @@ export function rewriteZCodeEndpointUrl(input: string | URL, endpointOrigin: str
   target.hash = parsed.hash;
   return target.toString();
 }
+
+export interface WebRemoteControlCustomEndpointUrls {
+  origin: string;
+  remoteUrl: string;
+  relayWsUrl: string;
+}
+
+/**
+ * 解析用户自定义的 Web 远控服务器节点（例如 http://192.168.1.100:8765 或 https://relay.example.com）。
+ * 自动规范化协议前缀、路径与 WebSocket 端点。为空或非法地址时返回 undefined。
+ */
+export function resolveWebRemoteControlCustomEndpointUrls(
+  customServerUrl: string | null | undefined,
+  options?: { appVersion?: string },
+): WebRemoteControlCustomEndpointUrls | undefined {
+  const trimmed = customServerUrl?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  let normalized = trimmed;
+  // 如果没有协议前缀，默认以 http:// 开头
+  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(normalized)) {
+    normalized = `http://${normalized}`;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    return undefined;
+  }
+
+  const isSecure = parsed.protocol === "https:" || parsed.protocol === "wss:";
+  const httpProto = isSecure ? "https:" : "http:";
+  const wsProto = isSecure ? "wss:" : "ws:";
+  const host = parsed.host;
+  if (!host) {
+    return undefined;
+  }
+  const origin = `${httpProto}//${host}`;
+
+  const remoteVersion = isWebRemoteControlV4AppVersion(options?.appVersion) ? "v4" : "v3";
+
+  // 如果用户输入的路径本身已经以 /remote/... 开头，则保留该路径结构，否则默认使用 /remote/{version}
+  let remotePath = parsed.pathname.replace(/\/+$/, "");
+  if (!remotePath.startsWith("/remote")) {
+    remotePath = `/remote/${remoteVersion}`;
+  }
+
+  return {
+    origin,
+    remoteUrl: `${origin}${remotePath}`,
+    relayWsUrl: `${wsProto}//${host}/ws`,
+  };
+}

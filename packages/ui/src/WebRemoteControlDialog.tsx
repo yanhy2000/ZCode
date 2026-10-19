@@ -6,13 +6,17 @@ import type {
   WebRemoteControlFailure,
   WebRemoteControlStatus,
 } from "@zcode/shared";
-import { resolveWebRemoteControlWorkspaceKey } from "@zcode/shared";
+import {
+  resolveWebRemoteControlCustomEndpointUrls,
+  resolveWebRemoteControlWorkspaceKey,
+} from "@zcode/shared";
 import {
   Bot as BotIcon,
   CopyIcon,
   LoaderCircle,
   MonitorSmartphone,
   RefreshCw,
+  Server,
   Smartphone,
   Unplug,
   XIcon,
@@ -20,6 +24,7 @@ import {
 import { BotsDialog } from "@/BotsDialog.js";
 import { ProviderIcon } from "@/BotsDialog/shared.js";
 import { Button } from "@/components/ui/button.js";
+import { Input } from "@/components/ui/input.js";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +35,7 @@ import {
 import { toast } from "@/components/ui/toast.js";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
+import { useSettings } from "@/hooks/useSettingService.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
 import { getBotProviderRegionTagLabelId } from "@/botsUi.js";
@@ -274,6 +280,18 @@ export const WebRemoteControlDialog = memo(function WebRemoteControlDialogCompon
   const platform = usePlatform();
   const confirmDialog = useConfirmDialog();
   const { intl } = useZCodeIntl();
+  const { settings, update: updateSettings } = useSettings();
+  const savedServerUrl = settings?.webRemoteControlCustomServerUrl ?? "";
+  const [serverUrlInput, setServerUrlInput] = useState(savedServerUrl);
+  const [savingServerUrl, setSavingServerUrl] = useState(false);
+
+  useEffect(() => {
+    setServerUrlInput(savedServerUrl);
+  }, [savedServerUrl, open]);
+
+  const isCustomServerActive = Boolean(savedServerUrl.trim());
+  const isServerUrlDirty = serverUrlInput.trim() !== savedServerUrl.trim();
+
   const [status, setStatus] = useState<WebRemoteControlStatus>({
     status: "idle",
   });
@@ -556,6 +574,81 @@ export const WebRemoteControlDialog = memo(function WebRemoteControlDialogCompon
     }
   };
 
+  const handleSaveServerUrl = async () => {
+    const trimmed = serverUrlInput.trim();
+    if (trimmed) {
+      const parsed = resolveWebRemoteControlCustomEndpointUrls(trimmed);
+      if (!parsed) {
+        toast(intl.formatMessage({ id: "webRemoteControl.serverSetting.invalidUrl" }));
+        return;
+      }
+    }
+
+    setSavingServerUrl(true);
+    setLoading(true);
+    try {
+      await updateSettings({
+        webRemoteControlCustomServerUrl: trimmed || undefined,
+      });
+      const nextStatus = await platform.refreshWebRemoteControlPairing({
+        workspacePath,
+        workspaceIdentity,
+        remoteSessionId,
+        initialTaskId,
+      });
+      if (nextStatus.status !== "cancelled") {
+        setStatus(nextStatus);
+      }
+      toast(
+        trimmed
+          ? intl.formatMessage({ id: "webRemoteControl.serverSetting.saved" })
+          : intl.formatMessage({ id: "webRemoteControl.serverSetting.resetSuccess" }),
+      );
+      logger.info("[WebRemoteControlDialog] 自定义远程服务器节点已更新", {
+        workspacePath,
+        customServerUrl: trimmed || "default",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast(intl.formatMessage({ id: "webRemoteControl.startFailed" }, { error: message }));
+      logger.error("[WebRemoteControlDialog] 更新自定义远程服务器失败", message);
+    } finally {
+      setSavingServerUrl(false);
+      setLoading(false);
+    }
+  };
+
+  const handleResetServerUrl = async () => {
+    setServerUrlInput("");
+    setSavingServerUrl(true);
+    setLoading(true);
+    try {
+      await updateSettings({
+        webRemoteControlCustomServerUrl: undefined,
+      });
+      const nextStatus = await platform.refreshWebRemoteControlPairing({
+        workspacePath,
+        workspaceIdentity,
+        remoteSessionId,
+        initialTaskId,
+      });
+      if (nextStatus.status !== "cancelled") {
+        setStatus(nextStatus);
+      }
+      toast(intl.formatMessage({ id: "webRemoteControl.serverSetting.resetSuccess" }));
+      logger.info("[WebRemoteControlDialog] 已恢复默认官方远程服务器", {
+        workspacePath,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast(intl.formatMessage({ id: "webRemoteControl.startFailed" }, { error: message }));
+      logger.error("[WebRemoteControlDialog] 恢复默认远程服务器失败", message);
+    } finally {
+      setSavingServerUrl(false);
+      setLoading(false);
+    }
+  };
+
   const handleStop = async () => {
     setLoading(true);
     try {
@@ -684,6 +777,64 @@ export const WebRemoteControlDialog = memo(function WebRemoteControlDialogCompon
                         id: "webRemoteControl.mobileQr.description",
                       })}
                     </p>
+                  </div>
+                </div>
+                <div
+                  data-testid="web-remote-control-server-setting"
+                  className="mb-3 rounded-lg border border-border bg-surface px-3 py-2.5"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-ui-base font-medium text-foreground">
+                      <Server className="size-3.5 text-foreground-subtle" />
+                      <span>{intl.formatMessage({ id: "webRemoteControl.serverSetting.title" })}</span>
+                    </div>
+                    {isCustomServerActive ? (
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-ui-xs font-medium text-primary">
+                        自定义节点
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <Input
+                      size="sm"
+                      value={serverUrlInput}
+                      onChange={(e) => setServerUrlInput(e.target.value)}
+                      placeholder={intl.formatMessage({
+                        id: "webRemoteControl.serverSetting.placeholder",
+                      })}
+                      className="flex-1 font-mono text-ui-xs"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          void handleSaveServerUrl();
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 gap-1.5 enabled:cursor-pointer"
+                      onClick={() => void handleSaveServerUrl()}
+                      disabled={loading || savingServerUrl || !isServerUrlDirty}
+                    >
+                      {intl.formatMessage({
+                        id: "webRemoteControl.serverSetting.save",
+                      })}
+                    </Button>
+                    {isCustomServerActive ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0 text-foreground-subtle hover:text-foreground enabled:cursor-pointer"
+                        onClick={() => void handleResetServerUrl()}
+                        disabled={loading || savingServerUrl}
+                      >
+                        {intl.formatMessage({
+                          id: "webRemoteControl.serverSetting.reset",
+                        })}
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
                 <div

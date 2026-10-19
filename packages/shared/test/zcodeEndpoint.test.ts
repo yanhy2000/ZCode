@@ -23,6 +23,7 @@ import {
   resolveBigModelApiOrigin,
   resolveRuntimeProductEndpointConfig,
   resolveWebRemoteControlRelayWsUrl,
+  resolveWebRemoteControlCustomEndpointUrls,
   resolveZaiBusinessBaseUrl,
   resolveZaiOAuthClientId,
   resolveZaiOAuthOrigin,
@@ -311,5 +312,82 @@ describe("zcodeEndpoint", () => {
       appSettingsPatchSchema.parse({ zcodeEndpointOrigin: "http://localhost:3030/foo" })
         .zcodeEndpointOrigin,
     ).toBe("http://localhost:3030");
+  });
+
+  it("persists webRemoteControlCustomServerUrl in app settings", () => {
+    expect(
+      appSettingsSchema.parse({
+        webRemoteControlCustomServerUrl: " http://192.168.1.100:8765 ",
+      }).webRemoteControlCustomServerUrl,
+    ).toBe("http://192.168.1.100:8765");
+    expect(
+      appSettingsPatchSchema.parse({
+        webRemoteControlCustomServerUrl: "https://relay.example.com",
+      }).webRemoteControlCustomServerUrl,
+    ).toBe("https://relay.example.com");
+  });
+
+  describe("resolveWebRemoteControlCustomEndpointUrls", () => {
+    it("returns undefined for empty, whitespace or invalid inputs", () => {
+      expect(resolveWebRemoteControlCustomEndpointUrls(undefined)).toBeUndefined();
+      expect(resolveWebRemoteControlCustomEndpointUrls("")).toBeUndefined();
+      expect(resolveWebRemoteControlCustomEndpointUrls("   ")).toBeUndefined();
+      expect(resolveWebRemoteControlCustomEndpointUrls(":::invalid")).toBeUndefined();
+    });
+
+    it("resolves http base url without path to v4 remote and ws endpoints", () => {
+      const result = resolveWebRemoteControlCustomEndpointUrls("http://192.168.1.100:8765", {
+        appVersion: "3.15.1",
+      });
+      expect(result).toEqual({
+        origin: "http://192.168.1.100:8765",
+        remoteUrl: "http://192.168.1.100:8765/remote/v4",
+        relayWsUrl: "ws://192.168.1.100:8765/ws",
+      });
+    });
+
+    it("resolves https url and wss protocol", () => {
+      const result = resolveWebRemoteControlCustomEndpointUrls("https://relay.example.com", {
+        appVersion: "3.15.1",
+      });
+      expect(result).toEqual({
+        origin: "https://relay.example.com",
+        remoteUrl: "https://relay.example.com/remote/v4",
+        relayWsUrl: "wss://relay.example.com/ws",
+      });
+    });
+
+    it("preserves explicit /remote path when provided", () => {
+      const result = resolveWebRemoteControlCustomEndpointUrls("http://localhost:8765/remote/v4/", {
+        appVersion: "3.15.1",
+      });
+      expect(result).toEqual({
+        origin: "http://localhost:8765",
+        remoteUrl: "http://localhost:8765/remote/v4",
+        relayWsUrl: "ws://localhost:8765/ws",
+      });
+    });
+
+    it("auto prepends http if protocol is omitted", () => {
+      const result = resolveWebRemoteControlCustomEndpointUrls("192.168.1.50:9000", {
+        appVersion: "3.15.1",
+      });
+      expect(result).toEqual({
+        origin: "http://192.168.1.50:9000",
+        remoteUrl: "http://192.168.1.50:9000/remote/v4",
+        relayWsUrl: "ws://192.168.1.50:9000/ws",
+      });
+    });
+
+    it("handles ws:// input by mapping to http origin and /ws relay", () => {
+      const result = resolveWebRemoteControlCustomEndpointUrls("ws://192.168.1.100:8765/ws", {
+        appVersion: "3.15.1",
+      });
+      expect(result).toEqual({
+        origin: "http://192.168.1.100:8765",
+        remoteUrl: "http://192.168.1.100:8765/remote/v4",
+        relayWsUrl: "ws://192.168.1.100:8765/ws",
+      });
+    });
   });
 });

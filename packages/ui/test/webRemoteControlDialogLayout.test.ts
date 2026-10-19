@@ -83,6 +83,17 @@ vi.mock("@/store/StoreProvider.js", () => ({
     selector({ theme: "zai-dark" }),
 }));
 
+const settingsMock = vi.hoisted(() => ({
+  settings: {
+    webRemoteControlCustomServerUrl: undefined as string | undefined,
+  },
+  update: vi.fn(async () => {}),
+}));
+
+vi.mock("@/hooks/useSettingService.js", () => ({
+  useSettings: () => settingsMock,
+}));
+
 const intlMock = vi.hoisted(() => ({
   intl: {
     formatMessage: ({ id }: { id: string }) => id,
@@ -398,5 +409,73 @@ describe("WebRemoteControlDialog layout", () => {
     // Bugfix: 手机远控已改为默认 dark + 本地偏好，桌面端不应再把 theme 注入 start 参数，
     // 否则会重新把两端主题耦合到同一链路，和当前设计目标冲突。
     expect(source).not.toContain("theme,");
+  });
+
+  it("renders custom remote server setting card and allows saving custom endpoint", async () => {
+    platformMock.getWebRemoteControlStatus.mockResolvedValue({
+      status: "running",
+      sessionId: "sid-1",
+      mobileConnected: true,
+      workspacePath: "/test/workspace",
+    });
+    settingsMock.settings.webRemoteControlCustomServerUrl = undefined;
+    settingsMock.update.mockClear();
+    platformMock.refreshWebRemoteControlPairing.mockClear();
+
+    const view = render(
+      createElement(WebRemoteControlDialog, {
+        open: true,
+        onOpenChange: vi.fn(),
+        workspacePath: "/test/workspace",
+      }),
+    );
+
+    expect(view.getByTestId("web-remote-control-server-setting")).toBeTruthy();
+    const input = view.getByPlaceholderText("webRemoteControl.serverSetting.placeholder");
+    expect(input).toBeTruthy();
+
+    fireEvent.change(input, { target: { value: "http://192.168.1.100:8765" } });
+    const saveButton = view.getByText("webRemoteControl.serverSetting.save");
+    await waitFor(() => expect(saveButton.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(settingsMock.update).toHaveBeenCalledWith({
+        webRemoteControlCustomServerUrl: "http://192.168.1.100:8765",
+      });
+      expect(platformMock.refreshWebRemoteControlPairing).toHaveBeenCalledOnce();
+    });
+  });
+
+  it("allows resetting custom remote server setting back to default", async () => {
+    platformMock.getWebRemoteControlStatus.mockResolvedValue({
+      status: "running",
+      sessionId: "sid-1",
+      mobileConnected: true,
+      workspacePath: "/test/workspace",
+    });
+    settingsMock.settings.webRemoteControlCustomServerUrl = "http://192.168.1.100:8765";
+    settingsMock.update.mockClear();
+    platformMock.refreshWebRemoteControlPairing.mockClear();
+
+    const view = render(
+      createElement(WebRemoteControlDialog, {
+        open: true,
+        onOpenChange: vi.fn(),
+        workspacePath: "/test/workspace",
+      }),
+    );
+
+    const resetButton = view.getByText("webRemoteControl.serverSetting.reset");
+    expect(resetButton).toBeTruthy();
+    await waitFor(() => expect(resetButton.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(resetButton);
+
+    await waitFor(() => {
+      expect(settingsMock.update).toHaveBeenCalledWith({
+        webRemoteControlCustomServerUrl: undefined,
+      });
+      expect(platformMock.refreshWebRemoteControlPairing).toHaveBeenCalledOnce();
+    });
   });
 });

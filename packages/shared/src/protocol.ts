@@ -390,4 +390,6 @@ export interface AppSettings {
   };
   /** 设置页里的临时 endpoint override；正式/测试默认 base url 由 ZCODE_BASE_URL env 管理。 */
   zcodeEndpointOrigin?: string;
+  /** 用户自定义的 Web 远控服务器节点（例如 http://192.168.1.100:8765）；为空时使用官方默认。 */
+  webRemoteControlCustomServerUrl?: string;
 }

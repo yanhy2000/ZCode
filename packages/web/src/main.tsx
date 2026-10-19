@@ -1326,12 +1326,25 @@ export function createHomeOnlyWebRemoteControlServices(): RootServices {
 }
 
 function resolveExternalRelayWsUrl(): string {
+  const explicitOverride = import.meta.env.VITE_ZCODE_WEB_REMOTE_CONTROL_RELAY_WS_URL?.trim();
+  if (explicitOverride) {
+    return explicitOverride;
+  }
+  if (typeof window !== "undefined") {
+    const urlRelay = new URLSearchParams(window.location.search).get("relay")?.trim();
+    if (urlRelay) {
+      return urlRelay;
+    }
+    if (window.location.hostname && !window.location.hostname.endsWith("z.ai")) {
+      const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
+      return `${wsProto}//${window.location.host}/ws`;
+    }
+  }
   const endpointOrigin =
     import.meta.env.VITE_ZCODE_BASE_URL?.trim() ||
     import.meta.env.VITE_ZCODE_ENDPOINT_ORIGIN?.trim();
   return resolveWebRemoteControlRelayWsUrl({
     endpointOrigin,
-    overrideUrl: import.meta.env.VITE_ZCODE_WEB_REMOTE_CONTROL_RELAY_WS_URL,
   });
 }
 

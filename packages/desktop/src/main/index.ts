@@ -62,6 +62,7 @@ import {
   ZCODE_VERSION,
   buildZCodeEndpointUrls,
   resolveUpstreamVersion,
+  resolveWebRemoteControlCustomEndpointUrls,
   resolveWebRemoteControlRelayWsUrl,
   resolveZCodeEndpointOrigin,
   type UpdateStatePayload,
@@ -710,6 +711,27 @@ let startupOpenWorkspaceRequest: ExplicitStartupWorkspaceRequest | null =
 
 const webRemoteControlManager = createWebRemoteControlManager({
   getEndpointUrls: async () => {
+    const settings = await mainSettingService.get();
+    const customEndpoint = resolveWebRemoteControlCustomEndpointUrls(
+      settings.webRemoteControlCustomServerUrl,
+      {
+        appVersion: webRemoteControlAppVersion,
+      },
+    );
+    if (customEndpoint) {
+      return {
+        origin: customEndpoint.origin,
+        apiBaseUrl: `${customEndpoint.origin}/api/v1`,
+        remoteUrl: customEndpoint.remoteUrl,
+        webRemoteCallbackUrl: `${customEndpoint.origin}/web-remote/callback`,
+        webShareCallbackUrl: `${customEndpoint.origin}/cn/share/callback`,
+        relayWsUrl: customEndpoint.relayWsUrl,
+        zcodePlanOpenAiBaseUrl: `${customEndpoint.origin}/api/v1/zcode-plan`,
+        zcodePlanAnthropicBaseUrl: `${customEndpoint.origin}/api/v1/zcode-plan/anthropic`,
+        zcodePlanBillingCurrentUrl: `${customEndpoint.origin}/api/v1/zcode-plan/billing/current`,
+        zcodePlanBillingBalanceUrl: `${customEndpoint.origin}/api/v1/zcode-plan/billing/balance`,
+      };
+    }
     const derived = buildZCodeEndpointUrls(await resolveCurrentZCodeEndpointOrigin(), {
       appVersion: webRemoteControlAppVersion,
     });
