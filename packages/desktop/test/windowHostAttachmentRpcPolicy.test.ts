@@ -30,7 +30,8 @@ describe("Window Host attachment RPC policy", () => {
     expect([...policy!.allowedChannels].every((channel) => registeredChannels.has(channel))).toBe(
       true,
     );
-    expect(policy?.allowedChannels.size).toBe(46);
+    // CodingPlanSubscription 已随云端面裁剪删除，手机 attachment 只放行仍保留的服务通道。
+    expect(policy?.allowedChannels.size).toBe(45);
   });
 
   it("keeps the complete service surface for desktop attachments", () => {

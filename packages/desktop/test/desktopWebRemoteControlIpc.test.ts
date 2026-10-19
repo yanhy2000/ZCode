@@ -18,7 +18,6 @@ function withStartAuthorization(manager: {
 }) {
   return {
     ...manager,
-    notifyAuthStateChanged: vi.fn(async () => {}),
     authorizeStart: vi.fn(
       (windowId: number, context: WebRemoteControlContext): WebRemoteControlStartAuthorization => ({
         token: `ticket-${windowId}`,
@@ -65,31 +64,6 @@ describe("Web Remote Control IPC telemetry", () => {
     h.showMessageBox.mockResolvedValue({ response: 1 });
   });
 
-  it("登录通知仅接受真实窗口与严格payload，不接收renderer指定的凭据或窗口", async () => {
-    const { registerWebRemoteControlIpcHandlers } =
-      await import("../src/main/desktopWebRemoteControlIpc.js");
-    const manager = withStartAuthorization({ start: vi.fn(), stop: vi.fn(), getStatus: vi.fn() });
-    registerWebRemoteControlIpcHandlers({
-      reportRemoteUsageEvent: vi.fn(),
-      webRemoteControlManager: manager,
-    });
-    const notify = h.listeners.get(PlatformChannels.WebRemoteControlAuthStateChanged)!;
-    for (const payload of [
-      null,
-      {},
-      { state: "signed-in", jwt: "secret" },
-      { state: "signed-out", windowId: 9 },
-    ]) {
-      notify({ sender: { id: 73 } }, payload);
-    }
-    expect(manager.notifyAuthStateChanged).not.toHaveBeenCalled();
-    notify({ sender: { id: 73 } }, { state: "signed-in" });
-    expect(manager.notifyAuthStateChanged).toHaveBeenCalledWith(17, { state: "signed-in" });
-    manager.notifyAuthStateChanged.mockClear();
-    h.fromWebContents.mockReturnValue(null);
-    notify({ sender: { id: 73 } }, { state: "signed-out" });
-    expect(manager.notifyAuthStateChanged).not.toHaveBeenCalled();
-  });
   it("显式启动成功后上报本地 workspace 终态", async () => {
     const reportRemoteUsageEvent = vi.fn();
     const start = vi.fn(async () => ({ status: "running" }));
@@ -126,7 +100,7 @@ describe("Web Remote Control IPC telemetry", () => {
     expect(h.showMessageBox).not.toHaveBeenCalled();
   });
 
-  it("只注册start/stop/status，不再暴露刷新配对IPC", async () => {
+  it("注册 start/stop/status 与 V1 刷新配对 IPC，不暴露 Relay V2 账号登录通知", async () => {
     const { registerWebRemoteControlIpcHandlers } =
       await import("../src/main/desktopWebRemoteControlIpc.js");
     registerWebRemoteControlIpcHandlers({
@@ -142,6 +116,7 @@ describe("Web Remote Control IPC telemetry", () => {
         PlatformChannels.StartWebRemoteControl,
         PlatformChannels.StopWebRemoteControl,
         PlatformChannels.GetWebRemoteControlStatus,
+        PlatformChannels.ResetWebRemoteControlPairing,
       ].sort(),
     );
   });

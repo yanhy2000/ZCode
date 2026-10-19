@@ -313,6 +313,10 @@ export * from "./tool-plan-adapter.js";
 export * from "./permission-request-preview.js";
 export * from "./web-remote-control.js";
 export * from "./web-remote-control-heartbeat.js";
+// CLI 兼容面：off-peak 执行面在桌面端已删除，但 CLI 运行时仍需要这些协议 schema/类型。
+export * from "./off-peak-execution.js";
+// CLI 兼容面：桌面端请求验证已删除；上游把该模块退化成 no-op 壳，CLI 仍引用类型。
+export * from "./request-security-edition/verification-policy.js";
 
 export * from "./web-remote-control-rpc-transport.js";
 export * from "./settings-sync.js";
