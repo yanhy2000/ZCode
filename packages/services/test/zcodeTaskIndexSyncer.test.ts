@@ -3059,6 +3059,22 @@ describe("createZCodeTaskIndexSyncer", () => {
     });
     syncer.ensureWorkspaceSubscription({ workspacePath: "/repo" });
     await subscribed(env);
+    // 首帧会 fire-and-forget 地补 sessions-index 基线行、修复子代理索引并对账；
+    // 它们共享同一条异步数据库初始化链路。若测试在这条链路完成前结束，afterEach 的
+    // close() 会关闭仍在初始化中的连接，令这些后台任务以 "database is not open" 拒绝，
+    // 并把 warn 泄漏到后续用例的 console.warn spy（全量 CI 下曾表现为 provider/model
+    // 未就绪用例的零 warn 断言失败）。先等基线行落库，确保后台任务在关闭前收敛。
+    await vi.waitFor(
+      async () => {
+        expect(
+          await env.repo.getTaskMeta({
+            workspacePath: seedTarget.workspacePath,
+            taskId: seedTarget.sessionId,
+          }),
+        ).toMatchObject({ taskId: seedTarget.sessionId });
+      },
+      { timeout: 5_000 },
+    );
     env.configEmitter.fire(configFrame(config, 1));
 
     vi.useFakeTimers();
