@@ -631,10 +631,22 @@ describe("desktopResourceTelemetry perf_process_window", () => {
 
   it("事件属性不携带 pid、路径、workspace 等隐私维度", async () => {
     vi.useFakeTimers();
+    // Bug 根因：pid 是环境值，而 mock 的 RSS 也会落在 1000 KB 这种量级；CI 上 Node 进程
+    // 的 pid 恰好是 1000，于是“所有属性值里不能出现 pid”会被一条合法指标误伤。测试夹具
+    // 主动把 RSS 与 process.pid 错开，后续按属性名断言时才能区分“指标值”与“被抄进来的 pid”。
+    const mainRssKb = MAIN_PID + 10_000;
+    const rendererRssKb = MAIN_PID + 20_000;
+    const memoryUsageSpy = vi.spyOn(process, "memoryUsage").mockReturnValue({
+      rss: 300 * 1024 * 1024,
+      heapTotal: 120 * 1024 * 1024,
+      heapUsed: 90 * 1024 * 1024,
+      external: 20 * 1024 * 1024,
+      arrayBuffers: 2 * 1024 * 1024,
+    } as NodeJS.MemoryUsage);
     const cleanupRoles = await registerAllChromiumRoles();
     getAppMetricsMock.mockReturnValue([
-      metric(MAIN_PID, "Browser", 1, 1_000),
-      metric(MAIN_WINDOW_PID, "Tab", 1, 1_000),
+      metric(MAIN_PID, "Browser", 1, mainRssKb),
+      metric(MAIN_WINDOW_PID, "Tab", 1, rendererRssKb),
     ]);
     const logger = { info: vi.fn(), warn: vi.fn() };
     const {
@@ -654,21 +666,62 @@ describe("desktopResourceTelemetry perf_process_window", () => {
       await vi.advanceTimersByTimeAsync(REPORT_INTERVAL_MS);
 
       const { checkProcessResourceEventProperties } = await import("@zcode/shared");
-      for (const event of processWindowEvents()) {
+      const events = processWindowEvents();
+      for (const event of events) {
         expect(
           checkProcessResourceEventProperties("perf_process_window", event.properties),
         ).toMatchObject({ ok: true });
       }
-      // 曾用「JSON 不含 pid 子串」断言，但真实 heap 读数（如 520193）会偶然包含 "201"，
-      // 造成与代码无关的抖动。pid 泄漏的形态是某个属性值就是 pid，按值精确比对即可。
-      const propertyValues = processWindowEvents().flatMap((event) =>
-        Object.values(event.properties),
-      );
-      expect(propertyValues).not.toContain(String(MAIN_WINDOW_PID));
-      expect(propertyValues).not.toContain(String(MAIN_PID));
+      // 曾用「所有属性值中不含 pid」的断言，但属性值域与 pid 值域重叠：CI 的 pid=1000
+      // 与 RSS=1000KB 完全可能是同一条合法上报，全局扫描必然随机误报。这里改为按属性名
+      // 与本用例输入逐项比对期望值：不是放宽断言——任何属性被写成 pid、路径或 workspace，
+      // 都会与该属性应有的值不符（只有 pid 恰好等于该属性合法指标时才不可区分，此时输出
+      // 与正确实现逐字节相同）。键集合与隐私 key 仍由共享白名单校验兜底。
+      const expectedCommon = {
+        platform: "macos",
+        app_version: "3.6.1-test",
+        arms_env: "test",
+        device_mid: "privacy-device",
+        runtime_surface: "local",
+        arch: process.arch,
+        logical_cpu_count: "8",
+        total_memory_gb: "16",
+        background_ratio: "1",
+        uptime_minutes: "0",
+        cpu_percent_p95: "1",
+        cpu_percent_peak: "1",
+        process_count_peak: "1",
+        sample_count: "30",
+      };
+      const expectedByRole: Record<string, Record<string, string>> = {
+        main: {
+          ...expectedCommon,
+          process_role: "main",
+          rss_kb_total_mean: String(mainRssKb),
+          rss_kb_total_peak: String(mainRssKb),
+          rss_kb_max_process_peak: String(mainRssKb),
+          heap_used_kb_mean: "92160",
+          heap_used_kb_peak: "92160",
+        },
+        renderer_main: {
+          ...expectedCommon,
+          process_role: "renderer_main",
+          rss_kb_total_mean: String(rendererRssKb),
+          rss_kb_total_peak: String(rendererRssKb),
+          rss_kb_max_process_peak: String(rendererRssKb),
+        },
+      };
+      expect(events.map((event) => event.properties.process_role)).toEqual([
+        "main",
+        "renderer_main",
+      ]);
+      for (const event of events) {
+        expect(event.properties).toEqual(expectedByRole[event.properties.process_role]);
+      }
     } finally {
       stopDesktopResourceTelemetry();
       cleanupRoles();
+      memoryUsageSpy.mockRestore();
       vi.useRealTimers();
     }
   });

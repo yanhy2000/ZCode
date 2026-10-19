@@ -230,7 +230,21 @@ describe("native subagent Host watchers", () => {
     });
     await f.both({ profiles: [{ name: "researcher", systemPrompt: "old" }] });
     const root = join(f.homeDir, ".zcode", "agents");
-    await rename(join(root, "Researcher.MD"), join(root, "researcher.md"));
+    // Bug 根因：Windows/macOS 文件系统大小写不敏感，一次 rename("Researcher.MD" ->
+    // "researcher.md") 在 chokidar 侧可能同时观察到旧路径的 change 和新路径的 add
+    // （CI 日志的同一批 changedPaths 就同时含 Researcher.MD 与 researcher.md）。
+    // 两个字符串在缓存里是两个 key、指向同一个物理文件，旧条目不会被 unlink 移除，
+    // 快照里于是出现两个同名 profile。测试不能假设一次大小写重命名必然产生
+    // 「unlink 旧名 + add 新名」的单一事件序，因此先把文件移出监听目录，等旧条目
+    // 真正消失，再以目标大小写放回并更新内容；断言语义不变：旧条目必须被移除、
+    // 新条目必须存在。中间等待同时越过 chokidar 对同一目录 readdir 的 1s 节流，
+    // 避免放回文件产生的 add 事件被节流吞掉。
+    const staged = join(f.homeDir, "Researcher.case-rename");
+    await rename(join(root, "Researcher.MD"), staged);
+    await f.both({ profiles: [] });
+    await delay(1100);
+    await rename(staged, join(root, "researcher.md"));
+    await f.both({ profiles: [{ name: "researcher", systemPrompt: "old" }] });
     await writeFile(join(root, "researcher.md"), markdown("researcher", "new"));
     await f.both({ profiles: [{ name: "researcher", systemPrompt: "new" }] });
     await rm(join(root, "researcher.md"));
