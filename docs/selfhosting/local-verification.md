@@ -7,8 +7,8 @@
 | 后端环境 | `ZCODE_ENV=production` |
 | 产品身份 | production（`ZCode`） |
 | 安装名 | `ZCode` |
-| 应用版本 | `1.0.0+3.15.1` |
-| Agent CLI 版本 | `1.0.0+3.15.1` |
+| 应用版本 | `1.0.0+3.16.1` |
+| Agent CLI 版本 | `1.0.0+3.16.1` |
 | 自动更新 | 启动后自动检查本项目 GitHub Release，只跳转手动下载 |
 | 强更闸门 | 已跳过 |
 | 遥测 | 已移除上报链路 |
@@ -21,14 +21,14 @@
 GitHub Actions 的 `Build Windows` 运行会产出：
 
 ```text
-ZCode-1.0.0+3.15.1-win-x64.exe
+ZCode-1.0.0+3.16.1-win-x64.exe
 *.exe.blockmap
 latest.yml
 SHA256SUMS.txt
 ```
 
-产物名里的版本必须等于根 `package.json` 版本。如果出现 `0.x`、`0.0.0`、`3.15.1`（缺少私有版本）或
-`3.15.1-self.*`，本次验收直接判失败并记录产物全名。
+产物名里的版本必须等于根 `package.json` 版本。如果出现 `0.x`、`0.0.0`、`3.16.1`（缺少私有版本）或
+`3.16.1-self.*`，本次验收直接判失败并记录产物全名。
 
 ## 获取产物
 
@@ -67,7 +67,7 @@ $env:ZCODE_DESKTOP_USER_DATA_DIR = "D:\zcode-self-test\userData"
 
 - [ ] 安装完成，桌面快捷方式、开始菜单、托盘菜单和 About 都显示 `ZCode`，不出现 `Preview`。
 - [ ] 启动后主窗口正常创建，没有被“需要升级 ZCode”阻断。
-- [ ] About/设置页显示版本 `1.0.0+3.15.1`，提交号与 CI 运行一致。
+- [ ] About/设置页显示版本 `1.0.0+3.16.1`，提交号与 CI 运行一致。
 - [ ] 帮助菜单或托盘菜单中的“检查更新”可以打开；仓库尚无已发布 release 时给出明确提示。
 - [ ] 把 GitHub Release 正式发布后，自动检查和手动检查都能发现新版本并打开下载页。
 

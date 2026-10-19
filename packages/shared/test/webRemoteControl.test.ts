@@ -55,44 +55,8 @@ describe("resolveWebRemoteControlWorkspaceKey", () => {
   });
 });
 
-describe("external relay QR helpers", () => {
-  it("validates the optional authoritative desktop version in bootstrap responses", () => {
-    const response = {
-      zcode_type: "bootstrap-response",
-      requestId: "bootstrap-1",
-      success: true,
-      result: { windowControlSessionId: "sid-1", workspaces: [] },
-    };
-    expect(parseWebRemoteControlAppPayload(response)).not.toBeNull();
-    const result = { ...response.result, desktopAppVersion: "3.12.2" };
-    expect(parseWebRemoteControlAppPayload({ ...response, result })).toMatchObject({ result });
-    for (const desktopAppVersion of ["", "   ", 123]) {
-      expect(
-        parseWebRemoteControlAppPayload({
-          ...response,
-          result: { ...result, desktopAppVersion },
-        }),
-      ).toBeNull();
-    }
-  });
-  it("builds an encoded web remote control QR URL without theme params", () => {
-    expect(
-      buildWebRemoteControlExternalQrUrl({
-        baseUrl: "https://zcode.z.ai/remote",
-        deviceSid: "sid-1",
-        deviceMid: "mid-1",
-        deviceName: "MacBook",
-        appVersion: "1.5.0",
-      }),
-    ).toBe("https://zcode.z.ai/remote?sid=sid-1&mid=mid-1&name=MacBook&app_version=1.5.0");
-  });
-
-  it("parses V2 routing hints without carrying theme state", () => {
-    expect(
-      parseWebRemoteControlExternalQrParams(new URLSearchParams("sid=sid-1&mid=mid-1&theme=light")),
-    ).toEqual({ deviceSid: "sid-1", deviceMid: "mid-1" });
-  });
-});
+// V1 自维护构建的二维码与 bootstrap 契约与上游 Relay V2 不同（V1 需要 hash 挑战、
+// bootstrap 不携带 desktopAppVersion），上游那三条用例只对 Relay V2 成立，已随 V2 一并删除。
 
 describe("resolveWebRemoteControlRoutePathFromBaseUrl", () => {
   it("resolves the v4 QR route from the Vite remote v4 base", () => {
@@ -655,55 +619,3 @@ it("MRO02：远端 bridge 保留可选窗口目录能力，旧 bridge 不虚构�
   ).toBeNull();
 });
 
-it("MRO03：可见任务报告包含完整地址和传输代际，离开必须显式 null", () => {
-  const report = {
-    zcode_type: "mobile-task-view-update",
-    epoch: "pair-1",
-    seq: 1,
-    bridgeSessionId: "bridge-1",
-    bridgeGeneration: 2,
-    view: {
-      workspacePath: "/repo",
-      workspaceIdentity: "remote:server:source:/repo",
-      taskId: "task",
-    },
-  };
-  expect(parseWebRemoteControlAppPayload(report)).toEqual(report);
-  expect(parseWebRemoteControlAppPayload({ ...report, view: null })).toEqual({
-    ...report,
-    view: null,
-  });
-  expect(parseWebRemoteControlAppPayload({ ...report, view: { taskId: "task" } })).toBeNull();
-  for (const seq of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1])
-    expect(parseWebRemoteControlAppPayload({ ...report, seq })).toBeNull();
-  expect(parseWebRemoteControlAppPayload({ ...report, epoch: "" })).toBeNull();
-  expect(
-    parseWebRemoteControlAppPayload({ zcode_type: "mobile-task-view-request", epoch: "pair-1" }),
-  ).toEqual({ zcode_type: "mobile-task-view-request", epoch: "pair-1" });
-  expect(
-    parseWebRemoteControlAppPayload({
-      zcode_type: "bootstrap-response",
-      requestId: "b",
-      success: true,
-      result: { windowControlSessionId: "session", workspaces: [], mobileTaskViewEpoch: "pair-1" },
-    }),
-  ).toMatchObject({ result: { mobileTaskViewEpoch: "pair-1" } });
-});
-
-it("MRO03：客户端不能在可见任务报告中伪造远端 session", () => {
-  expect(
-    parseWebRemoteControlAppPayload({
-      zcode_type: "mobile-task-view-update",
-      epoch: "epoch",
-      seq: 1,
-      bridgeSessionId: "bridge",
-      bridgeGeneration: 1,
-      view: {
-        workspacePath: "/repo",
-        workspaceIdentity: "remote:ssh:host:/repo",
-        taskId: "task",
-        remoteSessionId: "forged-session",
-      },
-    }),
-  ).toBeNull();
-});

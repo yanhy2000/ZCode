@@ -6,16 +6,16 @@
 
 ## 版本规则
 
-- 版本号格式为 `<私有版本>+<官方基线版本>`，两者都是 `major.minor.patch`，例如 `1.0.0+3.15.1`。
+- 版本号格式为 `<私有版本>+<官方基线版本>`，两者都是 `major.minor.patch`，例如 `1.0.0+3.16.1`。
 - 根 `package.json` 与 `apps/zcode-cli/package.json` 使用同一个版本号；桌面构建元数据、CLI `__CLI_VERSION__` 与安装包文件名都从它派生。
-- Windows 安装包命名为 `ZCode-<version>-win-<arch>.exe`，例如 `ZCode-1.0.0+3.15.1-win-x64.exe`。
-- Release tag 为 `v<version>`，例如 `v1.0.0+3.15.1`；tag 必须与 `package.json` 完全一致。
+- Windows 安装包命名为 `ZCode-<version>-win-<arch>.exe`，例如 `ZCode-1.0.0+3.16.1-win-x64.exe`。
+- Release tag 为 `v<version>`，例如 `v1.0.0+3.16.1`；tag 必须与 `package.json` 完全一致。
 - 版本比较按“私有版本优先，官方基线次之”的二元组进行。SemVer 会忽略 `+` 之后的 build metadata，因此更新检查不得直接使用 `semver.gt`。
 
 版本号的两种用途：
 
 - 「显示与更新」使用完整的 `<私有版本>+<官方基线>`：About / 版本信息、安装包名、Release tag、自动更新比较，以及需要区分自维护包身份的本地场景。
-- 「与云端/官方服务交互」使用官方基线版本（`1.0.0+3.15.1` → `3.15.1`，实现为 shared `ZCODE_UPSTREAM_VERSION`）：请求头（`X-ZCode-App-Version`、`User-Agent`）、`app_version` 查询参数、客户端灰度与帮助配置、OAuth 中转、项目访问令牌、遥测与反馈、注入远端进程的应用版本，以及依赖版本比较的功能门槛（如手机远控前端 v4 判定）。官方服务不认识私有版本号，`1.0.0` 会被当成远低于基线的旧客户端。
+- 「与云端/官方服务交互」使用官方基线版本（`1.0.0+3.16.1` → `3.16.1`，实现为 shared `ZCODE_UPSTREAM_VERSION`）：请求头（`X-ZCode-App-Version`、`User-Agent`）、`app_version` 查询参数、客户端灰度与帮助配置、OAuth 中转、项目访问令牌、遥测与反馈、注入远端进程的应用版本，以及依赖版本比较的功能门槛（如手机远控前端 v4 判定）。官方服务不认识私有版本号，`1.0.0` 会被当成远低于基线的旧客户端。
 - 例外：自维护远端资源（server bundle / remote assets 的 CDN 路径、manifest、握手校验）继续以私有版本为键，保证构建与部署两侧自洽；这些链路不访问官方资产。
 - 版本号缺少 `+` 基线时（非自维护构建、测试桩）按原样使用，不做转换。
 
@@ -110,14 +110,33 @@
 
 ## 手机远控
 
-- 远控二维码链接固定使用官方基线版本：`https://zcode.z.ai/remote/v4?...&app_version=<官方基线>`（例如 `app_version=3.15.1`）。
+- 远控二维码链接固定使用官方基线版本：`https://zcode.z.ai/remote/v4?...&app_version=<官方基线>`（例如 `app_version=3.16.1`）。
 - 远程前端版本按官方基线判定（门槛常量 `WEB_REMOTE_CONTROL_V4_MIN_APP_VERSION`）；私有版本 `1.0.0` 不得参与该判定，否则链接会退回云端已下线的 `/remote/v3` 并返回 404。
 - relay、attachment、会话复用与本地配对凭据链路保持不变；云端页面模板不属于自维护范围。
+- 上游 3.16 引入的 Relay V2（`@zcode/shared/web-remote-relay`、`web-remote-control/` 目录、`/api/remote/v2/*` 协商、设备码与 relay 侧任务快照）**不予采用**：自维护构建继续使用 V1 web-remote-control 协议与自定义 relay 地址，仓库中不存在 `web-remote-relay` 目录或 `web-remote-relay` 导出。
+- 因为 V1 保留，上游 3.16 重写的手机远控前端能力（mobile task view、任务列表同步、workspace 列表快照）以 V1 协议消息承载：`SyncWebRemoteControlTasks`、`ResetWebRemoteControlPairing`、`BotRemoteWorkspaceReconnected` 等通道与 `WebRemoteControlMobileTaskView` 类型保留在 shared/platform 层。
 
 ## 强制更新
 
 - 启动流程不请求官方 `minimalVersion`，不展示官方强更弹窗。
 - 删除 `forceUpdateGuard` 的启动调用；本地未打包 dev 与打包自维护包行为一致。
+
+## 3.16.1 合入时的删除面
+
+上游 3.16.1 带来的下列能力在本次合入时**物理删除**，不进入自维护构建：
+
+- 账号 OAuth 登录页与登录等待页（桌面保留下载/配对但不提供官方账号登录入口）；
+- Coding Plan（商品、购买/升级、额度与套餐卡）；
+- 闲时执行运行时（`off-peak` 取号/调度/运行时与 CLI 工具链），仅保留「闲时任务」**分组**这一上游任务分组特性；
+- Highspeed（加速卡）；
+- Rewards 与营销触达（marketing-touch）；
+- 请求验证（request-security）；
+- 渲染器动作追踪（userActionTelemetry）与本地 TTFT 上报；
+- 用量权益（usage entitlement）与官方套餐准入；
+- 全局通知（global notice）、Start Plan 繁忙重试与 Provider 账号访问（account provider access）；
+- Relay V2 全家桶（见「手机远控」）。
+
+对应地，桌面 Main 的账号/ARMS 遥测接线改为可选依赖：`registerPlatformIpcHandlers` 的 `appTelemetryRuntime` / `appTelemetryCore` / `reportRemoteUsageEvent` / `armsCustomContext` / `getRemoteConnectionStats` 均为可选项，自维护构建不提供，IPC 处理函数在缺省时短路返回，不初始化 ARMS，也不发送产品事件。
 
 ## 不变项
 
@@ -178,8 +197,8 @@
 
 ## 验收
 
-1. `package.json`、CLI 包、桌面构建元数据都是 `1.0.0+3.15.1`。
-2. Windows 构建产物名为 `ZCode-1.0.0+3.15.1-win-x64.exe`，CI 校验该名称。
+1. `package.json`、CLI 包、桌面构建元数据都是 `1.0.0+3.16.1`。
+2. Windows 构建产物名为 `ZCode-1.0.0+3.16.1-win-x64.exe`，CI 校验该名称。
 3. 打包应用启动后不访问官方更新/强更接口。
 4. 帮助菜单和托盘菜单都能触发 GitHub Release 检查，并覆盖上述成功与失败分支。
 5. 设置页不再出现预览版更新、自动下载安装两个开关。
@@ -206,9 +225,13 @@
 26. 定时任务不受影响：自动化页仍可创建、编辑、启停、立即运行、查看运行历史；`off_peak_tasks` 表与既有迁移 checksum 保持原样，仅为历史数据兼容保留。
 27. 设置 → 模型设置没有任何供应商时，右栏直接显示“添加供应商”模板页而非“加载中”；该页保持显示直到创建出第一个供应商，此时不显示返回按钮。
 28. “添加供应商”模板页不渲染“智谱 / 其他”分组标题：首位为“创建自定义供应商”，Z.ai 与 BigModel 模板显示在列表末尾，其余模板顺序与内置 Provider 配置一致。
-29. 手机远控链接为 `https://zcode.z.ai/remote/v4?...&app_version=3.15.1`：路径与 `app_version` 都使用官方基线版本，私有版本号不出现在链接中；手机浏览器打开后能进入远控页并连接成功（无需手工改 URL）。
-30. 版本号用途分离可验证：About、安装包名、Release tag 与自动更新比较使用 `1.0.0+3.15.1`；请求头 `X-ZCode-App-Version`、`app_version` 参数、帮助配置、OAuth 中转、项目访问令牌、遥测/反馈与远端进程应用版本使用 `3.15.1`。自维护远端资源 CDN/manifest 仍以 `1.0.0+3.15.1` 为键。
+29. 手机远控链接为 `https://zcode.z.ai/remote/v4?...&app_version=3.16.1`：路径与 `app_version` 都使用官方基线版本，私有版本号不出现在链接中；手机浏览器打开后能进入远控页并连接成功（无需手工改 URL）。
+30. 版本号用途分离可验证：About、安装包名、Release tag 与自动更新比较使用 `1.0.0+3.16.1`；请求头 `X-ZCode-App-Version`、`app_version` 参数、帮助配置、OAuth 中转、项目访问令牌、遥测/反馈与远端进程应用版本使用 `3.16.1`。自维护远端资源 CDN/manifest 仍以 `1.0.0+3.16.1` 为键。
 31. Highspeed 已物理删除：仓库中不存在 `HighspeedCardService`、`IHighspeedCardService`、`createHighspeedHttpTransport`、`createHighspeedMockTransport`、`HIGHSPEED_DRAW_PROVIDER_IDS`、`HIGHSPEED_CARD_EXPIRED_PROVIDER_ERROR_CODE`；`packages/ui/src` 不存在 `highspeed/` 与 `v4/highspeed/` 模块；Host 不注册加速卡服务，也不读取 `ZCODE_HIGHSPEED_MOCK_SCENARIO`；桌面 E2E 的 highspeed 卡片用例、fixtures 与 Mock 场景已删除。`HIGHSPEED_PROVIDER_IDS` 作为 CLI 兼容映射保留（见上文「保留」）。
 32. Highspeed 移除后 UI 无残留：输入框不出现加速描边/粒子/模型锁定/倒计时，会话行不出现 Highspeed 标签、节省时间或来源 footer，左下角不出现分享卡；普通发送、编辑重发与队列提升不再走抽卡 prepare。协议层 `highspeedMeta` / `setHighspeedMetrics` 字段保留但不产生新数据。
 33. Highspeed 移除不影响本地用量统计：`usage-stats` 的本地 App 用量聚合（`model_usage/turn_usage/tool_usage`）行为不变，只删除加速卡专用的普通 TPS 请求类型。
 34. 桌面侧无账号 Provider 专属分支：模型设置的可禁用开关对所有 Provider 生效（不再对账号 Provider 隐藏），GLM-5.3 视觉徽标不因账号套餐隐藏；`packages/ui` 不出现 `zhipu-account` 引用，i18n 不存在 `settings.modelProvider.accountProviderConfigMissing`；桌面 Host 不向 CLI 下发账号配置（不存在账号配置同步接线）。
+35. 仓库中不存在 Relay V2 实现：`packages/*/src/**/web-remote-relay/`、`@zcode/shared/web-remote-relay` 导出、`/api/remote/v2` 协商与 relay 侧任务快照均不可用；手机远控仍通过 V1 web-remote-control 协议与自定义 relay 地址连接。
+36. 闲时执行运行时已删除，但「闲时任务」任务分组仍可按上游 3.16 行为展示；`off_peak_tasks` 表与迁移保持冻结。
+37. 桌面 Main 不初始化 ARMS：`appTelemetryRuntime` / `appTelemetryCore` / `reportRemoteUsageEvent` / `armsCustomContext` 缺省时相关 IPC 直接短路，打包应用不发送产品事件。
+38. 上游 3.16 重写的手机远控前端能力按 V1 消息承载：任务列表同步、配对重置与 Bot 远端 workspace 重连通道存在且类型完整。
