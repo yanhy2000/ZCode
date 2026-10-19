@@ -2919,8 +2919,6 @@ const zhCN: Record<string, string> = {
   "settings.modelProvider.connectionMode.teamPlanBadge": "团队",
   "settings.modelProvider.connectionMode.loadFailed": "连接方式获取失败",
   "settings.modelProvider.connectionMode.noAvailablePlan": "无可用套餐",
-  "settings.modelProvider.accountProviderConfigMissing":
-    "账号 Provider 配置暂不可用，请刷新后重试。",
   "settings.modelProvider.planCard.codingPlan": "编程套餐",
   "settings.modelProvider.planCard.startPlan": "体验套餐",
   "settings.modelProvider.planCard.usage.fiveHour": "5h 用量",

@@ -1104,14 +1104,12 @@ export function createLocalServices(options: {
     resolveRuntimeZCodeEndpointOrigin(process.env, {
       overrideOrigin: (await settingService.get()).zcodeEndpointOrigin,
     });
-  let invalidateProjectTokens = () => {};
   let invalidatePluginUiAccounts: (() => void) | undefined;
   const provisioningOAuthKeys = new Set<string>(PROVIDER_PROVISIONING_OAUTH_CREDENTIAL_KEYS);
   const credentialService = createCredentialService({
     onDidMutate: ({ key }) => {
       if (key === "oauth:active_provider" || /^oauth:[^:]+:user_info$/.test(key))
         invalidatePluginUiAccounts?.();
-      if (provisioningOAuthKeys.has(key)) invalidateProjectTokens();
       if (provisioningOAuthKeys.has(key)) {
         options.onProviderProvisioningSourceChanged?.("credential");
       }

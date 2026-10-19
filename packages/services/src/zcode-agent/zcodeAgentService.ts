@@ -26,11 +26,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { Emitter } from "@zcode/rpc";
 import type { IDisposable } from "@zcode/rpc";
-import type {
-  AccountProviderConfigSnapshot,
-  ModelSelectionView,
-  ProviderSource,
-} from "@zcode/provider";
+import type { ModelSelectionView } from "@zcode/provider";
 import { completeNewModelSelection } from "@zcode/provider";
 import {
   subagentRuntimeConfigSchema,
@@ -125,7 +121,6 @@ import {
   zcodeWorkspaceHookTrustGrantResultSchema,
   zcodeWorkspaceUpdateInteractionPreferencesResultSchema,
   zcodeWorkspaceUpdateModelIoPreferencesResultSchema,
-  zcodeProviderUpdateAccountConfigResultSchema,
   type ZCodeSessionStateSnapshot,
   type ZCodeAutomation,
   type ZCodeAutomationRun,
@@ -1176,7 +1171,6 @@ export function createZCodeAgentService(
     }
     waitingWorkspaceStartups.clear();
   }
-  const accountConfigSyncByClient = new WeakMap<ZCodeProtocolClient, Promise<void>>();
   const sessionTraceIdBySessionKey = new Map<string, TraceId>();
   const modelSelectionReadinessSource = options?.modelSelectionReadinessSource;
   const sessionRuntimePreferencesAuthority = options?.sessionRuntimePreferencesAuthority ?? "local";
@@ -1290,12 +1284,6 @@ export function createZCodeAgentService(
       });
     });
   });
-  async function ensureAccountProviderConfigSynced(_params: {
-    client: ZCodeProtocolClient;
-    reason: string;
-    workspace: ZCodeAgentWorkspaceTarget;
-  }): Promise<void> {}
-
   function enqueueInteractionPreferenceSync(params: {
     client: ZCodeProtocolClient;
     preferences: ZCodeAgentAppRuntimePreferences;
@@ -1372,12 +1360,9 @@ export function createZCodeAgentService(
             return;
           }
           const { workspace } = waiting;
-          const client = await getClient(workspace);
-          await ensureAccountProviderConfigSynced({
-            client,
-            reason: `startup_ready:${event.reason}`,
-            workspace,
-          });
+          // provider/model 就绪后必须重新触发启动：getClient 会复用等待记录并真正拉起 Agent；
+          // 它的返回值不再有别的用途（账号配置下发接线已删除），但不能因此省掉这次调用。
+          await getClient(workspace);
           logger.info(undefined, "provider/model 就绪后已启动等待中的 ZCode agent", {
             providerCount: event.snapshot.providerCount,
             reason: event.reason,
@@ -3286,11 +3271,6 @@ export function createZCodeAgentService(
     async createSession(params: ZCodeAgentCreateSessionParams) {
       const startedAt = Date.now();
       const client = await getClient(params);
-      await ensureAccountProviderConfigSynced({
-        client,
-        reason: "session_create",
-        workspace: params,
-      });
       const sessionTraceId = params.sessionTraceId;
       logger.info(sessionTraceId, "开始请求 ZCode Protocol session/create", {
         hasInitialModel: params.model !== undefined,
@@ -3396,11 +3376,6 @@ export function createZCodeAgentService(
     async resumeSession(params: ZCodeAgentResumeSessionParams) {
       const startedAt = Date.now();
       const client = await getClient(params);
-      await ensureAccountProviderConfigSynced({
-        client,
-        reason: "session_resume",
-        workspace: params,
-      });
       const cachedTraceId = getSessionTraceId(params);
       // 冷恢复同样按 Host 的灰度判定下发，否则恢复出来的会话会丢掉工作流工具簇。
       const dynamicWorkflowFlags = await resolveDynamicWorkflowSessionFlags();
@@ -3531,15 +3506,7 @@ export function createZCodeAgentService(
     async readSession(params: ZCodeAgentReadSessionParams) {
       const client = await getReadOnlyClient(params, params.runtimePolicy);
       // task-index 为补正文索引调用 readSession 时，默认策略会在 runtime
-      // 已被回收后重新拉起 Agent；这条观察路径不应改变 session 生命周期。只有显式
-      // 的普通读取才同步 provider registry，existing-only 读取必须保持纯观察语义。
-      if (params.runtimePolicy !== "existing-only") {
-        await ensureAccountProviderConfigSynced({
-          client,
-          reason: "session_read",
-          workspace: params,
-        });
-      }
+      // 已被回收后重新拉起 Agent；这条观察路径不应改变 session 生命周期。
       const snapshot = await client.request(
         zcodeProtocolMethods.sessionRead,
         {
@@ -3603,11 +3570,6 @@ export function createZCodeAgentService(
         for (let attempt = 0; attempt < 2; attempt += 1) {
           const client = await getReadOnlyClient(params);
           try {
-            await ensureAccountProviderConfigSynced({
-              client,
-              reason: "workspace_read_presentation",
-              workspace: params,
-            });
             presentation = await client.request(
               zcodeProtocolMethods.workspaceReadPresentation,
               { workspace: buildWorkspaceRef(params) },
@@ -4557,13 +4519,6 @@ export function createZCodeAgentService(
 
     async generateWorkspaceText(params: ZCodeAgentGenerateWorkspaceTextParams) {
       const client = await getClient(params);
-      // Worker 自己读取 ZCode Built-in / Personal Config；Host 只在执行前确保账号状态形成的
-      // Account Config Overlay 已同步，避免新进程先按旧套餐状态创建 Model。
-      await ensureAccountProviderConfigSynced({
-        client,
-        reason: "workspace_generate_text",
-        workspace: params,
-      });
       const operationId = params.signal ? randomUUID() : undefined;
       const cancel = () => {
         if (!operationId) return;
@@ -4614,11 +4569,6 @@ export function createZCodeAgentService(
 
     async testModelConnectivity(params: ZCodeAgentTestModelConnectivityParams) {
       const client = await getClient(params);
-      await ensureAccountProviderConfigSynced({
-        client,
-        reason: "provider_test_model_connectivity",
-        workspace: params,
-      });
       return client.request(
         zcodeProtocolMethods.providerTestModelConnectivity,
         {
@@ -5237,19 +5187,6 @@ export function createZCodeAgentService(
         cliProcessState === "spawned"
           ? Math.max(0, Math.round(performance.now() - cliBootstrapStartedAt))
           : undefined;
-      // conversation 冷订阅会在 CLI 内部直接恢复历史 Session 并立即发布首帧。
-      // 若 Account Config 尚未到达，首帧会先按缺少 Account Overlay 的 Registry 解析；这里只建立
-      // Account Config 顺序屏障，不提升模型执行权限。ZCode Built-in / Personal 仍由 Worker 维护。
-      const providerRegistryStartedAt = performance.now();
-      await ensureAccountProviderConfigSynced({
-        client,
-        reason: "conversation_subscribe",
-        workspace: params,
-      });
-      const providerRegistrySyncMs = Math.max(
-        0,
-        Math.round(performance.now() - providerRegistryStartedAt),
-      );
       const connection = resolveV4Connection(params);
       const topic = conversationTopic(params.sessionId);
       const taskMetaStartedAt = performance.now();
@@ -5302,7 +5239,6 @@ export function createZCodeAgentService(
         hostPrepareMs,
         ...(cliBootstrapMs !== undefined ? { cliBootstrapMs } : {}),
         cliProcessState,
-        providerRegistrySyncMs,
         taskMetaReadMs,
         cliRequestMs,
       };
@@ -5349,15 +5285,6 @@ export function createZCodeAgentService(
         readTrustedZCodeAgentV4Connection(params)?.clientMode ??
         params.clientMode ??
         "desktop-continuous";
-      if (params.envelope.type === "createSession") {
-        // V4 草稿预热直接走 command 转发；新会话创建前只需等待 Account Config，
-        // ZCode Built-in / Personal 已由 Worker 进程 Registry 自己装配。
-        await ensureAccountProviderConfigSynced({
-          client,
-          reason: "v4_command_create_session",
-          workspace: params,
-        });
-      }
       let envelope = await buildConversationCommandEnvelope(params);
       // TTFT 首版只允许可信桌面本地 continuous，手机/远端透传不能开启本地观测。
       if (

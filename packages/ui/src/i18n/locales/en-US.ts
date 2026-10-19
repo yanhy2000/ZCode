@@ -3120,8 +3120,6 @@ const enUS: Record<string, string> = {
   "settings.modelProvider.connectionMode.teamPlanBadge": "Team",
   "settings.modelProvider.connectionMode.loadFailed": "Connection settings failed",
   "settings.modelProvider.connectionMode.noAvailablePlan": "No available plan",
-  "settings.modelProvider.accountProviderConfigMissing":
-    "The account provider configuration is unavailable. Refresh and try again.",
   "settings.modelProvider.planCard.codingPlan": "Coding Plan",
   "settings.modelProvider.planCard.startPlan": "Start Plan",
   "settings.modelProvider.planCard.usage.fiveHour": "5h usage",

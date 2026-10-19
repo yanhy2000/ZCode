@@ -229,7 +229,8 @@ describe("ProviderModelsSection compact model rows", () => {
         return model;
       });
       render(createElement(InlineEditableProviderCard, { provider, onSave: vi.fn() }));
-      expect(screen.getAllByText("视觉")).toHaveLength(mode === "standard" ? 2 : 1);
+      // 手工配置的套餐 Key 仍隐藏 GLM-5.3 视觉标；账号 Provider 不再例外（自维护版不产生账号 Provider）。
+      expect(screen.getAllByText("视觉")).toHaveLength(mode === "manual" ? 1 : 2);
       expect(provider.models[0]!.config.properties?.inputFormat?.supportsImage).toBe(true);
     },
   );

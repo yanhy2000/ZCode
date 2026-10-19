@@ -147,7 +147,11 @@
 - CLI 与 Host 的 Coding Plan 登录、账号鉴权、Start Plan 繁忙重试、官方购买 webview/preload 与分区清理不再作为可用路径保留；CLI 侧未被 Desktop 调用的协议定义不要求逐项删除。
 - 内置 Provider 配置删除全部 `account:*` 规则与 Coding Plan 模板，revision 提升以覆盖旧 active/LKG 缓存；`zai-standard-api` / `bigmodel-standard-api` 等第三方模板保留。
 - 漏洞上报（zsrc）：移除公开配置字段、帮助菜单入口与文案。
-- 官方账号、登录、套餐、余额、权益、Rewards、营销触达与官方模型准入：移除客户端入口与服务调用。
+- 官方账号、登录、套餐、余额、权益、Rewards、营销触达与官方模型准入：移除桌面客户端入口与服务调用（CLI 侧保留判定见下）。
+- 账号 Provider 的根实现（`packages/provider` 的 account source 与 `zhipu-account` access 类型、`packages/shared` 的账号协议字段与项目访问令牌、`packages/provider-node` 的账号模型选择分类）保留为 **CLI 兼容面**，不进入桌面产品路径：
+  - 桌面 Host 不装配账号配置来源，注册表恒以 fail-closed 空快照作为 Account 层（`EmptyAccountProviderConfigSource`），不产生账号 Provider、账号准入或官方模型准入。
+  - 桌面不提供官方账号登录、退出或套餐入口；官方账号登录只存在于 `apps/zcode-cli` 的 standalone 链路，不参与桌面构建，桌面也不再向 CLI 下发账号配置（接线为空函数时删除该接线）。
+  - 决定记录（2026-10-19）：曾计划把账号 overlay 从根包物理删除并同步改造 CLI；评估确认 `apps/zcode-cli` 侧影响面约 100 个源码文件 + 约 89 个测试文件（含与 MCP OAuth 共用的凭据存储、SQLite 历史迁移、core 的 9 个模型请求入口），代价不成比例，故保留兼容面，只清理桌面可达面。
 - Highspeed（加速卡）：物理删除 Host `HighspeedCardService`（draw / healthy / 加速执行材料与 Coding Plan 双 JWT 头）、UI 激活动效/模型标识/倒计时/节省时间/来源 footer/分享卡与全局通知承载位、桌面 E2E 用例与 Mock 场景、相关单测与文案。加速卡是与官方 Coding Plan 账号权益强绑定的隐藏 Provider（`account:*-highspeed-card`），自维护版无可用路径。
 
 保留：
@@ -156,6 +160,7 @@
 - 插件市场排序 `pluginStoreOrder`。
 - 手机远控 relay 与本地配对凭据。
 - 模型上下文预算的本地默认值。
+- 账号 overlay 与 `accountAccess` / 项目访问令牌等协议字段（CLI 兼容；桌面恒为 fail-closed 空快照，不产生账号事实）。
 - shared 协议中的 `highspeedMeta` 输入字段、`setHighspeedMetrics` 命令与 CLI 侧 highspeed 投影/持久化分支：没有 Host 生产端后这些数据是惰性的，仅为协议兼容与历史消息读取保留；`isHighspeedProviderId` 谓词与 `HIGHSPEED_PROVIDER_IDS` 映射保留用于过滤历史/恢复出的加速 Provider 选择（CLI 测试经 junction 直接引用根 shared，删除会破坏「CLI 零改动」约束）。
 
 数据兼容：
@@ -206,3 +211,4 @@
 31. Highspeed 已物理删除：仓库中不存在 `HighspeedCardService`、`IHighspeedCardService`、`createHighspeedHttpTransport`、`createHighspeedMockTransport`、`HIGHSPEED_DRAW_PROVIDER_IDS`、`HIGHSPEED_CARD_EXPIRED_PROVIDER_ERROR_CODE`；`packages/ui/src` 不存在 `highspeed/` 与 `v4/highspeed/` 模块；Host 不注册加速卡服务，也不读取 `ZCODE_HIGHSPEED_MOCK_SCENARIO`；桌面 E2E 的 highspeed 卡片用例、fixtures 与 Mock 场景已删除。`HIGHSPEED_PROVIDER_IDS` 作为 CLI 兼容映射保留（见上文「保留」）。
 32. Highspeed 移除后 UI 无残留：输入框不出现加速描边/粒子/模型锁定/倒计时，会话行不出现 Highspeed 标签、节省时间或来源 footer，左下角不出现分享卡；普通发送、编辑重发与队列提升不再走抽卡 prepare。协议层 `highspeedMeta` / `setHighspeedMetrics` 字段保留但不产生新数据。
 33. Highspeed 移除不影响本地用量统计：`usage-stats` 的本地 App 用量聚合（`model_usage/turn_usage/tool_usage`）行为不变，只删除加速卡专用的普通 TPS 请求类型。
+34. 桌面侧无账号 Provider 专属分支：模型设置的可禁用开关对所有 Provider 生效（不再对账号 Provider 隐藏），GLM-5.3 视觉徽标不因账号套餐隐藏；`packages/ui` 不出现 `zhipu-account` 引用，i18n 不存在 `settings.modelProvider.accountProviderConfigMissing`；桌面 Host 不向 CLI 下发账号配置（不存在账号配置同步接线）。

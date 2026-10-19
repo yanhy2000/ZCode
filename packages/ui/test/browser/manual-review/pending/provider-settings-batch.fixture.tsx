@@ -40,19 +40,6 @@ function createProvider(templateId: string): ProviderSettingsFormProvider {
     group: "standard-personal" as const,
     access: { ...template.config.access, apiKey: "fixture-key" },
   };
-  const startPlan = params.get("access")?.startsWith("start-");
-  if (params.get("access") === "account" || params.get("access") === "team" || startPlan) {
-    config.access = {
-      type: "zhipu-account",
-      accountType: params.get("access") === "start-zai" ? "zai" : "bigmodel",
-      mode: startPlan
-        ? "start-plan"
-        : params.get("access") === "team"
-          ? "team-coding-plan"
-          : "individual-coding-plan",
-      entitled: true,
-    };
-  }
   return {
     providerId: "fixture",
     providerName: "Fixture Provider",

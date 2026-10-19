@@ -5,13 +5,13 @@ import { buildRegistryModelSelectGroups } from "../src/lib/modelSelectionGroups.
 
 describe("model selection groups", () => {
   it.each([
-    [{ type: "zhipu-account", accountType: "zai", mode: "individual-coding-plan" }, false],
-    [{ type: "zhipu-account", accountType: "bigmodel", mode: "team-coding-plan" }, false],
+    [{ type: "zhipu-account", accountType: "zai", mode: "individual-coding-plan" }, true],
+    [{ type: "zhipu-account", accountType: "bigmodel", mode: "team-coding-plan" }, true],
     [{ type: "zhipu-coding-plan-api-key" }, false],
-    [{ type: "zhipu-account", accountType: "zai", mode: "start-plan" }, false],
-    [{ type: "zhipu-account", accountType: "bigmodel", mode: "start-plan" }, false],
+    [{ type: "zhipu-account", accountType: "zai", mode: "start-plan" }, true],
+    [{ type: "zhipu-account", accountType: "bigmodel", mode: "start-plan" }, true],
     [{ type: "api-key" }, true],
-  ])("仅套餐 GLM-5.3 隐藏视觉标，不影响 Flash/真实能力：%j", (access, expected) => {
+  ])("只有手工配置的套餐 Key 隐藏 GLM-5.3 视觉标，账号 Provider 不再例外：%j", (access, expected) => {
     const view: ModelSelectionView = {
       revision: 1,
       providers: [

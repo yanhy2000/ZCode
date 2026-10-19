@@ -7,13 +7,9 @@ export function shouldShowModelVisionBadge(
   access?: ProviderConfigObject["access"],
 ): boolean {
   if (supportsImage !== true) return false;
-  // 体验套餐也在展示例外之内；与 Coding Plan 一样只隐藏 GLM-5.3 徽标。
-  const hideGlm53Vision =
-    access?.type === "zhipu-coding-plan-api-key" ||
-    (access?.type === "zhipu-account" &&
-      (access.mode === "individual-coding-plan" ||
-        access.mode === "team-coding-plan" ||
-        access.mode === "start-plan"));
+  // 自维护版不再产生账号 Provider（账号 overlay 只作为 CLI 兼容面保留），
+  // 展示例外只保留手工配置的套餐 Key；两者都只隐藏 GLM-5.3 徽标。
+  const hideGlm53Vision = access?.type === "zhipu-coding-plan-api-key";
   // 只控制徽标，不改能力事实、附件校验或精确模型身份；Flash 和其他型号不受影响。
   return !(hideGlm53Vision && modelId.toLowerCase() === "glm-5.3");
 }
