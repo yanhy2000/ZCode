@@ -10,6 +10,10 @@ const processLifecycleTests = [
 ];
 const forkIsolatedTests = [
   ...processLifecycleTests,
+  // 修复原因：该文件 5200+ 行、75 个用例，在 CI 满负载的 threads 池里曾让 worker 直接崩溃
+  // （`[vitest-pool]: Worker threads emitted error`）：整文件 55 个用例的统计丢失、run 被判定失败，
+  // 且崩溃点无法归因。隔离到 fork 池后它单独串行执行，峰值内存下降且崩溃只会显式落在本文件。
+  "packages/services/test/botsService.messageFlow.test.ts",
   // electron-builder 下载 NSIS 时把进程 stdio 传给子进程，不能使用 threads 的虚拟 stdio。
   "packages/desktop/test/windowsInstallerCompile.test.ts",
   "packages/desktop/test/cdnPreloadScript.test.ts",
