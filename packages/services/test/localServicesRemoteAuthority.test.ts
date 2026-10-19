@@ -248,9 +248,9 @@ describe("createLocalServices remote authority", () => {
         .get(serviceDescriptors.ICredentialService)
         .save("oauth:active_provider", "zai");
 
+      // 账号设置（account-settings）已随账号体系物理删除，Host 只会收到设置与凭据两类通知。
       expect(onProviderProvisioningSourceChanged.mock.calls).toEqual([
         ["personal-config"],
-        ["account-settings"],
         ["credential"],
       ]);
     } finally {
