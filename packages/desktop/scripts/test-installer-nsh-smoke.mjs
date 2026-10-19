@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -139,7 +139,9 @@ async function main() {
     getBinFromUrl("nsis-resources-3.4.1", "nsis-resources-3.4.1.7z", NSIS_RESOURCES_CHECKSUM),
   ]);
   const makensisPath = resolve(nsisDir, "makensis.exe");
-  const tempRoot = mkdtempSync(join(tmpdir(), "zcode-installer-nsh-smoke-"));
+  // CI（GitHub runner）的 TEMP 可能是 8.3 短名 `RUNNER~1`；安装器读快捷方式目标走的是 PowerShell +
+  // COM，返回的是规范长名（GetFinalPathNameByHandle 语义）。若测试用短名拼期望值，两侧形态不同会假失败。
+  const tempRoot = realpathSync.native(mkdtempSync(join(tmpdir(), "zcode-installer-nsh-smoke-")));
 
   try {
     const uninstallerFixturePath = join(tempRoot, "uninstaller-fixture.exe");

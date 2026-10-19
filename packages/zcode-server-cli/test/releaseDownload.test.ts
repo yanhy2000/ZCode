@@ -111,8 +111,11 @@ describe("release downloader", () => {
       destination: join(dir, "release.tar.gz"),
       sha256,
       expectedSizeBytes: payload.byteLength,
-      timeoutMs: 50,
-      overallTimeoutMs: 1_000,
+      // 修复原因：服务端每 30ms 发一个字节，原来 idle=50ms / overall=1000ms 只剩 20ms 余量，
+      // CI 满负载下事件循环抖动会先打穿 idle（或整体）超时，得到 AbortError 的假失败。
+      // 断言意图不变（数据持续流动就不应触发 idle 超时），只把余量放大。
+      timeoutMs: 200,
+      overallTimeoutMs: 5_000,
       maxAttempts: 1,
     });
   });

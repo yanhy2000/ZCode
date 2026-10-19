@@ -19,9 +19,10 @@ const originalProcessLabel = process.env.ZCODE_PROCESS_LABEL;
 const tempHomes: string[] = [];
 
 function makeTempHome(): string {
-  // CI（GitHub runner）的 TEMP 可能是 8.3 短名 `RUNNER~1`，而 skills 服务在读取用户技能根时会
-  // realpath 收敛成规范长名；断言必须与同一形态比较，否则短名机器上路径包含关系不成立。
-  const home = realpathSync(mkdtempSync(join(tmpdir(), "zcode-skills-home-")));
+  // CI（GitHub runner）的 TEMP 可能是 8.3 短名 `RUNNER~1`；技能服务用 fs 的 realpath（原生 binding，
+  // GetFinalPathNameByHandle）把用户技能根收敛成长名，而同步版 realpathSync 不展开短名。
+  // 必须用 realpathSync.native 才能与生产路径形态一致，否则短名机器上路径包含关系不成立。
+  const home = realpathSync.native(mkdtempSync(join(tmpdir(), "zcode-skills-home-")));
   tempHomes.push(home);
   return home;
 }

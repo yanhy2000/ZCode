@@ -98,6 +98,7 @@ describe("DataRootLock", () => {
     const barrierFile = join(root, "go");
     const resultsFile = join(root, "results");
     const readyDir = join(root, "ready");
+    const releaseFile = join(root, "release");
     await mkdir(readyDir);
     await writeFile(lockFile, `${JSON.stringify({ pid: DEAD_PID, acquiredAt: 0 })}\n`, "utf8");
     // 根目录 Vitest 与 package 脚本的 cwd 不同，不能用 cwd 推导源码路径，否则子进程会导入不存在的 root/src/runtime/lock.ts。
@@ -112,7 +113,9 @@ describe("DataRootLock", () => {
       try {
         await lock.acquire();
         await appendFile(process.env.ZCODE_TEST_LOCK_RESULTS, "success " + process.env.ZCODE_TEST_LOCK_CHILD + "\\n");
-        await delay(1_000);
+        // 修复原因：原来固定持锁 1s，CI 满负载下慢启动的子进程会在释放之后才尝试抢锁，
+        // 于是出现第二个 success。改由测试「全部子进程都写出结果」后放行释放，去掉时序依赖。
+        while (true) { try { await access(process.env.ZCODE_TEST_LOCK_RELEASE); break; } catch { await delay(10); } }
         await lock.release();
       } catch {
         await appendFile(process.env.ZCODE_TEST_LOCK_RESULTS, "locked " + process.env.ZCODE_TEST_LOCK_CHILD + "\\n");
@@ -126,6 +129,7 @@ describe("DataRootLock", () => {
           ZCODE_TEST_LOCK_BARRIER: barrierFile,
           ZCODE_TEST_LOCK_FILE: lockFile,
           ZCODE_TEST_LOCK_READY: join(readyDir, String(index)),
+          ZCODE_TEST_LOCK_RELEASE: releaseFile,
           ZCODE_TEST_LOCK_RESULTS: resultsFile,
           ZCODE_TEST_LOCK_CHILD: String(index),
         },
@@ -148,10 +152,22 @@ describe("DataRootLock", () => {
       await new Promise<void>((resolve) => setTimeout(resolve, 10));
     }
     await writeFile(barrierFile, "go", "utf8");
+    // 等所有子进程都写出结果（赢家 success、其余 locked）后再放行释放：这样「只有一个 success」
+    // 不再依赖固定持锁时长，慢启动的子进程也不会在释放之后抢到锁。
+    const resultsDeadline = Date.now() + 15_000;
+    while (Date.now() < resultsDeadline) {
+      const lines = (await readFile(resultsFile, "utf8").catch(() => ""))
+        .trim()
+        .split("\n")
+        .filter(Boolean);
+      if (lines.length === children.length) break;
+      await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    }
+    await writeFile(releaseFile, "release", "utf8");
     await Promise.all(children);
     const results = (await readFile(resultsFile, "utf8")).trim().split("\n");
     expect(allChildrenReady).toBe(true);
     expect(results.filter((result) => result.startsWith("success "))).toHaveLength(1);
     expect(results.filter((result) => result.startsWith("locked "))).toHaveLength(7);
-  }, 30_000);
+  }, 60_000);
 });
