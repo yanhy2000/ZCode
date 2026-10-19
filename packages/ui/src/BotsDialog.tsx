@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- BotsDialog 现在保留数据加载、保存和轮询编排；右侧卡片已拆到 BotsDialog/* 子组件，后续再继续下沉状态 hook。 */
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import QRCode from "qrcode";
 import { Bot, Loader2, Plus } from "lucide-react";
 import type {
@@ -84,10 +84,14 @@ function createDraftBot(params: { provider: BotProvider }): BotConfig {
 export function BotsDialog({
   open,
   onOpenChange,
+  workspacePath,
+  workspaceIdentity,
   entryProvider,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  workspacePath: string;
+  workspaceIdentity?: string;
   entryProvider?: BotProvider | null;
 }) {
   const { intl } = useZCodeIntl();
@@ -125,6 +129,17 @@ export function BotsDialog({
   const autoBindCreatingBotIdsRef = useRef(new Set<string>());
   const handledEntryProviderRef = useRef<BotProvider | null>(null);
 
+  // 身份 key 统一为 workspaceIdentity?.trim() || workspacePath（AGENTS.md · Workspace Identity）。
+  const currentWorkspaceId = workspaceIdentity?.trim() || workspacePath;
+  const currentWorkspace = useMemo(
+    () => ({
+      id: currentWorkspaceId,
+      label: workspacePath.split(/[\\/]/u).filter(Boolean).at(-1) ?? workspacePath,
+      workspacePath,
+      workspaceIdentity,
+    }),
+    [currentWorkspaceId, workspaceIdentity, workspacePath],
+  );
   const selectedBot = config.bots.find((bot) => bot.id === selectedBotId) ?? null;
   const selectedBotState = botStates.find((state) => state.botId === selectedBotId) ?? null;
   const selectedBotName =
@@ -228,7 +243,7 @@ export function BotsDialog({
       const [nextConfig, nextStatus, nextWorkspaces, nextBotStates] = await Promise.all([
         botsService.getConfig(),
         botsService.getStatus(),
-        botsService.listWorkspaceRefs(),
+        botsService.listWorkspaceRefs({ currentWorkspace }),
         botsService.getBotStates(),
       ]);
       setConfig(nextConfig);
@@ -244,7 +259,7 @@ export function BotsDialog({
       logger.error("[BotsDialog] 加载 Bots 配置失败", message);
       toast(intl.formatMessage({ id: "bots.loadFailed" }, { error: message }));
     }
-  }, [botsService, creatingBot, intl]);
+  }, [botsService, creatingBot, currentWorkspace, intl]);
 
   useEffect(() => {
     if (
@@ -1222,6 +1237,7 @@ export function BotsDialog({
                   <WorkspaceAccessCard
                     bot={selectedBot}
                     workspaceRefs={workspaceRefs}
+                    currentWorkspace={currentWorkspace}
                     loading={workspaceAccessSaving}
                     onPatchAllowedWorkspaces={patchAllowedWorkspaces}
                     onToggleWorkspaceAccess={toggleWorkspaceAccess}

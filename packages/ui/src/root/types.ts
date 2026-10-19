@@ -23,13 +23,6 @@ export type WebRemoteControlTerminalTransportState =
   | "error";
 
 export interface WebRemoteControlWorkspaceSwitcherApi {
-  /** 账号级设备导航由 Web 入口注入，不通过 workspace bridge/RPC 访问。 */
-  deviceNavigation?: {
-    deviceName?: string;
-    /** 目标电脑平台（darwin / win32 / linux），来自本机记住的设备记录，只用于展示图标。 */
-    devicePlatform?: string;
-    chooseOtherDevice(): void;
-  };
   listWorkspaces(): Promise<WebRemoteControlWorkspaceListResult>;
   openProjectDraft?(request: CreateTaskOptions): Promise<void>;
   onWorkspaceListUpdated?(
@@ -91,6 +84,8 @@ export interface RootProps {
   /** Web 远控跨 workspace 点击任务后的单次移动端落点 */
   initialSidebarFileTreeOpen?: boolean;
   initialWebRemoteControlMobileNavigationIntent?: WebRemoteControlMobileNavigationIntent;
+  /** Web 远控没有可 bridge workspace 时，手机首页预先拿到的 workspace/task 列表 */
+  initialWebRemoteControlWorkspaceList?: WebRemoteControlWorkspaceListResult;
   /** Web 远控手机端 relay terminal transport 状态，用于已进入页面后的轻量恢复提示 */
   webRemoteControlTerminalTransportState?: WebRemoteControlTerminalTransportState;
   /** 手机 Web 远控初始 workspace 注入前继续展示的入口 loading，桌面端不使用 */

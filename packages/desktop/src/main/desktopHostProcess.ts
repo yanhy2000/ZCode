@@ -10,7 +10,6 @@ import {
   type HostCuaOperationStateResponse,
   type HostMcpTelemetryResponse,
   type HostSessionCreateTelemetryResponse,
-  type HostPluginTelemetryResponse,
   type RemoteTarget,
   type TaskRealtimeHostDeliveryKind,
   type WorkspacePurpose,
@@ -22,7 +21,6 @@ import {
   LAUNCH_MARKS_QUERY_KEY,
   RUNTIME_ZCODE_DEBUG,
   serializeLaunchMarks,
-  ZCODE_DESKTOP_CONTEXT_PROMPT_ENABLED_ENV,
 } from "@zcode/shared";
 import type {
   PluginSandboxHandle,
@@ -60,7 +58,6 @@ import {
   unregisterHostAgentProcess,
   unregisterHostProcess,
 } from "./resourceManagerWindow.js";
-import type { RemoteAssetDirs } from "./desktopRuntimeEnv.js";
 import type { TaskRealtimeBus } from "./taskRealtimeBus.js";
 
 export interface WindowBootstrapOptions {
@@ -87,7 +84,6 @@ export interface HostInitMessage {
     workspaceIdentity?: string;
   }>;
   agentSpawnFallbackCwd?: string;
-  remoteAssets?: RemoteAssetDirs;
   /** Main 解析后的 ZCode Built-in Provider Config 路径；Host/Services 不感知 Electron 安装布局。 */
   zcodeBuiltinProviderConfigFilePath: string;
   /** Main 提前异步采集并过滤的本机 runtime 环境；只允许传给 InitLocal。 */
@@ -163,8 +159,6 @@ export function spawnHostProcess(
   initMessage: HostInitMessage,
   dependencies: {
     hostProcessLocalEnv: Record<string, string>;
-    /** Main 进程已完成服务端灰度裁决；Host 只消费这个快照，不自行请求或分桶。 */
-    desktopContextPromptEnabled?: () => boolean;
     logger: {
       info: (...args: unknown[]) => void;
       warn: (...args: unknown[]) => void;
@@ -187,13 +181,33 @@ export function spawnHostProcess(
     onAgentProcessReady?: (event: HostAgentProcessReadyResponse) => void;
     onAgentProcessSpawned?: (event: HostAgentProcessSpawnedResponse) => void;
     onMcpTelemetry?: (event: HostMcpTelemetryResponse) => void;
-    onPluginTelemetry?: (event: HostPluginTelemetryResponse) => void;
     onSessionCreateTelemetry?: (event: HostSessionCreateTelemetryResponse) => void;
     onCuaOperationStateChanged?: (
       source: ElectronUtilityProcess,
       event: HostCuaOperationStateResponse,
     ) => void;
     onCuaOperationStateSourceExited?: (source: ElectronUtilityProcess) => void;
+    handleBotRemoteWorkspaceReconnectRequest?: (params: {
+      win: BrowserWindow;
+      requestId: string;
+      workspacePath: string;
+      workspaceIdentity: string;
+      target: RemoteTarget;
+    }) => Promise<{ ok: boolean; sessionId?: string; error?: string }>;
+    handleBotRemoteWorkspaceConnectionStatusRequest?: (params: {
+      win: BrowserWindow;
+      requestId: string;
+      workspacePath: string;
+      workspaceIdentity: string;
+      target: RemoteTarget;
+    }) => Promise<{ ok: boolean; connected?: boolean; error?: string }>;
+    handleBotRemoteWorkspaceRuntimePortRequest?: (params: {
+      win: BrowserWindow;
+      requestId: string;
+      workspacePath: string;
+      workspaceIdentity: string;
+      target: RemoteTarget;
+    }) => Promise<{ ok: boolean; port?: MessagePortMain; error?: string }>;
     /** host → main：定时任务派发结果，转交给 cron scheduler 结算调度状态机。 */
     onCronRunResult?: (result: {
       runId: string;
@@ -203,20 +217,8 @@ export function spawnHostProcess(
       error?: string;
       failureKind?: "transient" | "permanent";
     }) => void;
-    /** host → main：闲时任务派发结果，转交给 scheduler 结算（与 cron 独立）。 */
-    onOffPeakRunResult?: (result: {
-      offPeakTaskId: string;
-      ok: boolean;
-      lifecycleManaged?: true;
-      conversationId?: string;
-      sessionId?: string;
-      error?: string;
-      failureKind?: "transient" | "permanent";
-    }) => void;
     /** host 中 manual run 落库后请求 main 立即唤醒 scheduler。 */
     onCronSchedulerWakeRequested?: (automationId: string) => void;
-    /** host 中闲时任务翻 schedulable 后请求 main 立即唤醒 scheduler。 */
-    onOffPeakSchedulerWakeRequested?: (offPeakTaskId?: string) => void;
     // browser-use：main 用 WebContentsView+CDP 执行一条命令。实现由宿主注入；缺省则 backend_unavailable。
     handleBrowserExecuteRequest?: (params: {
       win: BrowserWindow;
@@ -262,13 +264,6 @@ export function spawnHostProcess(
       // health-timing out. Env-name mirror of services' LAUNCHER_PID_ENV. Not set on
       // Windows/Linux (CUA is macOS-only; nothing reads it there) to keep the host env pristine.
       ...(process.platform === "darwin" ? { ZCODE_CUA_LAUNCHER_PID: String(process.pid) } : {}),
-      ...(dependencies.desktopContextPromptEnabled
-        ? {
-            [ZCODE_DESKTOP_CONTEXT_PROMPT_ENABLED_ENV]: dependencies.desktopContextPromptEnabled()
-              ? "1"
-              : "0",
-          }
-        : {}),
     },
   });
 
@@ -357,11 +352,6 @@ export function spawnHostProcess(
 
     if (result.data.type === HostResponseTypes.McpTelemetry) {
       dependencies.onMcpTelemetry?.(result.data);
-      return;
-    }
-
-    if (result.data.type === HostResponseTypes.PluginTelemetry) {
-      dependencies.onPluginTelemetry?.(result.data);
       return;
     }
 
@@ -551,26 +541,8 @@ export function spawnHostProcess(
       return;
     }
 
-    if (result.data.type === HostResponseTypes.OffPeakRunResult) {
-      dependencies.onOffPeakRunResult?.({
-        offPeakTaskId: result.data.offPeakTaskId,
-        ok: result.data.ok,
-        lifecycleManaged: result.data.lifecycleManaged,
-        conversationId: result.data.conversationId,
-        sessionId: result.data.sessionId,
-        error: result.data.error,
-        failureKind: result.data.failureKind,
-      });
-      return;
-    }
-
     if (result.data.type === HostResponseTypes.CronSchedulerWakeRequest) {
       dependencies.onCronSchedulerWakeRequested?.(result.data.automationId);
-      return;
-    }
-
-    if (result.data.type === HostResponseTypes.OffPeakSchedulerWakeRequest) {
-      dependencies.onOffPeakSchedulerWakeRequested?.(result.data.offPeakTaskId);
       return;
     }
 
@@ -592,6 +564,139 @@ export function spawnHostProcess(
         workspaceIdentity: result.data.workspaceIdentity,
         runningTaskCount: result.data.runningTaskCount,
       });
+      return;
+    }
+
+    if (result.data.type === HostResponseTypes.BotRemoteWorkspaceReconnectRequest) {
+      const request = result.data;
+      const handler = dependencies.handleBotRemoteWorkspaceReconnectRequest;
+      if (!handler) {
+        child.postMessage({
+          type: HostMessageTypes.BotRemoteWorkspaceReconnectResult,
+          requestId: request.requestId,
+          ok: false,
+          // Bugfix: /reconnect 需要 main 侧 bridge，缺 handler 时返回明确原因，避免继续显示笼统的不可访问。
+          error: "未注入 Bot 远端 workspace 重连处理器。",
+        });
+        return;
+      }
+
+      void handler({
+        win,
+        requestId: request.requestId,
+        workspacePath: request.workspacePath,
+        workspaceIdentity: request.workspaceIdentity,
+        target: request.target,
+      })
+        .then((reconnectResult) => {
+          child.postMessage({
+            type: HostMessageTypes.BotRemoteWorkspaceReconnectResult,
+            requestId: request.requestId,
+            ok: reconnectResult?.ok === true,
+            sessionId: reconnectResult?.sessionId,
+            error: reconnectResult?.error,
+          });
+        })
+        .catch((error) => {
+          child.postMessage({
+            type: HostMessageTypes.BotRemoteWorkspaceReconnectResult,
+            requestId: request.requestId,
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+      return;
+    }
+
+    if (result.data.type === HostResponseTypes.BotRemoteWorkspaceConnectionStatusRequest) {
+      const request = result.data;
+      const handler = dependencies.handleBotRemoteWorkspaceConnectionStatusRequest;
+      if (!handler) {
+        child.postMessage({
+          type: HostMessageTypes.BotRemoteWorkspaceConnectionStatusResult,
+          requestId: request.requestId,
+          ok: false,
+          error: "未注入 Bot 远端 workspace 连接状态处理器。",
+        });
+        return;
+      }
+
+      void handler({
+        win,
+        requestId: request.requestId,
+        workspacePath: request.workspacePath,
+        workspaceIdentity: request.workspaceIdentity,
+        target: request.target,
+      })
+        .then((statusResult) => {
+          child.postMessage({
+            type: HostMessageTypes.BotRemoteWorkspaceConnectionStatusResult,
+            requestId: request.requestId,
+            ok: statusResult?.ok === true,
+            connected: statusResult?.connected,
+            error: statusResult?.error,
+          });
+        })
+        .catch((error) => {
+          child.postMessage({
+            type: HostMessageTypes.BotRemoteWorkspaceConnectionStatusResult,
+            requestId: request.requestId,
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+      return;
+    }
+
+    if (result.data.type === HostResponseTypes.BotRemoteWorkspaceRuntimePortRequest) {
+      const request = result.data;
+      const handler = dependencies.handleBotRemoteWorkspaceRuntimePortRequest;
+      if (!handler) {
+        child.postMessage({
+          type: HostMessageTypes.BotRemoteWorkspaceRuntimePort,
+          requestId: request.requestId,
+          ok: false,
+          // Bugfix: 远端 Bot 不能在缺少 runtime bridge 时回落到本地 ZCode Agent，
+          // 否则会把 remote workspace 的任务写到本地并触发错误模型。
+          error: "未注入 Bot 远端 workspace runtime 处理器。",
+        });
+        return;
+      }
+
+      void handler({
+        win,
+        requestId: request.requestId,
+        workspacePath: request.workspacePath,
+        workspaceIdentity: request.workspaceIdentity,
+        target: request.target,
+      })
+        .then((runtimeResult) => {
+          if (runtimeResult.ok && runtimeResult.port) {
+            child.postMessage(
+              {
+                type: HostMessageTypes.BotRemoteWorkspaceRuntimePort,
+                requestId: request.requestId,
+                ok: true,
+              },
+              [runtimeResult.port],
+            );
+            return;
+          }
+          child.postMessage({
+            type: HostMessageTypes.BotRemoteWorkspaceRuntimePort,
+            requestId: request.requestId,
+            ok: false,
+            error: runtimeResult.error ?? "unknown",
+          });
+        })
+        .catch((error) => {
+          child.postMessage({
+            type: HostMessageTypes.BotRemoteWorkspaceRuntimePort,
+            requestId: request.requestId,
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
       return;
     }
   });

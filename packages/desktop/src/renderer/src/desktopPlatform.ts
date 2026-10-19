@@ -25,6 +25,8 @@ export function createDesktopPlatform(options: {
     // Source 自动重连会替换 logical session；统一由 preload bridge 转发换代事件。
     onRemoteSessionReconnected: (handler) =>
       window.zcode.onRemoteSessionReconnected?.(handler) ?? (() => {}),
+    onBotRemoteWorkspaceReconnected: (handler) =>
+      window.zcode.onBotRemoteWorkspaceReconnected(handler),
     activateOrSetWorkspace: (path) =>
       window.zcode.activateOrSetWorkspace?.(path) ?? Promise.resolve({ activated: false }),
     connectRemote: (remoteOptions, requestId, context) =>
@@ -38,6 +40,8 @@ export function createDesktopPlatform(options: {
       window.zcode.bindRemoteWorkspaceSessionContext?.(context) ??
       Promise.reject(new Error("Desktop bindRemoteWorkspaceSessionContext bridge unavailable")),
     startWebRemoteControl: (context) => window.zcode.startWebRemoteControl(context),
+    refreshWebRemoteControlPairing: (context) =>
+      window.zcode.refreshWebRemoteControlPairing(context),
     stopWebRemoteControl: () => window.zcode.stopWebRemoteControl(),
     getWebRemoteControlStatus: () => window.zcode.getWebRemoteControlStatus(),
     onWebRemoteControlStatusChanged: (handler) =>
@@ -69,8 +73,6 @@ export function createDesktopPlatform(options: {
     startCuaHelperPermissionDrag: window.zcode.startCuaHelperPermissionDrag
       ? () => window.zcode.startCuaHelperPermissionDrag?.()
       : undefined,
-    notifyWebRemoteControlAuthStateChanged: (change) =>
-      window.zcode.notifyWebRemoteControlAuthStateChanged(change),
     registerOAuthState: (payload) => window.zcode.registerOAuthState(payload),
     onOAuthCallback: (callback) => window.zcode.onOAuthCallback(callback),
     onPaymentCallback: (callback) => window.zcode.onPaymentCallback(callback),
@@ -88,6 +90,7 @@ export function createDesktopPlatform(options: {
     syncWindowTabs: (paths) => window.zcode.syncWindowTabs(paths),
     syncWebRemoteControlWorkspaces: (workspaces) =>
       window.zcode.syncWebRemoteControlWorkspaces?.(workspaces),
+    syncWebRemoteControlTasks: (tasks) => window.zcode.syncWebRemoteControlTasks?.(tasks),
     onWebRemoteControlReconnectWorkspace: (handler) =>
       window.zcode.onWebRemoteControlReconnectWorkspace?.(handler) ?? (() => {}),
     syncWindowUnreadCount: (count) => window.zcode.syncWindowUnreadCount(count),

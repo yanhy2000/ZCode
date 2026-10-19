@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getWebRemoteControlHeartbeatDelayMs,
   getWebRemoteControlReconnectJitterMs,
-} from "#src/web-remote-relay/index.js";
+} from "../src/web-remote-control-heartbeat.js";
 
 describe("web remote control heartbeat scheduling", () => {
   it("keeps the production heartbeat delay inside the symmetric jitter window", () => {

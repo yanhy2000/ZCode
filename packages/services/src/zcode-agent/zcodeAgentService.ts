@@ -3,10 +3,6 @@ import {
   type PluginUiToolResultNotification,
 } from "@zcode/shared/mcp-apps";
 import { supportsHistoryFirst } from "./independentPlanSupport.js";
-import {
-  offPeakLifecycleNotificationSchema,
-  type OffPeakLifecycleNotification,
-} from "@zcode/shared";
 import { zcodeMcpUiSamplingResultSchema } from "@zcode/shared";
 import { MCP_APPS_SAMPLING_TRANSPORT_TIMEOUT_MS } from "@zcode/shared/mcp-apps";
 import {
@@ -1180,7 +1176,6 @@ export function createZCodeAgentService(
   const conversationFrameEmitters = new Map<string, Emitter<ConversationTopicWireCandidate>>();
   const localTtftFactsEmitter = new Emitter<{ workspaceKey: string; facts: LocalTtftFacts }>();
   const conversationTelemetryFactEmitters = new Map<string, Emitter<ConversationTelemetryFact>>();
-  const offPeakLifecycleEmitters = new Map<string, Emitter<OffPeakLifecycleNotification>>();
   const pluginUiToolResultEmitter = new Emitter<
     PluginUiToolResultNotification & ZCodeAgentWorkspaceTarget
   >();
@@ -1608,16 +1603,6 @@ export function createZCodeAgentService(
     const created = new Emitter<ConversationTelemetryFact>();
     conversationTelemetryFactEmitters.set(key, created);
     return created;
-  }
-
-  function getOffPeakLifecycleEmitter(workspace: ZCodeAgentWorkspaceTarget) {
-    const key = resolveWorkspaceKey(workspace);
-    let emitter = offPeakLifecycleEmitters.get(key);
-    if (!emitter) {
-      emitter = new Emitter<OffPeakLifecycleNotification>();
-      offPeakLifecycleEmitters.set(key, emitter);
-    }
-    return emitter;
   }
 
   function getSessionsIndexFrameEmitter(workspace: ZCodeAgentWorkspaceTarget) {
@@ -2095,16 +2080,6 @@ export function createZCodeAgentService(
           }
           return;
         }
-        if (message.method === V4_NOTIFICATIONS.offPeakLifecycle) {
-          const parsed = offPeakLifecycleNotificationSchema.safeParse(message.params);
-          if (parsed.success) getOffPeakLifecycleEmitter(workspace).fire(parsed.data);
-          else
-            logger.warn(undefined, "丢弃无效闲时生命周期通知", {
-              workspaceKey: resolveWorkspaceKey(workspace),
-            });
-          return;
-        }
-
         if (message.method === V4_NOTIFICATIONS.pluginUiToolResult) {
           const parsed = pluginUiToolResultNotificationSchema.safeParse(message.params);
           // 只接受当前本地 runtime；旧进程迟到结果和远程客户端不能在本窗口创建 UI。
@@ -3230,8 +3205,6 @@ export function createZCodeAgentService(
       emitter.dispose();
     }
     conversationTelemetryFactEmitters.clear();
-    for (const emitter of offPeakLifecycleEmitters.values()) emitter.dispose();
-    offPeakLifecycleEmitters.clear();
     localTtftFactsEmitter.dispose();
     cuaPermissionObservationEmitter.dispose();
     pluginUiToolResultEmitter.dispose();
@@ -6126,10 +6099,6 @@ export function createZCodeAgentService(
     onDynamicConversationTelemetryFact(params: ZCodeAgentWorkspaceTarget) {
       return getConversationTelemetryFactEmitter(params).event;
     },
-    onDynamicOffPeakLifecycle(params: ZCodeAgentWorkspaceTarget) {
-      return getOffPeakLifecycleEmitter(params).event;
-    },
-
     onDynamicPluginUiToolResult() {
       return pluginUiToolResultEmitter.event;
     },

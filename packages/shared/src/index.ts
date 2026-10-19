@@ -129,6 +129,7 @@ export interface ICredentialStore {
   delete(key: string): Promise<void>;
 }
 
+export * from "./test-ids.js";
 export * from "./test-ids-workflow.js";
 export * from "./channels.js";
 export * from "./storage.js";
@@ -193,6 +194,7 @@ export type {
   BindRemoteWorkspaceSessionContextRequest,
   BindRemoteWorkspaceSessionContextIpcResult,
   BindRemoteWorkspaceSessionContextResult,
+  BotRemoteWorkspaceReconnectedEvent,
   BrowserTabResidencyState,
   BrowserViewCloseTabNotification,
   BrowserViewCloseTabRequest,
@@ -238,6 +240,7 @@ export type {
   EmbeddedBrowserSitePermissionResetRequest,
   EmbeddedBrowserSitePermissionUpdateRequest,
   EmbeddedBrowserSitePermissionsSnapshot,
+  DesktopZoomState,
   IPlatformService,
   OpenInEditorRemoteTarget,
   OpenInEditorOptions,
@@ -251,6 +254,7 @@ export type {
   UpdateCheckResultPayload,
   UpdateStatePayload,
   WSLDistro,
+  WindowControlsOverlayMetrics,
   WindowControlsOverlayReadyPayload,
   ZCodeStdioTapDevState,
 } from "./platform.js";
@@ -308,7 +312,7 @@ export * from "./streaming-tool-input-preview.js";
 export * from "./tool-plan-adapter.js";
 export * from "./permission-request-preview.js";
 export * from "./web-remote-control.js";
-export * from "#src/web-remote-relay/index.js";
+export * from "./web-remote-control-heartbeat.js";
 
 export * from "./web-remote-control-rpc-transport.js";
 export * from "./settings-sync.js";

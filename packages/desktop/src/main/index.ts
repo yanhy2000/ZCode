@@ -52,6 +52,7 @@ import {
 import {
   desktopMenuMessageIds,
   type Locale,
+  appSettingsPatchSchema,
   type AppSettings,
   PlatformChannels,
   ZCODE_ENV,
@@ -72,6 +73,7 @@ import { logger, webRemoteControlRelayLogger } from "./logger.js";
 import { markMainLaunchAppReady } from "./desktopLaunchMarks.js";
 import { createCuaPipFocusRouter, resolveCuaPipWindowKey } from "./cuaPipFocusRouter.js";
 import {
+  acknowledgePostUpdateReleaseNotes,
   getAutoUpdaterState,
   initAutoUpdater,
   onAutoUpdaterStateChanged,
@@ -677,6 +679,7 @@ const upstreamAppVersion = resolveUpstreamVersion(ZCODE_VERSION || app.getVersio
 const readHelpConfig = createDesktopHelpConfigReader({
   appVersion: upstreamAppVersion,
   deviceMid,
+  getClientLanguage: () => currentApplicationLocale,
   resolveEndpointOrigin: resolveCurrentZCodeEndpointOrigin,
 });
 const webRemoteControlAppVersion = upstreamAppVersion;
@@ -871,7 +874,7 @@ function syncCloseToTrayOnWindows(value: unknown) {
   logger.info(`[settings] closeToTrayOnWindows=${value}`);
 }
 
-function syncImmediateAppSettings(patch: Partial<AppSettings>) {
+function syncImmediateAppSettings(patch: ReturnType<typeof appSettingsPatchSchema.parse>) {
   syncCloseToTrayOnWindows(patch.closeToTrayOnWindows);
 
   if (typeof patch.keepAwakeWhileRunning === "boolean") {
@@ -1677,7 +1680,7 @@ function createWindowInstance(startupBootstrap: StartupWindowBootstrap = {}) {
     initialWindowSize: currentDesktopWindowSize,
     currentApplicationLocale: () => currentApplicationLocale,
     resolveBrowserViewOwner: (webContentsId) =>
-      browserGuestManager.getTabOwnerByWebContentsId(webContentsId),
+      browserGuestManager.getTabOwnerByWebContentsId(webContentsId) ?? undefined,
     persistWindowSize: async (state) => {
       currentDesktopWindowSize = state;
       await mainSettingService.update({ desktopWindowSize: state });
@@ -1954,8 +1957,8 @@ app.whenReady().then(async () => {
       }
       return result;
     },
-    updateBrowserGuestViewport: (tabId, viewport, windowId, desktopZoomFactor) =>
-      browserGuestManager.updateViewportFromRenderer(tabId, viewport, windowId, desktopZoomFactor),
+    updateBrowserGuestViewport: (tabId, viewport, windowId) =>
+      browserGuestManager.updateViewportFromRenderer(tabId, viewport, windowId),
     reportBrowserScreenshotSurfaceReady: (windowId, senderWebContentsId, payload) => {
       logger.debug("[browser-screenshot-surface] renderer ready", {
         windowId,
@@ -2035,6 +2038,8 @@ app.whenReady().then(async () => {
       void webRemoteControlManager.restorePreviouslyEnabled(windowId, contexts);
     },
     getUpdateState: getAutoUpdaterState,
+    acknowledgePostUpdateReleaseNotes: (version) =>
+      acknowledgePostUpdateReleaseNotes(version, mainSettingService),
     openUpdateStatusWindow,
     getDesktopSessionActivity: () => ({
       runningAgentSessionCount: getRunningAgentSessionCount(),
@@ -2100,7 +2105,7 @@ app.whenReady().then(async () => {
   });
 
   const protocolUrl = extractDeepLinkUrlFromArgs(process.argv);
-  if (startupDeepLinkConsumptionGate.shouldHandleReadyProtocolUrl(protocolUrl)) {
+  if (protocolUrl && startupDeepLinkConsumptionGate.shouldHandleReadyProtocolUrl(protocolUrl)) {
     handleDeepLink(protocolUrl, logger, {
       confirmationCopy: resolveExternalWorkspaceConfirmationCopy(),
       resolveApplicationWindow: () => getApplicationWindowsExcludingCuaIndicator()[0] ?? null,

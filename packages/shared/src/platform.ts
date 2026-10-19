@@ -15,11 +15,11 @@ import type {
 } from "./mcp.js";
 import type { OAuthStateRegistration } from "./oauth.js";
 import type {
-  WebRemoteControlAuthStateChange,
   WebRemoteControlContext,
   WebRemoteControlReconnectWorkspaceResult,
   WebRemoteControlStartOperationResult,
   WebRemoteControlStatus,
+  WebRemoteControlTaskTarget,
   WebRemoteControlReconnectWorkspaceRequest,
   WebRemoteControlWorkspaceTarget,
 } from "./web-remote-control.js";
@@ -581,6 +581,13 @@ export interface EmbeddedBrowserSitePermissionResetRequest {
   origin: string;
 }
 
+export interface BotRemoteWorkspaceReconnectedEvent {
+  sessionId: string;
+  workspacePath: string;
+  workspaceIdentity: string;
+  target: RemoteTarget;
+}
+
 export interface ConnectRemoteRequest {
   target: RemoteTarget;
   requestId?: string;
@@ -744,6 +751,11 @@ export interface IPlatformService {
   /** 订阅 Source transport 自动重连后的 logical session 换代事件。 */
   onRemoteSessionReconnected?(handler: (event: RemoteSessionReconnectedEvent) => void): () => void;
 
+  /** 订阅 Bot 触发的远程 workspace 重连成功事件，返回 disposer */
+  onBotRemoteWorkspaceReconnected(
+    handler: (event: BotRemoteWorkspaceReconnectedEvent) => void,
+  ): () => void;
+
   /** 检查目录是否已在其他窗口打开；如果是则激活该窗口并切到对应 tab */
   activateOrSetWorkspace(path: string): Promise<{ activated: boolean }>;
 
@@ -787,14 +799,16 @@ export interface IPlatformService {
     context: WebRemoteControlContext,
   ): Promise<WebRemoteControlStartOperationResult>;
 
+  /** 清除旧配对材料并重新生成 Web 远程控制二维码 */
+  refreshWebRemoteControlPairing(
+    context: WebRemoteControlContext,
+  ): Promise<WebRemoteControlStartOperationResult>;
+
   /** 关闭当前窗口已开启的 Web 远程控制能力 */
   stopWebRemoteControl(): Promise<void>;
 
   /** 查询当前窗口 Web 远程控制状态 */
   getWebRemoteControlStatus(): Promise<WebRemoteControlStatus>;
-
-  /** 桌面 OAuth 会话通知；main 独立重读凭据后决定是否恢复远控。 */
-  notifyWebRemoteControlAuthStateChanged?(change: WebRemoteControlAuthStateChange): void;
 
   /** 订阅当前窗口 Web 远程控制状态变化；旧平台可不实现，UI 会保留轮询兜底 */
   onWebRemoteControlStatusChanged?(handler: (status: WebRemoteControlStatus) => void): () => void;
@@ -914,6 +928,9 @@ export interface IPlatformService {
 
   /** 同步当前窗口里 Web 远程控制允许切换的 workspace；Web fallback 可忽略 */
   syncWebRemoteControlWorkspaces?(workspaces: WebRemoteControlWorkspaceTarget[]): void;
+
+  /** 同步当前窗口里 Web 远程控制可展示的 task 快照；Web fallback 可忽略 */
+  syncWebRemoteControlTasks?(tasks: WebRemoteControlTaskTarget[]): void;
 
   /** 注册 Web 远程控制手机端请求重连 workspace 的回调，返回 disposer */
   onWebRemoteControlReconnectWorkspace?(

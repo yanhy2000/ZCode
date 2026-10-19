@@ -55,7 +55,6 @@ export function createWindow(options: {
   agentWarmupTargets?: readonly StartupWorkspaceWarmupTarget[];
   agentSpawnFallbackCwd: string;
   deviceMid: string;
-  remoteAssets?: RemoteAssetDirs;
   initialDesktopZoomLevel?: number;
   initialWindowSize?: DesktopWindowSize;
   currentApplicationLocale?: () => Locale;
@@ -196,7 +195,6 @@ export function createWindow(options: {
         // 同一窗口会后台索引所有已恢复 workspace，不只索引启动时的 active workspace。
         // fallback 必须跟随 local Host 生命周期常驻，否则非 active 历史目录被删除后会用失效 cwd 反复 spawn。
         agentSpawnFallbackCwd: options.agentSpawnFallbackCwd,
-        remoteAssets: options.remoteAssets,
         // Host 的 X-Client-Language 以 Main 的实时界面语言为准；与后续变更消息同端口按序到达。
         ...(options.currentApplicationLocale ? { locale: options.currentApplicationLocale() } : {}),
       });

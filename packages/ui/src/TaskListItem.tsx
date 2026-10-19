@@ -1,17 +1,8 @@
 import { RemoteTaskDeviceLabel } from "@/remote-connection/RemoteTaskDeviceLabel.js";
 /* eslint-disable max-lines -- task item 同时承载默认列表和 timeline 两行布局的共享交互，先保持动作链路集中避免归档/置顶回归。 */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Archive,
-  Clock,
-  CloudUpload,
-  LoaderIcon,
-  ListTree,
-  Moon,
-  Pin,
-  Smartphone,
-} from "lucide-react";
-import { isCronTask, isOffPeakTask, type ZCodeTaskMeta } from "@zcode/shared";
+import { Archive, Clock, CloudUpload, ListTree, LoaderIcon, Pin, Smartphone } from "lucide-react";
+import { isCronTask, type ZCodeTaskMeta } from "@zcode/shared";
 import { TID_TASK_ARCHIVE, TID_TASK_ITEM, testId } from "@zcode/shared/test-ids";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
@@ -47,7 +38,6 @@ import { TaskTitleOverflowText } from "@/components/TaskTitleOverflowText.js";
 import { createTaskWorkbenchDragPreview } from "@/lib/taskWorkbenchDragPreview.js";
 import { resolveTaskSourceLabel } from "@/lib/taskSourceAttribution.js";
 import { logger } from "@/logger.js";
-import { runUserAction, runUserActionAsync } from "@/lib/userActionTelemetry.js";
 import { TaskRowActionButton } from "@/workspace-grouped-tasks/task-row-action-button.js";
 import { TaskWorkflowRunLines } from "@/components/workflow-run-line/TaskWorkflowRunLines.js";
 
@@ -270,12 +260,7 @@ export const MemoTaskItem = memo(function TaskListItem({
       id: task.forkedFromTaskId ? "taskList.forkedUntitled" : "taskList.untitled",
     });
   const handleSelect = useCallback(() => {
-    runUserAction({
-      input: { featureId: "task.lifecycle", action: "open", trigger: "button" },
-      operation: () => onSelectTask(task.taskId),
-      completed: { resultSource: "optimistic_projection" },
-      failureStage: "task_open",
-    });
+    (() => onSelectTask(task.taskId))();
   }, [onSelectTask, task.taskId]);
   const handleDragStart = useCallback(
     (event: React.DragEvent<HTMLLIElement>) => {
@@ -328,6 +313,23 @@ export const MemoTaskItem = memo(function TaskListItem({
   const handleContextMenu = useCallback(() => {
     onOpenTaskContextMenu?.(task.taskId);
   }, [onOpenTaskContextMenu, task.taskId]);
+  const handleOpenFileTree = useCallback(
+    (event: React.MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (workspaceActionsDisabled) {
+        return;
+      }
+      const result = onOpenFileTree?.();
+      if (result) {
+        void result.catch((cause) => {
+          logger.error("[task-list] 查看文件失败", cause);
+          toast(String(cause));
+        });
+      }
+    },
+    [onOpenFileTree, workspaceActionsDisabled],
+  );
   const handleArchive = useCallback(
     (event: React.MouseEvent) => {
       if (workspaceActionsDisabled) {
@@ -335,12 +337,7 @@ export const MemoTaskItem = memo(function TaskListItem({
         event.stopPropagation();
         return;
       }
-      runUserAction({
-        input: { featureId: "task.lifecycle", action: "archive", trigger: "button" },
-        operation: () => onArchiveTaskInline(event, task.taskId),
-        completed: { resultSource: "optimistic_projection" },
-        failureStage: "task_archive",
-      });
+      (() => onArchiveTaskInline(event, task.taskId))();
     },
     [onArchiveTaskInline, task.taskId, workspaceActionsDisabled],
   );
@@ -369,10 +366,7 @@ export const MemoTaskItem = memo(function TaskListItem({
     [task, taskActivity],
   );
   const isTaskCron = isCronTask(task);
-  // 月亮身份改为持久 meta 标记判断；off-peak store 反查在任务被删除后会丢失
-  // 会话溯源，且让每一行多背一个全局 store 订阅。
-  const isTaskOffPeak = isOffPeakTask(task);
-  // Bugfix: 手机远控标记和置顶状态共用左侧 leading 槽。
+  // 手机远控标记和置顶状态共用左侧 leading 槽。
   // 已置顶任务如果继续常显 Pin，会和绝对定位的手机图标重叠；手机激活态默认让手机图标优先，hover 时再显示 Pin 操作。
   const showPinnedState = isPinned && leadingIndicator === "none" && !isMobileActive;
   // 修复原因：手机会在 click 前合成 mouseenter/focus；此时切换内容会让首次点击只进入 hover。
@@ -479,9 +473,12 @@ export const MemoTaskItem = memo(function TaskListItem({
       )}
     </div>
   ) : null;
-  // 原因：置顶任务常跨项目，查看文件必须保留独立入口；复用共享 action，避免点击选择任务。
+  // 远端 task 的 session 未就绪时 resolver 会拒绝打开；渲染层同步隐藏入口，
+  // 避免展示一个点击后无反馈的按钮。本地 task 不依赖已打开 tab，仍可直接按路径打开。
+  const canOpenFileTree =
+    Boolean(onOpenFileTree) && (!task.workspaceIdentity?.trim() || Boolean(remoteSessionId));
   const fileTreeActionNode =
-    onOpenFileTree &&
+    canOpenFileTree &&
     !workspaceActionsDisabled &&
     !hasPendingInteraction &&
     (shouldMountWorkspaceTaskActions || isMobileActive) ? (
@@ -489,19 +486,7 @@ export const MemoTaskItem = memo(function TaskListItem({
         label={intl.formatMessage({ id: "git.action.showTree" })}
         showTooltip
         testId={`task-files-${task.taskId}`}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          void runUserActionAsync({
-            input: { featureId: "workbench.file", action: "open_tree", trigger: "button" },
-            operation: async () => onOpenFileTree?.(),
-            completed: { resultSource: "local_commit" },
-            failureStage: "file_tree_open",
-          }).catch((cause) => {
-            logger.error("[task-list] 查看文件失败", cause);
-            toast(String(cause));
-          });
-        }}
+        onClick={handleOpenFileTree}
       >
         <ListTree className="size-3.5" />
       </TaskRowActionButton>
@@ -706,14 +691,6 @@ export const MemoTaskItem = memo(function TaskListItem({
                       })}
                       className="size-3.5 shrink-0"
                     />
-                  ) : isTaskOffPeak ? (
-                    <Moon
-                      data-off-peak-task-icon="true"
-                      aria-label={intl.formatMessage({
-                        id: "taskList.offPeakTaskLabel",
-                      })}
-                      className="size-3.5 shrink-0"
-                    />
                   ) : null}
                   <span className="mr-1">{taskTimeLabel}</span>
                 </span>
@@ -799,12 +776,6 @@ export const MemoTaskItem = memo(function TaskListItem({
                     aria-label={intl.formatMessage({
                       id: "taskList.cronTaskLabel",
                     })}
-                    className="size-3.5 shrink-0"
-                  />
-                ) : isTaskOffPeak ? (
-                  <Moon
-                    data-off-peak-task-icon="true"
-                    aria-label={intl.formatMessage({ id: "taskList.offPeakTaskLabel" })}
                     className="size-3.5 shrink-0"
                   />
                 ) : null}

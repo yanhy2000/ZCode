@@ -221,6 +221,8 @@ export function createRemoteWorkspaceSessionManager(options: {
   const pendingWorkspaceBindsByRequestKey = new Map<string, PendingWorkspaceBind>();
   const workspaceContextBindFlightsBySessionId = new Map<string, WorkspaceContextBindFlight>();
   const routesBySessionId = new Map<string, RemoteAttachmentRoute>();
+  // fork 保留：Bot 触发的远端 workspace 重连按 webContents+identity 去重。
+  const reconnectsByWorkspaceKey = new Map<string, Promise<string>>();
   const listenedHosts = new WeakSet<ElectronUtilityProcess>();
   const workspaceBindReadyTimeoutMs = options.workspaceBindReadyTimeoutMs ?? 30_000;
   const pendingProviderProvisioningExecutions = new Map<
@@ -1578,9 +1580,68 @@ export function createRemoteWorkspaceSessionManager(options: {
     });
   }
 
+  // fork 保留：bot 服务跑在本地窗口 host 内，/reconnect 需要 main 侧创建/复用远端 session。
+  function reconnectBotRemoteWorkspaceSession(
+    win: BrowserWindow,
+    params: {
+      target: RemoteTarget;
+      workspacePath: string;
+      workspaceIdentity: string;
+      requestId?: string;
+    },
+  ): Promise<string> {
+    const existing = Array.from(routesBySessionId.entries()).find(([, route]) => {
+      return (
+        route.webContentsId === win.webContents.id &&
+        route.attachmentState === "attachable" &&
+        route.descriptor.workspacePath === params.workspacePath &&
+        route.descriptor.workspaceIdentity === params.workspaceIdentity &&
+        isSameRemoteTarget(route.descriptor.target, params.target)
+      );
+    });
+    if (existing) return Promise.resolve(existing[0]);
+    const key = `${win.webContents.id}\0${params.workspaceIdentity}`;
+    const pending = reconnectsByWorkspaceKey.get(key);
+    if (pending) return pending;
+    const reconnect = createRemoteWorkspaceSession(win, params.target, params.requestId, params);
+    reconnectsByWorkspaceKey.set(key, reconnect);
+    void reconnect.finally(() => {
+      if (reconnectsByWorkspaceKey.get(key) === reconnect) reconnectsByWorkspaceKey.delete(key);
+    });
+    return reconnect;
+  }
+
+  async function createBotRemoteWorkspaceRuntimePort(
+    win: BrowserWindow,
+    params: { target: RemoteTarget; workspacePath: string; workspaceIdentity: string },
+    _requestId?: string,
+  ): Promise<MessagePortMain> {
+    const routeEntry = Array.from(routesBySessionId.entries()).find(([, route]) => {
+      return (
+        route.webContentsId === win.webContents.id &&
+        route.attachmentState === "attachable" &&
+        route.descriptor.workspacePath === params.workspacePath &&
+        route.descriptor.workspaceIdentity === params.workspaceIdentity &&
+        isSameRemoteTarget(route.descriptor.target, params.target)
+      );
+    });
+    if (!routeEntry) {
+      throw new Error("未找到可供 Bot attachment 的远程 logical session");
+    }
+    return attachRemoteWorkspaceSessionHost({
+      windowId: win.id,
+      remoteSessionId: routeEntry[0],
+      workspacePath: params.workspacePath,
+      workspaceIdentity: params.workspaceIdentity,
+      workspaceKey: params.workspaceIdentity,
+      clientMode: "web-remote-replayable",
+    }).port;
+  }
   return {
     prepareProjectWorkspace,
     createRemoteWorkspaceSession,
+    reconnectBotRemoteWorkspaceSession,
+    createBotRemoteWorkspaceRuntimePort,
     attachRemoteWorkspaceSessionHost,
     bindRemoteWorkspaceSessionContext,
     confirmRendererAttachmentReady,

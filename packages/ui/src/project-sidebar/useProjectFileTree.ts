@@ -61,7 +61,9 @@ export function useProjectFileTree(
       ) {
         await props.webRemoteControlWorkspaceSwitcher.switchWorkspace(key, {
           taskHostId: task.hostId,
-          fileTreeTaskId: task.taskId,
+          taskId: task.taskId,
+          resolveTaskDirectoryOnly: true,
+          openFileManager: true,
           mobileNavigationIntent: "chat",
         });
         // 跨 workspace 由新 Root 消费文件请求，旧页面不能再次创建标签。

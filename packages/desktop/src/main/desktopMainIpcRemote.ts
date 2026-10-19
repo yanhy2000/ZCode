@@ -180,18 +180,19 @@ export function registerRemoteIpcHandlers(options: {
     warn: (...args: unknown[]) => void;
     error: (...args: unknown[]) => void;
   };
-  appTelemetryRuntime: {
+  // fork 裁剪：桌面端不再初始化账号/ARMS 遥测运行时，调用方可以不提供。
+  appTelemetryRuntime?: {
     onRendererReady(payload: { hasPendingOAuthCallback: boolean; rendererId: number }): void;
     syncRendererContext(payload: { rendererId: number; context: unknown }): void;
     onOAuthCallbackHandled(payload: { rendererId: number }): void;
   };
   /** OAuth 回调处理完成后的额外副作用（如刷新 ARMS user.id）；不影响既有 runtime 流程 */
   onOAuthCallbackHandledSideEffect?: () => void;
-  appTelemetryCore: {
+  appTelemetryCore?: {
     reportEvent(payload: unknown): Promise<void>;
   };
-  reportRemoteUsageEvent: (rendererId: number, event: TelemetryEventPayload) => void;
-  armsCustomContext: {
+  reportRemoteUsageEvent?: (rendererId: number, event: TelemetryEventPayload) => void;
+  armsCustomContext?: {
     deviceMid: string;
     platform: NodeJS.Platform;
     appVersion: string;
@@ -214,7 +215,7 @@ export function registerRemoteIpcHandlers(options: {
       onConnected?: (descriptor: WindowHostRemoteWorkspaceDescriptor) => void;
     },
   ) => Promise<string>;
-  getRemoteConnectionStats: () => RemoteConnectionStats;
+  getRemoteConnectionStats?: () => RemoteConnectionStats;
   disposeRemoteWorkspaceSession: (
     sessionId: string,
     reason: string,
@@ -246,7 +247,7 @@ export function registerRemoteIpcHandlers(options: {
 }) {
   function reportRemoteUsageEvent(rendererId: number, event: TelemetryEventPayload): void {
     try {
-      options.reportRemoteUsageEvent(rendererId, event);
+      options.reportRemoteUsageEvent?.(rendererId, event);
     } catch (error) {
       // 埋点是旁路能力，不能把已成功的远程连接改写成业务失败。
       options.logger.warn("[remote-usage-telemetry] dispatch failed", {
@@ -260,14 +261,17 @@ export function registerRemoteIpcHandlers(options: {
     ? enableSharedFinalArmsCustomEventE2EController()
     : null;
 
-  configureRemoteUsageArmsTelemetry({
-    armsCustomContext: options.armsCustomContext,
-    getRemoteConnectionStats: options.getRemoteConnectionStats,
-    sendCustom: (payload) =>
-      armsRum.sendCustom(payload as Parameters<typeof armsRum.sendCustom>[0]),
-    e2eController: finalArmsCustomEventE2E,
-    logger: options.logger,
-  });
+  // fork 裁剪：未提供 ARMS 上下文时完全不初始化远端用量遥测。
+  if (options.armsCustomContext && options.getRemoteConnectionStats) {
+    configureRemoteUsageArmsTelemetry({
+      armsCustomContext: options.armsCustomContext,
+      getRemoteConnectionStats: options.getRemoteConnectionStats,
+      sendCustom: (payload) =>
+        armsRum.sendCustom(payload as Parameters<typeof armsRum.sendCustom>[0]),
+      e2eController: finalArmsCustomEventE2E,
+      logger: options.logger,
+    });
+  }
 
   function reportRemoteConnectResultToArmsSafely(
     params: Parameters<typeof reportRemoteConnectResultToArms>[0],
@@ -374,14 +378,14 @@ export function registerRemoteIpcHandlers(options: {
 
   ipcMain.on(PlatformChannels.RendererReady, (event) => {
     const hasPendingOAuthCallback = deliverPendingDeepLink(event.sender);
-    options.appTelemetryRuntime.onRendererReady({
+    options.appTelemetryRuntime?.onRendererReady({
       hasPendingOAuthCallback,
       rendererId: event.sender.id,
     });
   });
 
   ipcMain.on(PlatformChannels.SyncTelemetryContext, (event, context) => {
-    options.appTelemetryRuntime.syncRendererContext({
+    options.appTelemetryRuntime?.syncRendererContext({
       rendererId: event.sender.id,
       context,
     });
@@ -397,7 +401,7 @@ export function registerRemoteIpcHandlers(options: {
       return;
     }
 
-    await options.appTelemetryCore.reportEvent(result.data);
+    await options.appTelemetryCore?.reportEvent(result.data);
   });
 
   ipcMain.handle(PlatformChannels.ReportArmsCustomEvent, async (event, payload: unknown) => {
@@ -410,11 +414,12 @@ export function registerRemoteIpcHandlers(options: {
       return;
     }
 
+    if (!options.armsCustomContext) return;
     try {
       dispatchFinalArmsCustomEvent({
         payload: result.data,
         context: {
-          ...options.armsCustomContext,
+          ...(options.armsCustomContext ?? {}),
           rendererId: event.sender.id,
         },
         e2eController: finalArmsCustomEventE2E,
@@ -432,7 +437,7 @@ export function registerRemoteIpcHandlers(options: {
   });
 
   ipcMain.on(PlatformChannels.OAuthCallbackHandled, (event) => {
-    options.appTelemetryRuntime.onOAuthCallbackHandled({
+    options.appTelemetryRuntime?.onOAuthCallbackHandled({
       rendererId: event.sender.id,
     });
     options.onOAuthCallbackHandledSideEffect?.();

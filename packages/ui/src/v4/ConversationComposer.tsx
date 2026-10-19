@@ -32,10 +32,7 @@ import {
   type ReactNode,
 } from "react";
 import { cn } from "@/components/lib/utils.js";
-import { HighspeedComposerBackground } from "@/highspeed/HighspeedActivationVisual.js";
-import { useHighspeedComposerEntrance } from "@/highspeed/useHighspeedComposerEntrance.js";
 import {
-  type HighspeedCardSnapshot,
   type PlanIdentitySnapshot,
   type ZCodeProvider,
 } from "@zcode/shared";
@@ -104,7 +101,6 @@ import { advanceComposerDraftRevision } from "@/v4/composer/composerDraftRevisio
 import type { AppSlashCommand } from "@/slashCommandHelpers.js";
 import { useOptionalServices } from "@/hooks/useServices.js";
 import { logger } from "@/logger.js";
-import { runUserAction, startUserAction } from "@/lib/userActionTelemetry.js";
 import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
 import type { ComposerMentionPrefill } from "@/store/zcodeSessionStoreTypes.js";
 import { FileDisplayIcon, resolveFileDisplayDescriptor } from "@/lib/fileDisplay.js";
@@ -428,14 +424,6 @@ export interface ConversationComposerProps {
   blockingRequestId?: string | null;
   disabled?: boolean;
   onRetryInitialization?: () => void;
-  /** 当前 Task 可用的 Highspeed 卡；只影响静态标识和模型锁定。 */
-  highspeedCard?: HighspeedCardSnapshot | null;
-  /**
-   * 发送路径 draw 新命中登记的一次性激活请求（值为 cardId）。
-   * 命中当前卡时才播放激活动效，composer 锁定入场方式后经回调消费；切回、恢复与重挂载不重播。
-   */
-  highspeedActivationCardId?: string | null;
-  onHighspeedActivationApplied?: (cardId: string) => void;
   /**
    * 是否在新建任务 / 切换会话 / 挂载后自动把光标聚焦到输入框（默认开）。
    * 竖切多 pane 时由宿主传入 SessionPane.focused，仅焦点 pane 聚焦、后台 pane 不抢焦点。
@@ -502,7 +490,6 @@ export interface ConversationComposerProps {
   onDismissError?: () => void;
   /** 无可用模型横幅的恢复动作；由 SessionPane 注入壳层导航，组件不直接操作 tab。 */
   onOpenModelSettings?: () => void;
-  onOpenModelUpgrade?: () => void;
   modelConfigTarget?: ChatErrorBannerModelConfigTarget;
   onOpenCodeViewer?: (source: CodeViewerSource) => void;
   /**
@@ -553,9 +540,6 @@ function ConversationComposerImpl({
   blockingRequestId = null,
   disabled: disabledProp = false,
   onRetryInitialization,
-  highspeedCard = null,
-  highspeedActivationCardId = null,
-  onHighspeedActivationApplied,
   autoFocusEnabled = true,
   isWebRemoteControl = false,
   workspacePath,
@@ -564,7 +548,6 @@ function ConversationComposerImpl({
   modelSelectionView = null,
   modelSelectionState = MODEL_SELECTION_LOADING_STATE,
   modelSelectionReload,
-  modelSelectionRefresh,
   attachmentSessionId = null,
   attachmentPut,
   onRuntimeRestart,
@@ -587,7 +570,6 @@ function ConversationComposerImpl({
   error,
   onDismissError,
   onOpenModelSettings,
-  onOpenModelUpgrade,
   modelConfigTarget = "local",
   onOpenCodeViewer,
   listenAddToChatEvents = true,
@@ -631,32 +613,6 @@ function ConversationComposerImpl({
   const configPickerScopeKey = `${workspaceKey}\0${draftScopeId}`;
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
-  const [presentedHighspeedCardId, setPresentedHighspeedCardId] = useState<string | null>(null);
-  const [highspeedSweepActive, setHighspeedSweepActive] = useState(false);
-  const highspeedCardId = highspeedCard?.cardId ?? null;
-  const highspeedEntrance = useHighspeedComposerEntrance({
-    cardId: highspeedCardId,
-    activationCardId: highspeedActivationCardId,
-    onActivationApplied: onHighspeedActivationApplied,
-  });
-  const highspeedEntranceAnimated = highspeedEntrance === "activation";
-  // 恢复入场（切回 Task、快照恢复、重挂载）不经扩散交接，卡片出现即呈现模型与倒计时。
-  const highspeedPresented =
-    highspeedCardId !== null &&
-    (!highspeedEntranceAnimated || presentedHighspeedCardId === highspeedCardId);
-  const handleHighspeedModelTransitionStart = useCallback(() => {
-    // 只记录已完成视觉交接的卡片身份，不改变卡片有效性或发送状态。
-    setPresentedHighspeedCardId(highspeedCardId);
-  }, [highspeedCardId]);
-  useEffect(() => {
-    // 扫光属于激活动效，只在 draw 新命中的交接后播放一次。
-    if (!highspeedPresented || !highspeedEntranceAnimated) {
-      setHighspeedSweepActive(false);
-      return;
-    }
-    const timer = window.setTimeout(() => setHighspeedSweepActive(true), 1_900);
-    return () => window.clearTimeout(timer);
-  }, [highspeedEntranceAnimated, highspeedPresented]);
   const [configPickerState, setConfigPickerState] = useState<{
     scopeKey: string;
     activePicker: V4ComposerConfigPicker | null;
@@ -1379,12 +1335,6 @@ function ConversationComposerImpl({
       ) {
         return;
       }
-      const sendAction = startUserAction({
-        featureId: "conversation.composer.message",
-        action: "send",
-        trigger: sendTriggerRef.current === "button" ? "button" : "shortcut",
-        workspaceKind: workspaceIdentity?.trim() ? "remote" : "local",
-      });
       pendingRef.current = true;
       setPending(true);
       // Bug 根因：草稿 intent 只保存用户显式改动，正常继承模型位于冻结初始化 config。
@@ -1552,7 +1502,6 @@ function ConversationComposerImpl({
             status: "fail",
             reasonCode: "attachment_not_ready",
           });
-          sendAction.fail({ failureStage: "attachment_not_ready" });
           return;
         }
         // 外部上下文不走协议附件；按 selection -> code comment -> web -> PPTX 的固定尾块顺序
@@ -1648,7 +1597,6 @@ function ConversationComposerImpl({
             status: "fail",
             reasonCode: "blocked",
           });
-          sendAction.reject({ resultSource: "authority_ack", admissionResult: "rejected" });
           return;
         }
         if (sendResult === "confirmationRequired") {
@@ -1666,14 +1614,12 @@ function ConversationComposerImpl({
             queueItemIds:
               latestQueueItemIds.length > 0 ? latestQueueItemIds : submittedQueueItemIds,
           });
-          sendAction.noop();
           return;
         }
         setHeldQueueConfirmation(null);
         // 发送成功或 ACK 丢失后由权威 projection 结算：清本次提交捕获的内容，
         // prompt history 已在真实发送前同步写盘，避免首发 promote 丢失或误清新 scope。
         await settleSubmittedContent();
-        sendAction.complete({ resultSource: "authority_ack", admissionResult: "accepted" });
       } catch (error) {
         rollbackPromptHistory();
         // 权威 ACK/投影可能在 Promise 失败回调前先到达；清理已开始时不能再把旧草稿恢复回来。
@@ -1689,7 +1635,6 @@ function ConversationComposerImpl({
           status: "fail",
           reasonCode: "composer_error",
         });
-        sendAction.fail({ failureStage: "composer_send" });
       } finally {
         pendingRef.current = false;
         setPending(false);
@@ -1809,12 +1754,7 @@ function ConversationComposerImpl({
   }, [heldQueueConfirmation, submit]);
 
   const handleStopClick = useCallback(() => {
-    runUserAction({
-      input: { featureId: "conversation.composer.message", action: "stop", trigger: "button" },
-      operation: onStop,
-      completed: { resultSource: "optimistic_projection" },
-      failureStage: "stop_generation",
-    });
+    onStop();
   }, [onStop]);
 
   // 发送键是 type="submit"，与 Enter 共用 handleEditorSubmit；DOM 事件顺序保证 click 早于
@@ -1905,17 +1845,7 @@ function ConversationComposerImpl({
     () => ({
       label: intl.formatMessage({ id: "chat.composer.attachment" }),
       menuItemTestId: TID_CHAT_ATTACHMENT_MENU_ITEM,
-      onSelect: () =>
-        runUserAction({
-          input: {
-            featureId: "conversation.composer.attachment",
-            action: "add",
-            trigger: "button",
-          },
-          operation: attachmentsApi.openAttachmentPicker,
-          completed: { resultSource: "local_commit" },
-          failureStage: "attachment_picker",
-        }),
+      onSelect: () => attachmentsApi.openAttachmentPicker(),
       testId: TID_CHAT_ATTACHMENT_BUTTON,
     }),
     [intl, attachmentsApi.openAttachmentPicker],
@@ -2299,25 +2229,8 @@ function ConversationComposerImpl({
   const composerUsage = snapshot?.usage ?? null;
   const composerPhase = snapshot?.control.phase ?? null;
   const handleSelectModelTrace = useCallback(
-    (
-      nextProvider: string,
-      nextModel: string,
-      sourceModel: ModelSelectionSource | null,
-      reasoningLevel?: string,
-    ) =>
-      runUserAction({
-        input: {
-          featureId: "conversation.composer.config",
-          action: "change_model",
-          trigger: "select",
-        },
-        operation: () =>
-          reasoningLevel === undefined
-            ? onSelectModel(nextProvider, nextModel, sourceModel)
-            : onSelectModel(nextProvider, nextModel, sourceModel, reasoningLevel),
-        completed: { resultSource: "optimistic_projection" },
-        failureStage: "model_change",
-      }),
+    (nextProvider: string, nextModel: string, sourceModel: ModelSelectionSource | null) =>
+      (() => onSelectModel(nextProvider, nextModel, sourceModel))(),
     [onSelectModel],
   );
   const submitControlNode = useMemo(
@@ -2339,7 +2252,6 @@ function ConversationComposerImpl({
               modelSelectionView={modelSelectionView}
               modelSelectionState={modelSelectionState}
               modelSelectionReload={modelSelectionReload}
-              modelSelectionRefresh={modelSelectionRefresh}
               sessionId={sessionId ?? null}
               phase={composerPhase}
               provider={provider}
@@ -2349,12 +2261,6 @@ function ConversationComposerImpl({
               draftConfig={draftConfig}
               usage={composerUsage}
               disabled={disabled || runtimeBlocked}
-              modelLocked={highspeedCard !== null}
-              highspeedPresented={highspeedPresented}
-              highspeedEntranceAnimated={highspeedEntranceAnimated}
-              highspeedSweepActive={highspeedSweepActive}
-              highspeedExpiresAt={highspeedCard?.expiresAt}
-              highspeedModel={highspeedCard?.model}
               activeConfigPicker={activeConfigPicker}
               onConfigPickerOpenChange={handleConfigPickerOpenChange}
               onSelectModel={handleSelectModelTrace}
@@ -2414,15 +2320,10 @@ function ConversationComposerImpl({
       handleStopClick,
       handleSendButtonClick,
       handleConfigPickerOpenChange,
-      highspeedCard,
-      highspeedEntranceAnimated,
-      highspeedPresented,
-      highspeedSweepActive,
       isWebRemoteControl,
       mode,
       handleSelectModelTrace,
       modelSelectionReload,
-      modelSelectionRefresh,
       modelSelectionState,
       modelSelectionView,
       onSelectThought,
@@ -2552,7 +2453,6 @@ function ConversationComposerImpl({
             }
             onDismiss={onDismissError}
             onOpenModelSettings={onOpenModelSettings}
-            onOpenUpgrade={onOpenModelUpgrade}
             modelConfigTarget={modelConfigTarget}
           />
         </div>
@@ -2582,22 +2482,11 @@ function ConversationComposerImpl({
         </div>
       ) : null}
       <div
-        data-highspeed-composer={highspeedCard ? "true" : undefined}
-        data-highspeed-entrance={highspeedCard ? highspeedEntrance : undefined}
         className={cn(
           "chat-composer-input-surface relative w-full",
           contextHeader && "rounded-2xl bg-surface shadow-xl/5",
-          highspeedCard && "highspeed-composer-surface",
-          highspeedPresented && "highspeed-placeholder-presented",
         )}
       >
-        {highspeedCard ? (
-          <HighspeedComposerBackground
-            key={highspeedCard.cardId}
-            animated={highspeedEntranceAnimated}
-            onModelTransitionStart={handleHighspeedModelTransitionStart}
-          />
-        ) : null}
         {contextHeader ? (
           // 旧 ChatViewComposer contextHeaderContent 同款包装（workspace 菜单 + Git 分支）。
           <div className="relative z-10 p-1.5 flex min-w-0 flex-wrap items-center gap-0">
@@ -2663,11 +2552,6 @@ function ConversationComposerImpl({
           leadingActions={leadingActionsNode}
           submitControl={submitControlNode}
           className="p-0"
-          shellClassName={
-            highspeedCard
-              ? "relative z-10 !rounded-none !border-0 !bg-transparent !transition-none hover:!border-transparent focus-within:!border-transparent focus-within:!bg-transparent"
-              : undefined
-          }
           onChange={handleEditorChange}
           onFocus={handleEditorFocus}
           onSubmit={handleEditorSubmit}

@@ -12,7 +12,7 @@ import {
   createWebRemoteControlAppPayloadRequester,
   createWebRemoteControlRelayRequestRecovery,
   type WebRemoteControlTerminalTransportState,
-} from "#src/web-remote-control/index.js";
+} from "../src/webRemoteControlTransport.js";
 
 const servers: WebSocketServer[] = [];
 const serverSockets = new Map<WebSocketServer, Set<import("ws").WebSocket>>();
@@ -165,6 +165,9 @@ describe("WebRemoteControlTerminalTransport", () => {
     const states: WebRemoteControlTerminalTransportState[] = [];
     const relay = await createRelayServer(({ message, socket }) => {
       if (message.type === "auth_init") {
+        socket.send(JSON.stringify({ type: "auth_challenge", nonce: "nonce-1" }));
+      }
+      if (message.type === "auth_response") {
         socket.send(
           JSON.stringify({ type: "auth_ack", device_sid: "sid-1", pair_status: "matched" }),
         );
@@ -173,9 +176,10 @@ describe("WebRemoteControlTerminalTransport", () => {
     const transport = new WebRemoteControlTerminalTransport({
       relayWsUrl: relay.url,
       deviceSid: "sid-1",
+      passHash: "hash-1",
       deviceMid: "mid-1",
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
-      getToken: async () => "token-1",
+      authProvider: { calculateProof: async () => "proof" },
       onPayload: () => {},
       onStateChange: (state) => states.push(state),
       onFailure: () => {},
@@ -228,6 +232,9 @@ describe("WebRemoteControlTerminalTransport", () => {
     );
     const relay = await createRelayServer(({ message, socket }) => {
       if (message.type === "auth_init") {
+        socket.send(JSON.stringify({ type: "auth_challenge", nonce: "nonce-1" }));
+      }
+      if (message.type === "auth_response") {
         socket.send(
           JSON.stringify({ type: "auth_ack", device_sid: "sid-1", pair_status: "matched" }),
         );
@@ -238,9 +245,10 @@ describe("WebRemoteControlTerminalTransport", () => {
     const transport = new WebRemoteControlTerminalTransport({
       relayWsUrl: relay.url,
       deviceSid: "sid-1",
+      passHash: "hash-1",
       deviceMid: "mid-1",
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
-      getToken: async () => "token-1",
+      authProvider: { calculateProof: async () => "proof" },
       onPayload: (payload) => payloads.push(payload),
       onRawTransportFault: (reasonCode) => rawFaults.push(reasonCode),
       onStateChange: () => {},
@@ -267,8 +275,9 @@ describe("WebRemoteControlTerminalTransport", () => {
     const transport = new WebRemoteControlTerminalTransport({
       relayWsUrl: "ws://127.0.0.1:1/ws",
       deviceSid: "sid-1",
+      passHash: "hash-1",
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
-      getToken: async () => "token-1",
+      authProvider: { calculateProof: async () => "proof" },
       onPayload: () => {},
       onStateChange: () => {},
       onFailure: () => {},
@@ -298,6 +307,9 @@ describe("WebRemoteControlTerminalTransport", () => {
     const relay = await createRelayServer(
       ({ message, socket }) => {
         if (message.type === "auth_init") {
+          socket.send(JSON.stringify({ type: "auth_challenge", nonce: "nonce-1" }));
+        }
+        if (message.type === "auth_response") {
           socket.send(
             JSON.stringify({ type: "auth_ack", device_sid: "sid-1", pair_status: "matched" }),
           );
@@ -309,10 +321,11 @@ describe("WebRemoteControlTerminalTransport", () => {
     const transport = new WebRemoteControlTerminalTransport({
       relayWsUrl: relay.url,
       deviceSid: "sid-1",
+      passHash: "hash-1",
       deviceMid: "mid-1",
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
       heartbeatIntervalMs: 20,
-      getToken: async () => "token-1",
+      authProvider: { calculateProof: async () => "proof" },
       onPayload: () => {},
       onStateChange: (state) => states.push(state),
       onFailure: () => {},
@@ -326,7 +339,7 @@ describe("WebRemoteControlTerminalTransport", () => {
     // Bugfix: permessage-deflate 握手和大 payload 压缩都走真实 ws/socket，CI 全量并发时
     // event loop 可能被其它用例挤压；这里放宽等待并标注阶段，避免 500ms 抖动误报且便于定位。
     await waitUntil(
-      () => relay.messages.some((message) => message.type === "auth_init"),
+      () => relay.messages.some((message) => message.type === "auth_response"),
       2_000,
       "compressed relay auth response",
     );
@@ -362,6 +375,9 @@ describe("WebRemoteControlTerminalTransport", () => {
     const states: WebRemoteControlTerminalTransportState[] = [];
     const relay = await createRelayServer(({ message, socket }) => {
       if (message.type === "auth_init") {
+        socket.send(JSON.stringify({ type: "auth_challenge", nonce: "nonce-1" }));
+      }
+      if (message.type === "auth_response") {
         socket.send(
           JSON.stringify({ type: "auth_ack", device_sid: "sid-1", pair_status: "matched" }),
         );
@@ -371,10 +387,14 @@ describe("WebRemoteControlTerminalTransport", () => {
     const transport = new WebRemoteControlTerminalTransport({
       relayWsUrl: relay.url,
       deviceSid: "sid-1",
+      passHash: "hash-1",
       deviceMid: "mid-1",
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
       heartbeatIntervalMs: 20,
-      getToken: async () => "token-1",
+      authProvider: {
+        calculateProof: async (_passHash, nonce, role, deviceSid) =>
+          `${nonce}:${role}:${deviceSid}:proof`,
+      },
       onPayload: () => {},
       onStateChange: (state) => states.push(state),
       onFailure: () => {},
@@ -385,13 +405,15 @@ describe("WebRemoteControlTerminalTransport", () => {
     transport.start();
     await waitUntil(() => relay.messages.some((message) => message.type === "pair_status_query"));
 
-    expect(relay.getRequestUrl()).toBe("/ws?token=token-1&mid=mid-1");
+    expect(relay.getRequestUrl()).toBe("/ws?mid=mid-1");
     expect(relay.messages[0]).toMatchObject({
       type: "auth_init",
+      role: "terminal",
       device_sid: "sid-1",
     });
-    expect(relay.messages[0]).not.toHaveProperty("role");
-    expect(relay.messages[0]).not.toHaveProperty("proof");
+    expect(relay.messages.find((message) => message.type === "auth_response")).toMatchObject({
+      proof: "nonce-1:terminal:sid-1:proof",
+    });
     expect(states).toContain("paired");
     transport.dispose();
   });
@@ -401,6 +423,9 @@ describe("WebRemoteControlTerminalTransport", () => {
     const sendReady = vi.fn();
     const relay = await createRelayServer(({ message, socket }) => {
       if (message.type === "auth_init") {
+        socket.send(JSON.stringify({ type: "auth_challenge", nonce: "nonce-1" }));
+      }
+      if (message.type === "auth_response") {
         socket.send(
           JSON.stringify({ type: "auth_ack", device_sid: "sid-1", pair_status: "matched" }),
         );
@@ -410,6 +435,7 @@ describe("WebRemoteControlTerminalTransport", () => {
         socket.send(
           JSON.stringify({
             type: "pair_status_ack",
+            device_sid: "sid-1",
             pair_status: heartbeatCount === 1 ? "waiting" : "matched",
           }),
         );
@@ -419,10 +445,11 @@ describe("WebRemoteControlTerminalTransport", () => {
     const transport = new WebRemoteControlTerminalTransport({
       relayWsUrl: relay.url,
       deviceSid: "sid-1",
+      passHash: "hash-1",
       deviceMid: "mid-1",
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
       heartbeatIntervalMs: 100,
-      getToken: async () => "token-1",
+      authProvider: { calculateProof: async () => "proof" },
       onPayload: () => {},
       onStateChange: () => {},
       onFailure: () => {},
@@ -448,6 +475,9 @@ describe("WebRemoteControlTerminalTransport", () => {
     const states: WebRemoteControlTerminalTransportState[] = [];
     const relay = await createRelayServer(({ message, socket }) => {
       if (message.type === "auth_init") {
+        socket.send(JSON.stringify({ type: "auth_challenge", nonce: "nonce-1" }));
+      }
+      if (message.type === "auth_response") {
         authResponseCount += 1;
         socket.send(
           JSON.stringify({
@@ -462,6 +492,7 @@ describe("WebRemoteControlTerminalTransport", () => {
         socket.send(
           JSON.stringify({
             type: "pair_status_ack",
+            device_sid: "sid-1",
             pair_status: heartbeatCount === 1 ? "waiting" : "matched",
           }),
         );
@@ -471,11 +502,12 @@ describe("WebRemoteControlTerminalTransport", () => {
     const transport = new WebRemoteControlTerminalTransport({
       relayWsUrl: relay.url,
       deviceSid: "sid-1",
+      passHash: "hash-1",
       deviceMid: "mid-1",
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
       heartbeatIntervalMs: 50,
       staleWaitingRecoveryMs: 80,
-      getToken: async () => "token-1",
+      authProvider: { calculateProof: async () => "proof" },
       onPayload: () => {},
       onStateChange: (state) => states.push(state),
       onFailure: (failure) => failures.push(failure.reason),
@@ -485,11 +517,7 @@ describe("WebRemoteControlTerminalTransport", () => {
 
     transport.start();
     await waitUntil(() => heartbeatCount >= 2, 5_000, "second pair status heartbeat");
-    await waitUntil(
-      () => states.at(-1) === "paired",
-      5_000,
-      "paired again after waiting heartbeat",
-    );
+    await waitUntil(() => states.at(-1) === "paired", 5_000, "paired again after waiting heartbeat");
 
     expect(failures).toEqual([]);
     expect(states).toContain("waiting");
@@ -502,22 +530,28 @@ describe("WebRemoteControlTerminalTransport", () => {
     const states: WebRemoteControlTerminalTransportState[] = [];
     const relay = await createRelayServer(({ message, socket }) => {
       if (message.type === "auth_init") {
+        socket.send(JSON.stringify({ type: "auth_challenge", nonce: "nonce-1" }));
+      }
+      if (message.type === "auth_response") {
         socket.send(
           JSON.stringify({ type: "auth_ack", device_sid: "sid-1", pair_status: "matched" }),
         );
       }
       if (message.type === "pair_status_query") {
-        socket.send(JSON.stringify({ type: "pair_status_ack", pair_status: "waiting" }));
+        socket.send(
+          JSON.stringify({ type: "pair_status_ack", device_sid: "sid-1", pair_status: "waiting" }),
+        );
       }
     });
 
     const transport = new WebRemoteControlTerminalTransport({
       relayWsUrl: relay.url,
       deviceSid: "sid-1",
+      passHash: "hash-1",
       deviceMid: "mid-1",
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
       heartbeatIntervalMs: 20,
-      getToken: async () => "token-1",
+      authProvider: { calculateProof: async () => "proof" },
       onPayload: () => {},
       onStateChange: (state) => states.push(state),
       onFailure: () => {},
@@ -540,6 +574,9 @@ describe("WebRemoteControlTerminalTransport", () => {
     let heartbeatCount = 0;
     const relay = await createRelayServer(({ message, socket }) => {
       if (message.type === "auth_init") {
+        socket.send(JSON.stringify({ type: "auth_challenge", nonce: "nonce-1" }));
+      }
+      if (message.type === "auth_response") {
         socket.send(
           JSON.stringify({ type: "auth_ack", device_sid: "sid-1", pair_status: "matched" }),
         );
@@ -549,6 +586,7 @@ describe("WebRemoteControlTerminalTransport", () => {
         socket.send(
           JSON.stringify({
             type: "pair_status_ack",
+            device_sid: "sid-1",
             pair_status: heartbeatCount < 3 ? "waiting" : "matched",
           }),
         );
@@ -558,10 +596,11 @@ describe("WebRemoteControlTerminalTransport", () => {
     const transport = new WebRemoteControlTerminalTransport({
       relayWsUrl: relay.url,
       deviceSid: "sid-1",
+      passHash: "hash-1",
       deviceMid: "mid-1",
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
       heartbeatIntervalMs: 20,
-      getToken: async () => "token-1",
+      authProvider: { calculateProof: async () => "proof" },
       onPayload: () => {},
       onStateChange: () => {},
       onFailure: () => {},
@@ -586,6 +625,9 @@ describe("WebRemoteControlTerminalTransport", () => {
     const states: WebRemoteControlTerminalTransportState[] = [];
     const relay = await createRelayServer(({ message, socket }) => {
       if (message.type === "auth_init") {
+        socket.send(JSON.stringify({ type: "auth_challenge", nonce: "nonce-1" }));
+      }
+      if (message.type === "auth_response") {
         socket.send(
           JSON.stringify({ type: "auth_ack", device_sid: "sid-1", pair_status: "matched" }),
         );
@@ -595,9 +637,10 @@ describe("WebRemoteControlTerminalTransport", () => {
     const transport = new WebRemoteControlTerminalTransport({
       relayWsUrl: relay.url,
       deviceSid: "sid-1",
+      passHash: "hash-1",
       deviceMid: "mid-1",
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
-      getToken: async () => "token-1",
+      authProvider: { calculateProof: async () => "proof" },
       onPayload: () => {},
       onStateChange: (state) => states.push(state),
       onFailure: () => {},
@@ -622,6 +665,9 @@ describe("WebRemoteControlTerminalTransport", () => {
     let closedFirstPairedSocket = false;
     const relay = await createRelayServer(({ message, socket }) => {
       if (message.type === "auth_init") {
+        socket.send(JSON.stringify({ type: "auth_challenge", nonce: "nonce-1" }));
+      }
+      if (message.type === "auth_response") {
         socket.send(
           JSON.stringify({ type: "auth_ack", device_sid: "sid-1", pair_status: "matched" }),
         );
@@ -635,9 +681,10 @@ describe("WebRemoteControlTerminalTransport", () => {
     const transport = new WebRemoteControlTerminalTransport({
       relayWsUrl: relay.url,
       deviceSid: "sid-1",
+      passHash: "hash-1",
       deviceMid: "mid-1",
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
-      getToken: async () => "token-1",
+      authProvider: { calculateProof: async () => "proof" },
       onPayload: () => {},
       onStateChange: (state) => states.push(state),
       onFailure: () => {},
@@ -675,6 +722,9 @@ describe("WebRemoteControlTerminalTransport", () => {
         return;
       }
       if (message.type === "auth_init") {
+        socket.send(JSON.stringify({ type: "auth_challenge", nonce: "nonce-1" }));
+      }
+      if (message.type === "auth_response") {
         socket.send(
           JSON.stringify({ type: "auth_ack", device_sid: "sid-1", pair_status: "matched" }),
         );
@@ -684,8 +734,9 @@ describe("WebRemoteControlTerminalTransport", () => {
     const transport = new WebRemoteControlTerminalTransport({
       relayWsUrl: relay.url,
       deviceSid: "sid-1",
+      passHash: "hash-1",
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
-      getToken: async () => "token-1",
+      authProvider: { calculateProof: async () => "proof" },
       onPayload: () => {},
       onStateChange: (state) => states.push(state),
       onFailure: (failure) => failures.push(failure.reason),
@@ -706,6 +757,9 @@ describe("WebRemoteControlTerminalTransport", () => {
     const states: WebRemoteControlTerminalTransportState[] = [];
     const relay = await createRelayServer(({ message, socket }) => {
       if (message.type === "auth_init") {
+        socket.send(JSON.stringify({ type: "auth_challenge", nonce: "nonce-1" }));
+      }
+      if (message.type === "auth_response") {
         socket.send(
           JSON.stringify({ type: "auth_ack", device_sid: "sid-1", pair_status: "matched" }),
         );
@@ -714,17 +768,20 @@ describe("WebRemoteControlTerminalTransport", () => {
         socket.send(JSON.stringify({ type: "error", code: "INTERNAL", message: "no such pair" }));
       }
       if (message.type === "pair_status_query") {
-        socket.send(JSON.stringify({ type: "pair_status_ack", pair_status: "waiting" }));
+        socket.send(
+          JSON.stringify({ type: "pair_status_ack", device_sid: "sid-1", pair_status: "waiting" }),
+        );
       }
     });
 
     const transport = new WebRemoteControlTerminalTransport({
       relayWsUrl: relay.url,
       deviceSid: "sid-1",
+      passHash: "hash-1",
       deviceMid: "mid-1",
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
       heartbeatIntervalMs: 20,
-      getToken: async () => "token-1",
+      authProvider: { calculateProof: async () => "proof" },
       onPayload: () => {},
       onStateChange: (state) => states.push(state),
       onFailure: () => {},
@@ -749,6 +806,9 @@ describe("WebRemoteControlTerminalTransport", () => {
     const states: WebRemoteControlTerminalTransportState[] = [];
     const relay = await createRelayServer(({ message, socket }) => {
       if (message.type === "auth_init") {
+        socket.send(JSON.stringify({ type: "auth_challenge", nonce: "nonce-1" }));
+      }
+      if (message.type === "auth_response") {
         socket.send(
           JSON.stringify({ type: "auth_ack", device_sid: "sid-1", pair_status: "matched" }),
         );
@@ -758,9 +818,10 @@ describe("WebRemoteControlTerminalTransport", () => {
     const transport = new WebRemoteControlTerminalTransport({
       relayWsUrl: relay.url,
       deviceSid: "sid-1",
+      passHash: "hash-1",
       deviceMid: "mid-1",
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
-      getToken: async () => "token-1",
+      authProvider: { calculateProof: async () => "proof" },
       onPayload: () => {},
       onStateChange: (state) => states.push(state),
       onFailure: () => {},
@@ -789,23 +850,29 @@ describe("WebRemoteControlTerminalTransport", () => {
     let heartbeatCount = 0;
     const relay = await createRelayServer(({ message, socket }) => {
       if (message.type === "auth_init") {
+        socket.send(JSON.stringify({ type: "auth_challenge", nonce: "nonce-1" }));
+      }
+      if (message.type === "auth_response") {
         socket.send(
           JSON.stringify({ type: "auth_ack", device_sid: "sid-1", pair_status: "matched" }),
         );
       }
       if (message.type === "pair_status_query") {
         heartbeatCount += 1;
-        socket.send(JSON.stringify({ type: "pair_status_ack", pair_status: "matched" }));
+        socket.send(
+          JSON.stringify({ type: "pair_status_ack", device_sid: "sid-1", pair_status: "matched" }),
+        );
       }
     });
 
     const transport = new WebRemoteControlTerminalTransport({
       relayWsUrl: relay.url,
       deviceSid: "sid-1",
+      passHash: "hash-1",
       deviceMid: "mid-1",
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
       heartbeatIntervalMs: 1_000,
-      getToken: async () => "token-1",
+      authProvider: { calculateProof: async () => "proof" },
       onPayload: () => {},
       onStateChange: (state) => states.push(state),
       onFailure: () => {},
@@ -828,6 +895,9 @@ describe("WebRemoteControlTerminalTransport", () => {
   it("reconnects when paired heartbeats stop receiving acknowledgements", async () => {
     const relay = await createRelayServer(({ message, socket }) => {
       if (message.type === "auth_init") {
+        socket.send(JSON.stringify({ type: "auth_challenge", nonce: "nonce-1" }));
+      }
+      if (message.type === "auth_response") {
         socket.send(
           JSON.stringify({ type: "auth_ack", device_sid: "sid-1", pair_status: "matched" }),
         );
@@ -837,11 +907,12 @@ describe("WebRemoteControlTerminalTransport", () => {
     const transport = new WebRemoteControlTerminalTransport({
       relayWsUrl: relay.url,
       deviceSid: "sid-1",
+      passHash: "hash-1",
       deviceMid: "mid-1",
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
       heartbeatIntervalMs: 20,
       heartbeatAckTimeoutMs: 50,
-      getToken: async () => "token-1",
+      authProvider: { calculateProof: async () => "proof" },
       onPayload: () => {},
       onStateChange: () => {},
       onFailure: () => {},
@@ -859,6 +930,9 @@ describe("WebRemoteControlTerminalTransport", () => {
   it("uses the ACK deadline independently from the next jittered heartbeat", async () => {
     const relay = await createRelayServer(({ message, socket }) => {
       if (message.type === "auth_init") {
+        socket.send(JSON.stringify({ type: "auth_challenge", nonce: "nonce-1" }));
+      }
+      if (message.type === "auth_response") {
         socket.send(
           JSON.stringify({ type: "auth_ack", device_sid: "sid-1", pair_status: "matched" }),
         );
@@ -868,13 +942,14 @@ describe("WebRemoteControlTerminalTransport", () => {
     const transport = new WebRemoteControlTerminalTransport({
       relayWsUrl: relay.url,
       deviceSid: "sid-1",
+      passHash: "hash-1",
       deviceMid: "mid-1",
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
       heartbeatIntervalMs: 5_000,
       heartbeatJitterMs: 0,
       heartbeatAckTimeoutMs: 50,
       reconnectJitterMs: 0,
-      getToken: async () => "token-1",
+      authProvider: { calculateProof: async () => "proof" },
       onPayload: () => {},
       onStateChange: () => {},
       onFailure: () => {},
@@ -903,9 +978,10 @@ describe("WebRemoteControlTerminalTransport", () => {
     const transport = new WebRemoteControlTerminalTransport({
       relayWsUrl: relay.url,
       deviceSid: "sid-1",
+      passHash: "hash-1",
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
       waitingTimeoutMs: 20,
-      getToken: async () => "token-1",
+      authProvider: { calculateProof: async () => "proof" },
       onPayload: () => {},
       onStateChange: () => {},
       onFailure: (failure) => failures.push(failure.reason),
@@ -916,7 +992,7 @@ describe("WebRemoteControlTerminalTransport", () => {
     transport.start();
     await waitUntil(() => failures.length === 1);
 
-    expect(failures).toEqual(["desktop-disconnected"]);
+    expect(failures).toEqual(["invalid-mobile-connection"]);
     expect(reloadPage).not.toHaveBeenCalled();
     transport.dispose();
   });
@@ -938,9 +1014,10 @@ describe("WebRemoteControlTerminalTransport", () => {
     const transport = new WebRemoteControlTerminalTransport({
       relayWsUrl: relay.url,
       deviceSid: "sid-1",
+      passHash: "hash-1",
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
       desktopOfflineGraceMs: 60,
-      getToken: async () => "token-1",
+      authProvider: { calculateProof: async () => "proof" },
       onPayload: () => {},
       onStateChange: (state) => states.push(state),
       onFailure: (failure) => failures.push(failure.reason),
@@ -956,6 +1033,39 @@ describe("WebRemoteControlTerminalTransport", () => {
     await waitUntil(() => failures.length === 1);
 
     expect(failures).toEqual(["desktop-disconnected"]);
+    transport.dispose();
+  });
+
+  it("keeps KICKED relay errors scoped to mobile session conflicts", async () => {
+    const failures: string[] = [];
+    const relay = await createRelayServer(({ message, socket }) => {
+      if (message.type === "auth_init") {
+        socket.send(
+          JSON.stringify({
+            type: "error",
+            code: "KICKED",
+            message: "Another mobile controller replaced this one.",
+          }),
+        );
+      }
+    });
+    const transport = new WebRemoteControlTerminalTransport({
+      relayWsUrl: relay.url,
+      deviceSid: "sid-1",
+      passHash: "hash-1",
+      WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
+      authProvider: { calculateProof: async () => "proof" },
+      onPayload: () => {},
+      onStateChange: () => {},
+      onFailure: (failure) => failures.push(failure.reason),
+      onError: () => {},
+      reloadPage: () => {},
+    });
+
+    transport.start();
+    await waitUntil(() => failures.length === 1);
+
+    expect(failures).toEqual(["session-conflict"]);
     transport.dispose();
   });
 
@@ -975,8 +1085,9 @@ describe("WebRemoteControlTerminalTransport", () => {
     const transport = new WebRemoteControlTerminalTransport({
       relayWsUrl: relay.url,
       deviceSid: "sid-1",
+      passHash: "hash-1",
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
-      getToken: async () => "token-1",
+      authProvider: { calculateProof: async () => "proof" },
       onPayload: () => {},
       onStateChange: () => {},
       onFailure: (failure) => failures.push(failure.reason),
@@ -1021,8 +1132,9 @@ describe("WebRemoteControlTerminalTransport", () => {
     const transport = new WebRemoteControlTerminalTransport({
       relayWsUrl: relay.url,
       deviceSid: "sid-1",
+      passHash: "hash-1",
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
-      getToken: async () => "token-1",
+      authProvider: { calculateProof: async () => "proof" },
       onPayload: (payload) => payloads.push(payload),
       onStateChange: () => {},
       onFailure: () => {},
@@ -1174,314 +1286,4 @@ describe("WebRemoteControlTerminalTransport", () => {
     await expect(promise).resolves.toMatchObject({ success: true });
     expect(sent).toHaveLength(1);
   });
-});
-
-class TaskViewLifecycleDocument extends EventTarget {
-  visibilityState: DocumentVisibilityState = "visible";
-}
-
-it.each([
-  ["visibilitychange", "lifecycle-first"],
-  ["visibilitychange", "reporter-first"],
-  ["pagehide", "lifecycle-first"],
-  ["pagehide", "reporter-first"],
-  ["freeze", "lifecycle-first"],
-  ["freeze", "reporter-first"],
-] as const)(
-  "MRO03：%s/%s 在真实 transport 挂起前撤销查看，同 socket 恢复不用新 epoch",
-  async (pause, order) => {
-    const relay = await createRelayServer(({ message, socket }) => {
-      if (message.type === "auth_init")
-        socket.send(
-          JSON.stringify({ type: "auth_ack", device_sid: "sid-1", pair_status: "matched" }),
-        );
-      if (message.type === "pair_status_query")
-        socket.send(JSON.stringify({ type: "pair_status_ack", pair_status: "matched" }));
-    });
-    const { createWebRemoteControlTaskViewPublisher, createWebRemoteControlLifecycleRecovery } =
-      await import("#src/web-remote-control/index.js");
-    const documentTarget = new TaskViewLifecycleDocument();
-    const windowTarget = new EventTarget();
-    let state: WebRemoteControlTerminalTransportState = "idle";
-    const publisher = createWebRemoteControlTaskViewPublisher((payload) =>
-      transport.sendPayload(payload),
-    );
-    const transport = new WebRemoteControlTerminalTransport({
-      relayWsUrl: relay.url,
-      deviceSid: "sid-1",
-      deviceMid: "mid-1",
-      WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
-      heartbeatIntervalMs: 60_000,
-      getToken: async () => "token",
-      onPayload: () => {},
-      onFailure: () => {},
-      onError: () => {},
-      reloadPage: () => {},
-      onStateChange: (next) => {
-        publisher.transportStateChanged(next, state);
-        state = next;
-      },
-      onSendReady: () => publisher.flush(),
-    });
-    const bridge = {
-      kind: "local" as const,
-      bridgeSessionId: "bridge",
-      bridgeGeneration: 1,
-      workspaceKey: "/repo",
-      workspacePath: "/repo",
-    };
-    const view = { workspacePath: "/repo", taskId: "task" };
-    const reports = () =>
-      relay.messages
-        .filter(
-          (message) =>
-            message.type === "data" && message.payload?.zcode_type === "mobile-task-view-update",
-        )
-        .map((message) => message.payload);
-    const report = () =>
-      publisher.update(bridge, documentTarget.visibilityState === "visible" ? view : null);
-    const hide = () => publisher.update(bridge, null);
-    const addReporter = () => {
-      documentTarget.addEventListener("visibilitychange", report);
-      documentTarget.addEventListener("freeze", hide);
-      documentTarget.addEventListener("resume", report);
-      windowTarget.addEventListener("pagehide", hide);
-      windowTarget.addEventListener("pageshow", report);
-    };
-    if (order === "reporter-first") addReporter();
-    let recovery: Promise<void> | undefined;
-    const lifecycle = createWebRemoteControlLifecycleRecovery({
-      documentTarget,
-      windowTarget,
-      onSuspend: () => {
-        publisher.suspend();
-        transport.suspend();
-      },
-      onRecover: () => {
-        recovery = transport.recoverConnection();
-      },
-    });
-    if (order === "lifecycle-first") addReporter();
-    try {
-      transport.start();
-      await waitUntil(() => state === "paired", 2_000);
-      publisher.setBridge(bridge);
-      publisher.seed("initial-bootstrap-epoch");
-      report();
-      await waitUntil(() => reports().at(-1)?.view?.taskId === "task", 2_000);
-      const previousSeq = reports().at(-1).seq;
-      if (pause === "visibilitychange") documentTarget.visibilityState = "hidden";
-      (pause === "pagehide" ? windowTarget : documentTarget).dispatchEvent(new Event(pause));
-      await waitUntil(() => reports().at(-1)?.view === null, 500, "view revoked before suspension");
-      expect(state).toBe("suspended");
-      documentTarget.visibilityState = "visible";
-      const resume =
-        pause === "pagehide" ? "pageshow" : pause === "freeze" ? "resume" : "visibilitychange";
-      (resume === "pageshow" ? windowTarget : documentTarget).dispatchEvent(new Event(resume));
-      await recovery;
-      await waitUntil(
-        () => reports().at(-1)?.view?.taskId === "task",
-        500,
-        "same-socket visible reassertion",
-      );
-      expect(reports().at(-1).epoch).toBe("initial-bootstrap-epoch");
-      expect(reports().at(-1).seq).toBeGreaterThan(previousSeq);
-      expect(relay.getConnectionCount()).toBe(1);
-    } finally {
-      lifecycle.dispose();
-      transport.dispose();
-    }
-  },
-);
-
-it.each(["online", "resume"])(
-  "MRO03：%s 恢复连接但页面仍 hidden 时不能重报缓存任务",
-  async (reason) => {
-    const relay = await createRelayServer(({ message, socket }) => {
-      if (message.type === "auth_init")
-        socket.send(
-          JSON.stringify({ type: "auth_ack", device_sid: "sid-1", pair_status: "matched" }),
-        );
-      if (message.type === "pair_status_query")
-        socket.send(JSON.stringify({ type: "pair_status_ack", pair_status: "matched" }));
-    });
-    const { createWebRemoteControlTaskViewPublisher, createWebRemoteControlLifecycleRecovery } =
-      await import("#src/web-remote-control/index.js");
-    const documentTarget = new TaskViewLifecycleDocument();
-    const windowTarget = new EventTarget();
-    let state: WebRemoteControlTerminalTransportState = "idle";
-    const publisher = createWebRemoteControlTaskViewPublisher((payload) =>
-      transport.sendPayload(payload),
-    );
-    const transport = new WebRemoteControlTerminalTransport({
-      relayWsUrl: relay.url,
-      deviceSid: "sid-1",
-      deviceMid: "mid-1",
-      WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
-      heartbeatIntervalMs: 60_000,
-      getToken: async () => "token",
-      onPayload: () => {},
-      onFailure: () => {},
-      onError: () => {},
-      reloadPage: () => {},
-      onStateChange: (next) => {
-        publisher.transportStateChanged(next, state);
-        state = next;
-      },
-      onSendReady: () => publisher.flush(),
-    });
-    let recovery: Promise<void> | undefined;
-    const lifecycle = createWebRemoteControlLifecycleRecovery({
-      documentTarget,
-      windowTarget,
-      onSuspend: () => {
-        publisher.suspend();
-        transport.suspend();
-      },
-      onRecover: () => {
-        recovery = transport.recoverConnection();
-      },
-    });
-    const reports = () =>
-      relay.messages
-        .filter((message) => message.payload?.zcode_type === "mobile-task-view-update")
-        .map((message) => message.payload);
-    try {
-      transport.start();
-      await waitUntil(() => state === "paired", 2_000);
-      const bridge = {
-        kind: "local" as const,
-        bridgeSessionId: "bridge",
-        workspaceKey: "/repo",
-        workspacePath: "/repo",
-      };
-      publisher.setBridge(bridge);
-      publisher.seed("initial");
-      publisher.update(bridge, { workspacePath: "/repo", taskId: "task" });
-      await waitUntil(() => reports().at(-1)?.view?.taskId === "task", 2_000);
-      documentTarget.visibilityState = "hidden";
-      documentTarget.dispatchEvent(new Event("visibilitychange"));
-      await waitUntil(() => reports().at(-1)?.view === null, 500, "background revoke");
-      const afterRevoke = reports().length;
-      (reason === "online" ? windowTarget : documentTarget).dispatchEvent(new Event(reason));
-      await recovery;
-      expect(state).toBe("paired");
-      // 有序 socket 上的额外请求/响应确认恢复后的发送已被观察，无需用等待猜没有任务报告。
-      transport.sendPayload({
-        zcode_type: "bootstrap-request",
-        requestId: "after-hidden-recovery",
-      });
-      await waitUntil(
-        () =>
-          relay.messages.some((message) => message.payload?.requestId === "after-hidden-recovery"),
-        2_000,
-      );
-      expect(
-        reports()
-          .slice(afterRevoke)
-          .every((report) => report.view === null),
-      ).toBe(true);
-      expect(reports().at(-1)?.view).toBeNull();
-      expect(relay.getConnectionCount()).toBe(1);
-    } finally {
-      lifecycle.dispose();
-      transport.dispose();
-    }
-  },
-);
-
-it("MRO03：真实 socket 换代清旧 epoch，漏掉重申请求时仍从 bootstrap 新 epoch 恢复", async () => {
-  let authCount = 0;
-  let breakHealthCheck = false;
-  const relay = await createRelayServer(({ message, socket }) => {
-    if (message.type === "auth_init") {
-      authCount++;
-      socket.send(
-        JSON.stringify({ type: "auth_ack", device_sid: "sid-1", pair_status: "matched" }),
-      );
-    }
-    if (message.type === "pair_status_query") {
-      if (breakHealthCheck) {
-        breakHealthCheck = false;
-        socket.terminate();
-      } else socket.send(JSON.stringify({ type: "pair_status_ack", pair_status: "matched" }));
-    }
-    if (message.payload?.zcode_type === "bootstrap-request")
-      socket.send(
-        JSON.stringify({
-          type: "data",
-          payload: {
-            zcode_type: "bootstrap-response",
-            requestId: message.payload.requestId,
-            success: true,
-            result: {
-              windowControlSessionId: "sid-1",
-              workspaces: [],
-              mobileTaskViewEpoch: `epoch-${authCount}`,
-            },
-          },
-        }),
-      );
-  });
-  const { createWebRemoteControlTaskViewPublisher } =
-    await import("#src/web-remote-control/index.js");
-  let state: WebRemoteControlTerminalTransportState = "idle";
-  const publisher = createWebRemoteControlTaskViewPublisher((payload) =>
-    transport.sendPayload(payload),
-  );
-  const transport = new WebRemoteControlTerminalTransport({
-    relayWsUrl: relay.url,
-    deviceSid: "sid-1",
-    deviceMid: "mid-1",
-    WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
-    heartbeatIntervalMs: 60_000,
-    healthCheckTimeoutMs: 50,
-    getToken: async () => "token",
-    onPayload: (payload) => {
-      if (payload.zcode_type === "bootstrap-response")
-        publisher.seed(payload.result.mobileTaskViewEpoch);
-    },
-    onFailure: () => {},
-    onError: () => {},
-    reloadPage: () => {},
-    onStateChange: (next) => {
-      publisher.transportStateChanged(next, state);
-      state = next;
-    },
-    onSendReady: () => publisher.flush(),
-  });
-  const reports = () =>
-    relay.messages
-      .filter((message) => message.payload?.zcode_type === "mobile-task-view-update")
-      .map((message) => message.payload);
-  try {
-    transport.start();
-    await waitUntil(() => state === "paired", 2_000);
-    const bridge = {
-      kind: "local" as const,
-      bridgeSessionId: "bridge",
-      workspaceKey: "/repo",
-      workspacePath: "/repo",
-    };
-    publisher.setBridge(bridge);
-    publisher.update(bridge, { workspacePath: "/repo", taskId: "task" });
-    transport.sendPayload({ zcode_type: "bootstrap-request", requestId: "initial" });
-    await waitUntil(() => reports().at(-1)?.epoch === "epoch-1", 2_000);
-    publisher.suspend();
-    transport.suspend();
-    breakHealthCheck = true;
-    const recovery = transport.recoverConnection();
-    publisher.update(bridge, { workspacePath: "/repo", taskId: "task" });
-    await recovery;
-    expect(relay.getConnectionCount()).toBeGreaterThan(1);
-    transport.sendPayload({ zcode_type: "bootstrap-request", requestId: "new-epoch" });
-    await waitUntil(
-      () => reports().at(-1)?.epoch === `epoch-${authCount}`,
-      2_000,
-      "new bootstrap epoch",
-    );
-    expect(reports().at(-1)).toMatchObject({ seq: 1, view: { taskId: "task" } });
-  } finally {
-    transport.dispose();
-  }
 });

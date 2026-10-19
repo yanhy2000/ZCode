@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Root 当前集中编排启动、workspace shell wiring 和 Web 远控同步，先保持入口收口避免跨层状态拆散。 */
 import { ProjectDirectoryProvider } from "@/project-sidebar/ProjectDirectoryProvider.js";
 import { RemoteProjectPicker } from "@/project-sidebar/RemoteProjectPicker.js";
 import {
@@ -8,14 +9,8 @@ import {
 import type { RemoteProjectHost } from "@zcode/services";
 import { useRemoteWorkspaceSessionStore } from "@/store/remoteWorkspaceSessionStore.js";
 import { RemoteConnectionProgressProvider } from "@/remote-connection-flow/ui/RemoteConnectionProgress.js";
-/* eslint-disable max-lines -- Root 当前集中编排启动、workspace shell wiring 和 Web 远控同步，先保持入口收口避免跨层状态拆散。 */
 import { RemoteProjectPresentationProvider } from "@/hooks/RemoteProjectPresentationContext.js";
-import {
-  RequestSecurityHost,
-  RequestSecurityWorkspaceBridge,
-  setRequestSecurityReporter,
-} from "@/request-security-edition/index.js";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LucideProvider, RefreshCw } from "lucide-react";
 import {
   APP_RUNTIME_PREFERENCES_CHANGED_BROADCAST_CHANNEL,
@@ -44,9 +39,7 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { SSHDialog } from "@/SSHDialog.js";
 import { SettingsPage } from "@/SettingsPage.js";
 import { setPendingSettingsSectionIntent } from "@/lib/settingsNavigation.js";
-import { CodingPlanUpgradeDialogProvider } from "@/settings/CodingPlanUpgradeDialogProvider.js";
-import { RewardsProvider } from "@/rewards/RewardsProvider.js";
-import { WelcomeScreen, type LoginCompleteReason } from "@/WelcomeScreen.js";
+import { WelcomeScreen, type WelcomeCompleteReason } from "@/WelcomeScreen.js";
 import { setDefaultFileDisplayBasePath } from "@/lib/fileDisplay.js";
 import { readRendererLaunchTimings, shouldReportLaunchToInput } from "@/lib/launchToInputReport.js";
 import { reportUiLaunchToInput } from "@/lib/uiPerfArmsTelemetry.js";
@@ -76,7 +69,6 @@ import { RemoteWorkspaceControllerProvider } from "@/remote/useRemoteWorkspaceCo
 import { useRootProviderStateRefresh } from "@/root/useRootProviderStateRefresh.js";
 import { useModelSelectionServiceView } from "@/hooks/useModelSelectionView.js";
 import { useRootProviderSettingsSnapshot } from "@/root/useRootProviderSettingsSnapshot.js";
-import { useWebRemoteControlAuthSync } from "@/web-remote-control/app/useWebRemoteControlAuthSync.js";
 import { useRootOAuthEffects } from "@/root/useRootOAuthEffects.js";
 import { consumeZcodeJwtInvalidRestartMarker } from "@/root/zcodeJwtInvalidRestartMarker.js";
 import { useDesktopNativeThemeSync } from "@/root/useDesktopNativeThemeSync.js";
@@ -86,6 +78,15 @@ import { useBotBroadcastEffects } from "@/root/useBotBroadcastEffects.js";
 import { registerBaseWorkspaceServices } from "@/store/remoteWorkspaceSessionStore.js";
 import type { RootProps } from "@/root/types.js";
 import { DiffsWorkerPoolProvider } from "@/root/DiffsWorkerPoolProvider.js";
+import { useGlobalTaskList } from "@/hooks/useGlobalTaskList.js";
+import {
+  buildWebRemoteControlTaskRuntimeByWorkspaceKey,
+  buildWebRemoteControlTaskTargets,
+} from "@/lib/webRemoteControlTaskIndex.js";
+import {
+  logDeferredWebRemoteControlTaskSnapshot,
+  shouldSyncWebRemoteControlTaskSnapshot,
+} from "@/lib/webRemoteControlTaskSync.js";
 import { ScopedErrorBoundary } from "@/ErrorBoundary.js";
 import {
   WebRemoteControlFeatureProvider,
@@ -101,14 +102,12 @@ import {
   markCodeCommentRemoved,
 } from "@/lib/codeCommentContext.js";
 import { useCodeCommentPreviewStore } from "@/store/codeCommentPreviewStore.js";
-import { MarketingTouchProvider } from "@/components/marketing-touch/MarketingTouchProvider.js";
 import { setUiPerfArmsReporter } from "@/lib/uiPerfArmsTelemetry.js";
 import { setSessionOpenArmsReporter } from "@/lib/sessionOpenArmsTelemetry.js";
 import { setSendFunnelArmsReporter } from "@/lib/sendFunnelArmsTelemetry.js";
 import { RootStartupLoading } from "@/root/RootStartupLoading.js";
 import { resolveProviderAvailabilityState } from "@/lib/modelProviderAvailability.js";
 import { useProviderAvailabilityLoginEntryGuard } from "@/root/useProviderAvailabilityLoginEntryGuard.js";
-import { ensureProviderFamilyDomainMigration } from "@/lib/providerFamilyDomainMigration.js";
 import { useSettings } from "@/hooks/useSettingService.js";
 import { CLOSE_ACTIVE_CONTEXT_REQUEST_EVENT } from "@/lib/closeActiveContext.js";
 import { AssistantCodeCommentFeatureProvider } from "@/AssistantCodeCommentFeatureProvider.js";
@@ -131,6 +130,110 @@ type WelcomeScreenOpenReason =
   | "provider-request"
   | "logout-provider-required"
   | "session-expired";
+
+function WebRemoteControlTaskSync({
+  syncWebRemoteControlTasks,
+  workspaceTabs,
+}: {
+  syncWebRemoteControlTasks: NonNullable<RootProps["platform"]["syncWebRemoteControlTasks"]>;
+  workspaceTabs: WorkspaceTabState[];
+}) {
+  const workspaceStates = useZCodeSessionStore((state) => state.workspaces);
+  const timelineTaskList = useGlobalTaskList({
+    kind: "timeline",
+    workspaceTabs,
+    sortBy: "updated",
+    searchQuery: "",
+    expanded: true,
+    collapsedLimit: 100,
+  });
+  const pinnedTaskList = useGlobalTaskList({
+    kind: "pinned",
+    workspaceTabs,
+    sortBy: "updated",
+    searchQuery: "",
+    expanded: true,
+    collapsedLimit: 100,
+  });
+  const archivedTaskList = useGlobalTaskList({
+    kind: "archived",
+    workspaceTabs,
+    sortBy: "updated",
+    searchQuery: "",
+    expanded: true,
+    collapsedLimit: 100,
+  });
+  const taskTargets = useMemo(() => {
+    const runtimeByWorkspaceKey = buildWebRemoteControlTaskRuntimeByWorkspaceKey(workspaceStates);
+    // Bugfix: Web remote 未开启时不应让 Root 订阅整张 workspace 表。
+    // 远控 task 索引只在该组件挂载后运行，避免桌面 continuous 流式更新唤醒 Root/App/Shell 主链路。
+    // Bugfix: 手机远控首页之前只同步 timeline，而 timeline 查询会过滤 pinned=1。
+    // 这里把 sqlite pinned 列表单独同步给手机端，避免置顶任务从远控任务列表消失。
+    const pinnedTargets = buildWebRemoteControlTaskTargets({
+      workspaceTabs,
+      tasks: pinnedTaskList.items,
+      taskRuntimeByWorkspaceKey: runtimeByWorkspaceKey,
+      pinned: true,
+    });
+    const timelineTargets = buildWebRemoteControlTaskTargets({
+      workspaceTabs,
+      tasks: timelineTaskList.items,
+      taskRuntimeByWorkspaceKey: runtimeByWorkspaceKey,
+    });
+    // Bugfix: 宽屏 Web 远控归档视图以前退回当前 bridge workspace 查询，
+    // 因为同步给 remote 的任务索引没有 archived 成员。归档目标只作为远控列表数据，不改变桌面任务区。
+    const archivedTargets = buildWebRemoteControlTaskTargets({
+      workspaceTabs,
+      tasks: archivedTaskList.items,
+      taskRuntimeByWorkspaceKey: runtimeByWorkspaceKey,
+      archived: true,
+    });
+
+    return [...pinnedTargets, ...timelineTargets, ...archivedTargets].sort((left, right) => {
+      if (right.updatedAt !== left.updatedAt) {
+        return right.updatedAt - left.updatedAt;
+      }
+      if (right.createdAt !== left.createdAt) {
+        return right.createdAt - left.createdAt;
+      }
+      return right.taskId.localeCompare(left.taskId);
+    });
+  }, [
+    archivedTaskList.items,
+    pinnedTaskList.items,
+    timelineTaskList.items,
+    workspaceStates,
+    workspaceTabs,
+  ]);
+  const shouldSyncTasks = shouldSyncWebRemoteControlTaskSnapshot({
+    archivedLoading: archivedTaskList.loading,
+    enabled: true,
+    pinnedLoading: pinnedTaskList.loading,
+    timelineLoading: timelineTaskList.loading,
+  });
+
+  useEffect(() => {
+    if (!shouldSyncTasks) {
+      logDeferredWebRemoteControlTaskSnapshot(logger, {
+        pinnedLoading: pinnedTaskList.loading,
+        archivedLoading: archivedTaskList.loading,
+        timelineLoading: timelineTaskList.loading,
+      });
+      return;
+    }
+
+    syncWebRemoteControlTasks(taskTargets);
+  }, [
+    archivedTaskList.loading,
+    pinnedTaskList.loading,
+    shouldSyncTasks,
+    syncWebRemoteControlTasks,
+    taskTargets,
+    timelineTaskList.loading,
+  ]);
+
+  return null;
+}
 
 /**
  * Root —— 应用根组件
@@ -167,16 +270,9 @@ export function Root(props: RootProps) {
                       <AssistantCodeCommentFeatureProvider
                         enabled={props.assistantCodeCommentCardsEnabled}
                       >
-                        <CodingPlanUpgradeDialogProvider>
-                          <RewardsProvider desktop={props.isDesktop === true}>
-                            <RequestSecurityHost />
-                            <MarketingTouchProvider desktop={props.isDesktop === true}>
-                              <RemoteConnectionProgressProvider>
-                                <RootInner {...props} />
-                              </RemoteConnectionProgressProvider>
-                            </MarketingTouchProvider>
-                          </RewardsProvider>
-                        </CodingPlanUpgradeDialogProvider>
+                        <RemoteConnectionProgressProvider>
+                          <RootInner {...props} />
+                        </RemoteConnectionProgressProvider>
                       </AssistantCodeCommentFeatureProvider>
                     </WebRemoteControlFeatureProvider>
                   </DiffsWorkerPoolProvider>
@@ -215,7 +311,6 @@ function RootInner({
   initialWorkspaceLoadingFallback,
 }: RootProps) {
   useEffect(() => {
-    setRequestSecurityReporter(platform);
     setMcpStorePlatform(platform);
     // 对话 UI perf 只属于 desktop-continuous；Web/mobile 即使能看到权威状态也不装 reporter。
     setUiPerfArmsReporter(isDesktop ? platform : null);
@@ -223,7 +318,6 @@ function RootInner({
     // 发送漏斗同理：只在 Electron 桌面端上报，Web/mobile 的 reportArmsCustomEvent 是空实现。
     setSendFunnelArmsReporter(isDesktop ? platform : null);
     return () => {
-      setRequestSecurityReporter(null);
       setMcpStorePlatform(null);
       setUiPerfArmsReporter(null);
       setSessionOpenArmsReporter(null);
@@ -250,7 +344,7 @@ function RootInner({
   // 动态工作流灰度快照的唯一取数点：
   // 放在 app 级 ServiceProvider 这一层取一次，自动化页与 run 面板只读。消费方可能位于
   // 工作区级 ServiceProvider 内（远程 Host 的 accessor），由它们取数会拿到另一台 Host 的答案。
-  useDynamicWorkflowAvailabilityLoader(services.codingPlanSubscriptionService);
+  useDynamicWorkflowAvailabilityLoader();
 
   const { intl, locale } = useZCodeIntl();
   const handleRemoteConnectionTargetChange = useSourceServerUpdateNotifications({
@@ -260,7 +354,6 @@ function RootInner({
   const theme = useZCodeStore((state) => state.theme);
   const user = useZCodeStore((state) => state.user);
   const isRestoringOAuthSession = useZCodeStore((state) => state.isRestoringOAuthSession);
-  useWebRemoteControlAuthSync(platform, services.oauthService, user?.id, isRestoringOAuthSession);
   const setUser = useZCodeStore((state) => state.setUser);
   const setIsRestoringOAuthSession = useZCodeStore((state) => state.setIsRestoringOAuthSession);
   const setOAuthError = useZCodeStore((state) => state.setOAuthError);
@@ -278,14 +371,11 @@ function RootInner({
     settingsLoaded: Boolean(appSettings),
     userMode: appSettings?.dynamicWorkflowMode,
     zcodeAgentService: services.zcodeAgentService,
-    codingPlanSubscriptionService: services.codingPlanSubscriptionService,
   });
   const [welcomeScreenOpenReason, setWelcomeScreenOpenReason] =
     useState<WelcomeScreenOpenReason | null>(() =>
       consumeZcodeJwtInvalidRestartMarker() ? "session-expired" : null,
     );
-  const [providerFamilyDomainMigrationComplete, setProviderFamilyDomainMigrationComplete] =
-    useState(false);
   const loginEntryRequest = useZCodeStore((state) => state.loginEntryRequest);
   const rootModelSelectionRead = useModelSelectionServiceView(services.modelSelectionService);
   const rootModelSelectionView =
@@ -527,43 +617,22 @@ function RootInner({
   );
   const webRemoteControlFeatureEnabled = useWebRemoteControlFeatureEnabled();
   // Bugfix: WebRemoteControlDialog 只是可开关的展示入口，不能由它的本地 state 决定全局远控状态。
-  // Root 直接轮询 main 进程状态，让远控会话 running/active 成为唯一真值来源。
+  // Root 直接轮询 main 进程状态，确保任务快照同步只跟真实远控会话 running/active 绑定。
   const webRemoteControlStatus = useWebRemoteControlStatus({
-    enabled: Boolean(webRemoteControlFeatureEnabled && isDesktop),
+    enabled: Boolean(
+      webRemoteControlFeatureEnabled && isDesktop && platform.syncWebRemoteControlTasks,
+    ),
   });
   const webRemoteControlSessionActive =
     webRemoteControlStatus.status === "running" || webRemoteControlStatus.status === "active";
+  const webRemoteControlTaskSyncEnabled = Boolean(
+    webRemoteControlFeatureEnabled &&
+    webRemoteControlSessionActive &&
+    isDesktop &&
+    platform.syncWebRemoteControlTasks,
+  );
   const refreshProviderState = useRootProviderStateRefresh(services);
   useRootProviderSettingsSnapshot(services);
-  useEffect(() => {
-    let disposed = false;
-
-    void (async () => {
-      try {
-        await ensureProviderFamilyDomainMigration(services);
-      } catch (error) {
-        logger.warn("[Root] provider family domain 迁移失败，继续启动", {
-          error,
-        });
-      } finally {
-        if (!disposed) {
-          setProviderFamilyDomainMigrationComplete(true);
-          try {
-            await refreshAppSettings();
-            await refreshProviderState();
-          } catch (refreshError) {
-            logger.warn("[Root] provider family domain 迁移后刷新状态失败", {
-              error: refreshError,
-            });
-          }
-        }
-      }
-    })();
-
-    return () => {
-      disposed = true;
-    };
-  }, [refreshAppSettings, refreshProviderState, services]);
 
   const shouldPreferDirectoryBrowser = Boolean(preferDirectoryBrowser);
   const supportsEmbeddedBrowser = explicitSupportsEmbeddedBrowser ?? Boolean(isDesktop);
@@ -572,7 +641,7 @@ function RootInner({
     modelSelectionView: rootModelSelectionView,
   });
   const providerStartupSyncPending = isProviderStartupSyncPending({
-    providerFamilyDomainMigrationComplete,
+    providerFamilyDomainMigrationComplete: true,
     modelSelectionViewHydrated:
       rootProviderAvailability.hydrated || rootModelSelectionRead.state.status === "error",
   });
@@ -586,7 +655,7 @@ function RootInner({
       enabled: providerAvailabilityLoginEntryGuardEnabled,
       user,
       isRestoringOAuthSession: isResolvingStartupAuthState || providerStartupSyncPending,
-      providerFamilyDomain: appSettings?.providerFamilyDomain,
+      providerFamilyDomain: null,
       modelSelectionView: rootModelSelectionView,
       modelSelectionError:
         rootModelSelectionRead.state.status === "error"
@@ -704,12 +773,8 @@ function RootInner({
     preferDirectoryBrowser: shouldPreferDirectoryBrowser,
     openDirectoryBrowser: handleOpenDirectoryBrowser,
     refreshProviderState,
-    updateAppSettings,
     setOAuthError,
     setUser,
-    onProviderFamilyDomainClearedAfterLogout: () => {
-      setWelcomeScreenOpenReason("logout-provider-required");
-    },
     userId: user?.id,
     onOpenRemoteConnection: allowRemoteWorkspace ? handleOpenRemoteConnection : undefined,
     openRemoteProjectWorkspace: openPreparedRemoteProjectWorkspace,
@@ -946,13 +1011,15 @@ function RootInner({
     );
   }, [hasCompletedFullRestore, isDesktop, windowWorkspaceTabs]);
 
-  // Bug 原因（2026-08-16 web 远控卡死）：官方版本请求安全校验应答方曾只随桌面正在展示的
-  // session pane 挂载，web 远控新建会话时桌面没有对应 pane、web 端无应答方，
-  // headers 请求永远滞留 pending，任务永久「工作中」。应答方必须常驻桌面窗口、
-  // 覆盖每个打开的 workspace tab，与展示状态解耦；Web 端保持零订阅，桌面仍是唯一权威。
-  const requestSecurityBridgeNode = isDesktop ? (
-    <RequestSecurityWorkspaceBridge workspaceTabs={windowWorkspaceTabs} />
-  ) : null;
+  const webRemoteControlTaskSyncNode =
+    hasCompletedFullRestore &&
+    webRemoteControlTaskSyncEnabled &&
+    platform.syncWebRemoteControlTasks ? (
+      <WebRemoteControlTaskSync
+        syncWebRemoteControlTasks={platform.syncWebRemoteControlTasks}
+        workspaceTabs={windowWorkspaceTabs}
+      />
+    ) : null;
 
   const { tryRefresh, clearCredentials } = useTokenRefresh();
   void tryRefresh;
@@ -1050,15 +1117,9 @@ function RootInner({
   }, [platform]);
 
   useRootOAuthEffects({
-    accountIntentKey: JSON.stringify([
-      user?.id,
-      appSettings?.providerFamilyDomain,
-      appSettings?.providerFamilyConnectionSelections,
-    ]),
     platform,
     services,
     refreshProviderState,
-    refreshAppSettings,
     setUser,
     setIsRestoringOAuthSession,
     setOAuthError,
@@ -1241,7 +1302,7 @@ function RootInner({
     setWelcomeScreenOpenReason("manual-login");
   }, []);
   const handleWelcomeScreenComplete = useCallback(
-    async (reason: LoginCompleteReason) => {
+    async (reason: WelcomeCompleteReason) => {
       await refreshAppSettings();
       if (
         welcomeScreenOpenReason !== "startup-provider-required" ||
@@ -1458,7 +1519,7 @@ function RootInner({
     return (
       <RootShell>
         {rootModelSelectionErrorNode}
-        {requestSecurityBridgeNode}
+        {webRemoteControlTaskSyncNode}
         {remoteConnectionDialog}
         {directoryBrowserDialog}
         {/* 修复原因：HTML 启动壳已经展示 ZCode SVG，但 React 接管 root 后旧壳会被整棵替换。
@@ -1473,7 +1534,7 @@ function RootInner({
     return (
       <RootShell>
         {rootModelSelectionErrorNode}
-        {requestSecurityBridgeNode}
+        {webRemoteControlTaskSyncNode}
         {remoteConnectionDialog}
         {directoryBrowserDialog}
         <WelcomeScreen onComplete={handleWelcomeScreenComplete} />
@@ -1485,6 +1546,7 @@ function RootInner({
     return (
       <RootShell>
         {rootModelSelectionErrorNode}
+        {webRemoteControlTaskSyncNode}
         {remoteConnectionDialog}
         {directoryBrowserDialog}
         <ScopedErrorBoundary
@@ -1510,7 +1572,7 @@ function RootInner({
     return (
       <RootShell>
         {rootModelSelectionErrorNode}
-        {requestSecurityBridgeNode}
+        {webRemoteControlTaskSyncNode}
         {initialWorkspaceLoadingFallback}
         {directoryBrowserDialog}
       </RootShell>
@@ -1521,6 +1583,7 @@ function RootInner({
     return remoteConnectionDialogOpen || directoryBrowserOpen || rootModelSelectionErrorNode ? (
       <RootShell>
         {rootModelSelectionErrorNode}
+        {webRemoteControlTaskSyncNode}
         {remoteConnectionDialogOpen ? remoteConnectionDialog : null}
         {directoryBrowserDialog}
       </RootShell>
@@ -1530,7 +1593,7 @@ function RootInner({
   return (
     <RootShell>
       {rootModelSelectionErrorNode}
-      {requestSecurityBridgeNode}
+      {webRemoteControlTaskSyncNode}
       {remoteConnectionDialog}
       {directoryBrowserDialog}
       <OccupationOnboarding

@@ -36,12 +36,13 @@ import type {
   WebRemoteControlReconnectWorkspaceResult,
   WebRemoteControlStartOperationResult,
   WebRemoteControlStatus,
+  WebRemoteControlTaskTarget,
   WebRemoteControlWorkspaceTarget,
   OAuthStateRegistration,
-  WebRemoteControlAuthStateChange,
   PostUpdateReleaseNotesPayload,
   RemoteConnectionRuntimeLog,
   RemoteSessionClosedEvent,
+  BotRemoteWorkspaceReconnectedEvent,
   RemoteTarget,
   SSHConfigAliasOption,
   RendererTelemetryEventPayload,
@@ -97,6 +98,10 @@ declare global {
       startWebRemoteControl(
         context: WebRemoteControlContext,
       ): Promise<WebRemoteControlStartOperationResult>;
+      /** 清除旧配对材料并重新生成 Web 远程控制二维码 */
+      refreshWebRemoteControlPairing(
+        context: WebRemoteControlContext,
+      ): Promise<WebRemoteControlStartOperationResult>;
       /** 关闭当前窗口的 Web 远程控制 */
       stopWebRemoteControl(): Promise<void>;
       /** 查询当前窗口 Web 远程控制状态 */
@@ -141,6 +146,10 @@ declare global {
       onRemoteConnectionLog(handler: (entry: RemoteConnectionRuntimeLog) => void): () => void;
       /** 订阅远程 workspace session 关闭事件，返回 disposer */
       onRemoteSessionClosed(handler: (event: RemoteSessionClosedEvent) => void): () => void;
+      /** 订阅 Bot 触发的远程 workspace 重连成功事件，返回 disposer */
+      onBotRemoteWorkspaceReconnected(
+        handler: (event: BotRemoteWorkspaceReconnectedEvent) => void,
+      ): () => void;
       /** 检查目录是否已在其他窗口打开 */
       activateOrSetWorkspace?(path: string): Promise<{ activated: boolean }>;
       /** 同步当前窗口所有 tab 的 workspace 路径到 main 进程 */
@@ -148,6 +157,7 @@ declare global {
       /** 同步当前窗口里 Web 远程控制允许切换的 workspace */
       syncWebRemoteControlWorkspaces?(workspaces: WebRemoteControlWorkspaceTarget[]): void;
       /** 同步当前窗口里 Web 远程控制可展示的 task 快照 */
+      syncWebRemoteControlTasks?(tasks: WebRemoteControlTaskTarget[]): void;
       /** 注册手机端 Web 远控请求重连 workspace 的回调 */
       onWebRemoteControlReconnectWorkspace?(
         handler: (
@@ -268,7 +278,6 @@ declare global {
       startCuaHelperPermissionDrag?(): void;
       /** 上报 OAuth state 用于 deep link 路由 */
       registerOAuthState(payload: OAuthStateRegistration): void;
-      notifyWebRemoteControlAuthStateChanged(change: WebRemoteControlAuthStateChange): void;
       /** 注册 OAuth deep link 回调，返回 disposer */
       onOAuthCallback(cb: (url: string) => void): () => void;
       /** 注册支付 deep link 回调，返回 disposer */

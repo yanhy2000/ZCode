@@ -1,4 +1,3 @@
-import type { WebRemoteControlAuthStateChange } from "./web-remote-control.js";
 /* eslint-disable max-lines -- 通信频道和请求响应映射必须集中定义，避免跨进程 channel 字符串散落。 */
 import type {
   ResourceUsageSnapshot,
@@ -15,6 +14,7 @@ import type {
   WebRemoteControlReconnectWorkspaceResult,
   WebRemoteControlStartOperationResult,
   WebRemoteControlStatus,
+  WebRemoteControlTaskTarget,
   WebRemoteControlWorkspaceTarget,
 } from "./web-remote-control.js";
 import type { AppSettings, Locale } from "./protocol.js";
@@ -30,6 +30,7 @@ import type { RendererHeapSample } from "./validation.js";
 import type {
   CancelPendingRemoteConnectionRequest,
   BindRemoteWorkspaceSessionContextRequest,
+  BotRemoteWorkspaceReconnectedEvent,
   BrowserViewScreenshotSurfacePreparePayload,
   BrowserViewScreenshotSurfaceReadyPayload,
   BrowserViewScreenshotSurfaceReleasePayload,
@@ -216,6 +217,8 @@ export const PlatformChannels = {
   RemoteConnectionLog: "zcode:remote-connection-log",
   /** Main → Renderer：远程 workspace session 已关闭 */
   RemoteSessionClosed: "zcode:remote-session-closed",
+  /** Main → Renderer：Bot 已触发远端 workspace 重连成功 */
+  BotRemoteWorkspaceReconnected: "zcode:bot-remote-workspace-reconnected",
   /** Main → Renderer：Source 自动重连后的 logical session 已换代并完成 port ready */
   RemoteSessionReconnected: "zcode:remote-session-reconnected",
   /** 检查目录是否已在其他窗口打开，如果是则激活该窗口 */
@@ -230,12 +233,11 @@ export const PlatformChannels = {
   BindRemoteWorkspaceSessionContext: "zcode:bind-remote-workspace-session-context",
   /** 为当前 workspace 开启 Web 远程控制 */
   StartWebRemoteControl: "zcode:start-web-remote-control",
+  ResetWebRemoteControlPairing: "zcode:reset-web-remote-control-pairing",
   /** 关闭当前窗口的 Web 远程控制 */
   StopWebRemoteControl: "zcode:stop-web-remote-control",
   /** 查询当前窗口的 Web 远程控制状态 */
   GetWebRemoteControlStatus: "zcode:get-web-remote-control-status",
-  /** Renderer → Main：OAuth 会话变化通知，不携带凭据 */
-  WebRemoteControlAuthStateChanged: "zcode:web-remote-control-auth-state-changed",
   /** Main → Renderer：当前窗口 Web 远程控制状态变化 */
   WebRemoteControlStatusChanged: "zcode:web-remote-control-status-changed",
   /** 释放当前窗口里的远程 session */
@@ -260,6 +262,8 @@ export const PlatformChannels = {
   SyncWindowTabs: "zcode:sync-window-tabs",
   /** Renderer → Main：同步当前窗口可供 Web 远程控制切换的 workspace */
   SyncWebRemoteControlWorkspaces: "zcode:sync-web-remote-control-workspaces",
+  /** Renderer → Main：同步当前窗口可供 Web 远程控制展示的 task 快照 */
+  SyncWebRemoteControlTasks: "zcode:sync-web-remote-control-tasks",
   /** Main → Renderer：手机端请求重连当前窗口里的远程 workspace */
   WebRemoteControlReconnectWorkspace: "zcode:web-remote-control-reconnect-workspace",
   /** Renderer → Main：同步当前窗口的未读 task 数 */
@@ -581,6 +585,12 @@ export const HostMessageTypes = {
   TaskOwnerCommandDeliver: "task-owner-command-deliver",
   /** main → host：deliver owner command result to requester */
   TaskOwnerCommandResult: "task-owner-command-result",
+  /** main → host：Bot 远端 workspace 重连结果 */
+  BotRemoteWorkspaceReconnectResult: "bot-remote-workspace-reconnect-result",
+  /** main → host：Bot 远端 workspace 连接状态查询结果 */
+  BotRemoteWorkspaceConnectionStatusResult: "bot-remote-workspace-connection-status-result",
+  /** main → host：Bot 远端 workspace runtime RPC 端口 */
+  BotRemoteWorkspaceRuntimePort: "bot-remote-workspace-runtime-port",
   /** main → host：把 session message 投递到该 host 管理的目标 session */
   SessionMessageDeliver: "session-message-deliver",
   /** main → host：把 session message 投递结果回写到源 session */
@@ -681,6 +691,12 @@ export const HostResponseTypes = {
   TaskOwnerCommandRequest: "task-owner-command-request",
   /** host → main：owner 返回 task command result */
   TaskOwnerCommandResult: "task-owner-command-result",
+  /** host → main：Bot 请求创建远端 workspace session */
+  BotRemoteWorkspaceReconnectRequest: "bot-remote-workspace-reconnect-request",
+  /** host → main：Bot 查询当前窗口是否已有远端 workspace session */
+  BotRemoteWorkspaceConnectionStatusRequest: "bot-remote-workspace-connection-status-request",
+  /** host → main：Bot 请求远端 workspace runtime RPC 端口 */
+  BotRemoteWorkspaceRuntimePortRequest: "bot-remote-workspace-runtime-port-request",
   /** host → main：Agent 请求向另一个 session 发送消息 */
   SessionMessageSendRequested: "session-message-send-requested",
   /** host → main：声明一个 ZCode Agent session 当前归属该 host */
@@ -765,6 +781,10 @@ export interface PlatformChannelMap {
     request: RemoteSessionClosedEvent;
     response: void;
   };
+  [PlatformChannels.BotRemoteWorkspaceReconnected]: {
+    request: BotRemoteWorkspaceReconnectedEvent;
+    response: void;
+  };
   [PlatformChannels.RemoteSessionReconnected]: {
     request: RemoteSessionReconnectedEvent;
     response: void;
@@ -803,12 +823,12 @@ export interface PlatformChannelMap {
     request: WebRemoteControlContext;
     response: WebRemoteControlStartOperationResult;
   };
+  [PlatformChannels.ResetWebRemoteControlPairing]: {
+    request: WebRemoteControlContext;
+    response: WebRemoteControlStartOperationResult;
+  };
   [PlatformChannels.StopWebRemoteControl]: {
     request: void;
-    response: void;
-  };
-  [PlatformChannels.WebRemoteControlAuthStateChanged]: {
-    request: WebRemoteControlAuthStateChange;
     response: void;
   };
   [PlatformChannels.GetWebRemoteControlStatus]: {
@@ -857,6 +877,10 @@ export interface PlatformChannelMap {
   };
   [PlatformChannels.SyncWebRemoteControlWorkspaces]: {
     request: WebRemoteControlWorkspaceTarget[];
+    response: void;
+  };
+  [PlatformChannels.SyncWebRemoteControlTasks]: {
+    request: WebRemoteControlTaskTarget[];
     response: void;
   };
   [PlatformChannels.WebRemoteControlReconnectWorkspace]: {

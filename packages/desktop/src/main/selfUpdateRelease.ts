@@ -92,8 +92,10 @@ function compareVersionPart(
   right: [number, number, number],
 ): number {
   for (let index = 0; index < left.length; index += 1) {
-    if (left[index] !== right[index]) {
-      return left[index] > right[index] ? 1 : -1;
+    const leftPart = left[index]!;
+    const rightPart = right[index]!;
+    if (leftPart !== rightPart) {
+      return leftPart > rightPart ? 1 : -1;
     }
   }
   return 0;

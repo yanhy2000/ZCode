@@ -13,6 +13,11 @@ interface WebAuthPageCopy {
   callbackErrorTitle: string;
   callbackErrorDescription: string;
   retryAction: string;
+  // fork 保留 V1 远控登录后等待桌面配对的页面文案。
+  waitingTitle: string;
+  waitingDescription: string;
+  signedInAs: string;
+  logoutAction: string;
 }
 
 const WEB_AUTH_COPY = {
@@ -27,6 +32,10 @@ const WEB_AUTH_COPY = {
     callbackErrorTitle: "登录失败",
     callbackErrorDescription: "授权流程未完成，请重新登录。",
     retryAction: "重新登录",
+    waitingTitle: "已登录",
+    waitingDescription: "请在电脑端打开 Web 远程控制并扫码配对，此页面会自动进入任务列表。",
+    signedInAs: "当前账号",
+    logoutAction: "退出登录",
   },
   "en-US": {
     brand: "ZCode",
@@ -39,6 +48,10 @@ const WEB_AUTH_COPY = {
     callbackErrorTitle: "Sign-In Failed",
     callbackErrorDescription: "The authorization flow did not complete. Sign in again.",
     retryAction: "Sign In Again",
+    waitingTitle: "Signed In",
+    waitingDescription: "Open Web Remote Control on your computer and pair this device; this page will continue automatically.",
+    signedInAs: "Signed in as",
+    logoutAction: "Sign out",
   },
 } satisfies Record<WebAuthLocale, WebAuthPageCopy>;
 

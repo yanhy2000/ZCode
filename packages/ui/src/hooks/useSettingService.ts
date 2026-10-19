@@ -142,50 +142,45 @@ export function useSettings(options: { cacheKey?: string; services?: IServiceAcc
     );
   }, [platform, refresh]);
 
-  const update = useCallback(
-    async (
-      patch: Partial<AppSettings>,
-      expectedAccountSettings?: Parameters<ISettingService["update"]>[1],
-    ) => {
-      try {
-        if (expectedAccountSettings) await settingService.update(patch, expectedAccountSettings);
-        else await settingService.update(patch);
-      } catch (error) {
-        // 原因：CAS 失败后页面仍持有旧快照；重读事实后报告失败，下一次用户重试才有新预期。
-        if (expectedAccountSettings) await refresh();
-        throw error;
-      }
-      platform.syncAppSettings?.(patch);
+  const update = useCallback(async (patch: Partial<AppSettings>) => {
+    try {
+      await settingService.update(patch);
+    } catch (error) {
+      // 原因：写入失败时页面仍持有旧快照；重读事实后报告失败，下一次用户重试才有新预期。
       await refresh();
-      if (
-        typeof patch.askUserQuestionAutoResolutionEnabled === "boolean" ||
-        typeof patch.modelIoFullRetentionEnabled === "boolean"
-      ) {
-        const currentSettings = getSettingsSnapshot(cacheKey).settings;
-        const preferences = {
-          askUserQuestionAutoResolutionEnabled:
-            patch.askUserQuestionAutoResolutionEnabled ??
-            currentSettings?.askUserQuestionAutoResolutionEnabled !== false,
-          modelIoFullRetentionEnabled:
-            patch.modelIoFullRetentionEnabled ??
-            currentSettings?.modelIoFullRetentionEnabled === true,
-        };
-        const syncResults = await Promise.allSettled([
-          zcodeAgentService.syncAppRuntimePreferences(preferences),
-          botsService.syncAppRuntimePreferences(preferences),
-        ]);
-        const syncError = syncResults.find(
-          (result): result is PromiseRejectedResult => result.status === "rejected",
-        )?.reason;
-        await broadcastService.send({
-          channel: APP_RUNTIME_PREFERENCES_CHANGED_BROADCAST_CHANNEL,
-          payload: preferences,
-        });
-        if (syncError) {
-          throw syncError;
-        }
+      throw error;
+    }
+    platform.syncAppSettings?.(patch);
+    await refresh();
+    if (
+      typeof patch.askUserQuestionAutoResolutionEnabled === "boolean" ||
+      typeof patch.modelIoFullRetentionEnabled === "boolean"
+    ) {
+      const currentSettings = getSettingsSnapshot(cacheKey).settings;
+      const preferences = {
+        askUserQuestionAutoResolutionEnabled:
+          patch.askUserQuestionAutoResolutionEnabled ??
+          currentSettings?.askUserQuestionAutoResolutionEnabled !== false,
+        modelIoFullRetentionEnabled:
+          patch.modelIoFullRetentionEnabled ??
+          currentSettings?.modelIoFullRetentionEnabled === true,
+      };
+      const syncResults = await Promise.allSettled([
+        zcodeAgentService.syncAppRuntimePreferences(preferences),
+        botsService.syncAppRuntimePreferences(preferences),
+      ]);
+      const syncError = syncResults.find(
+        (result): result is PromiseRejectedResult => result.status === "rejected",
+      )?.reason;
+      await broadcastService.send({
+        channel: APP_RUNTIME_PREFERENCES_CHANGED_BROADCAST_CHANNEL,
+        payload: preferences,
+      });
+      if (syncError) {
+        throw syncError;
       }
-    },
+    }
+  },
     [botsService, broadcastService, cacheKey, settingService, zcodeAgentService, platform, refresh],
   );
 

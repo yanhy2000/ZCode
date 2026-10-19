@@ -50,7 +50,6 @@ import type {
   EmbeddedBrowserSitePermissionsSnapshot,
   Locale,
   OAuthStateRegistration,
-  WebRemoteControlAuthStateChange,
   OpenInEditorOptions,
   RemoteTarget,
   TaskNotificationPayload,
@@ -59,6 +58,7 @@ import type {
   PostUpdateReleaseNotesPayload,
   RemoteSessionClosedEvent,
   RemoteSessionReconnectedEvent,
+  BotRemoteWorkspaceReconnectedEvent,
   UpdateCheckResultPayload,
   UpdateStatePayload,
   ZCodeStdioTapDevState,
@@ -73,6 +73,7 @@ import type {
   WebRemoteControlReconnectWorkspaceRequest,
   WebRemoteControlReconnectWorkspaceResult,
   WebRemoteControlStatus,
+  WebRemoteControlTaskTarget,
   WebRemoteControlWorkspaceTarget,
   RemoteConnectionRuntimeLog,
   WindowControlsOverlayMetrics,
@@ -288,6 +289,8 @@ contextBridge.exposeInMainWorld("zcode", {
       ),
   startWebRemoteControl: (context: WebRemoteControlContext) =>
     ipcRenderer.invoke(PlatformChannels.StartWebRemoteControl, context),
+  refreshWebRemoteControlPairing: (context: WebRemoteControlContext) =>
+    ipcRenderer.invoke(PlatformChannels.ResetWebRemoteControlPairing, context),
   stopWebRemoteControl: (): Promise<void> =>
     ipcRenderer.invoke(PlatformChannels.StopWebRemoteControl),
   getWebRemoteControlStatus: () => ipcRenderer.invoke(PlatformChannels.GetWebRemoteControlStatus),
@@ -365,6 +368,16 @@ contextBridge.exposeInMainWorld("zcode", {
     ipcRenderer.on(PlatformChannels.RemoteSessionReconnected, handler);
     return () => ipcRenderer.removeListener(PlatformChannels.RemoteSessionReconnected, handler);
   },
+  /** 订阅 Bot 触发的远程 workspace 重连成功事件，返回 disposer */
+  onBotRemoteWorkspaceReconnected: (
+    callback: (event: BotRemoteWorkspaceReconnectedEvent) => void,
+  ) => {
+    const handler = (_event: unknown, payload: unknown) =>
+      callback(payload as BotRemoteWorkspaceReconnectedEvent);
+    ipcRenderer.on(PlatformChannels.BotRemoteWorkspaceReconnected, handler);
+    return () =>
+      ipcRenderer.removeListener(PlatformChannels.BotRemoteWorkspaceReconnected, handler);
+  },
   /** 检查目录是否已在其他窗口打开 */
   activateOrSetWorkspace: (path: string): Promise<{ activated: boolean }> =>
     ipcRenderer.invoke(PlatformChannels.ActivateOrSetWorkspace, path),
@@ -373,6 +386,9 @@ contextBridge.exposeInMainWorld("zcode", {
   /** 同步当前窗口里 Web 远程控制允许切换的 workspace */
   syncWebRemoteControlWorkspaces: (workspaces: WebRemoteControlWorkspaceTarget[]) =>
     ipcRenderer.send(PlatformChannels.SyncWebRemoteControlWorkspaces, workspaces),
+  /** 同步当前窗口里 Web 远程控制可展示的 task 快照 */
+  syncWebRemoteControlTasks: (tasks: WebRemoteControlTaskTarget[]) =>
+    ipcRenderer.send(PlatformChannels.SyncWebRemoteControlTasks, tasks),
   onWebRemoteControlReconnectWorkspace: (
     callback: (
       request: WebRemoteControlReconnectWorkspaceRequest,
@@ -692,8 +708,6 @@ contextBridge.exposeInMainWorld("zcode", {
   /** 从权限浮窗拖拽 Helper.app 到 macOS 权限列表。必须是 send —— invoke 的往返会错过手势。 */
   startCuaHelperPermissionDrag: () =>
     ipcRenderer.send(PlatformChannels.StartCuaHelperPermissionDrag),
-  notifyWebRemoteControlAuthStateChanged: (change: WebRemoteControlAuthStateChange) =>
-    ipcRenderer.send(PlatformChannels.WebRemoteControlAuthStateChanged, change),
   /** 上报 OAuth state 用于 deep link 路由 */
   registerOAuthState: (payload: OAuthStateRegistration) =>
     ipcRenderer.send(PlatformChannels.OAuthRegisterState, payload),

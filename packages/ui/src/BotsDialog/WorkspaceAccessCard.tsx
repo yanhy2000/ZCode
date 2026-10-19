@@ -16,12 +16,15 @@ import { isAllWorkspacesAllowed } from "./shared.js";
 export function WorkspaceAccessCard({
   bot,
   workspaceRefs,
+  currentWorkspace,
   loading,
   onPatchAllowedWorkspaces,
   onToggleWorkspaceAccess,
 }: {
   bot: BotConfig;
   workspaceRefs: BotWorkspaceRef[];
+  /** fork 保留：仅选中范围时需要知道“当前 workspace”是哪一个，缺省退回首个 workspace。 */
+  currentWorkspace?: BotWorkspaceRef;
   loading: boolean;
   onPatchAllowedWorkspaces: (allowedWorkspaces: string[]) => Promise<void>;
   onToggleWorkspaceAccess: (workspaceId: string, checked: boolean) => Promise<void>;
@@ -51,9 +54,9 @@ export function WorkspaceAccessCard({
           <Select
             value={allAllowed ? "all" : "selected"}
             onValueChange={(value) => {
-              void onPatchAllowedWorkspaces(
-                value === "all" ? [ALL_BOT_WORKSPACES] : [workspaceRefs[0]!.id],
-              );
+              const selectedWorkspaceId = currentWorkspace?.id ?? workspaceRefs[0]?.id;
+              if (value === "all") void onPatchAllowedWorkspaces([ALL_BOT_WORKSPACES]);
+              else if (selectedWorkspaceId) void onPatchAllowedWorkspaces([selectedWorkspaceId]);
             }}
             disabled={loading || workspaceRefs.length === 0}
           >
