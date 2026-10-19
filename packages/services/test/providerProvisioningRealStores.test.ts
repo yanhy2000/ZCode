@@ -188,7 +188,7 @@ describe("R3A-PRV-08/09 正式磁盘Store与Registry事务", () => {
     if (root) await rm(root, { recursive: true, force: true });
   });
 
-  it.each(["settings", "credentials", "personal"] as const)(
+  it.each(["credentials", "personal"] as const)(
     "PRV-08 %s提交后报错，逆序恢复正式存储及内存Registry",
     async (stage) => {
       const before = await readFile(fixture.personal, "utf8");
@@ -200,7 +200,6 @@ describe("R3A-PRV-08/09 正式磁盘Store与Registry事务", () => {
           throw new Error(`R3_FAULT_AFTER_${stage}`);
         }) as never);
       };
-      if (stage === "settings") inject(fixture.settings, "update");
       if (stage === "credentials") inject(fixture.credentials, "save");
       if (stage === "personal") inject(fixture.personalRepository, "update");
       const result = await fixture.target.apply(envelope(`fail-${stage}`, "new-value"));
@@ -401,8 +400,9 @@ describe("R3A-PRV-05/06/07/10/11 完整替换、allowlist 凭据、窄设置与�
     expect(raw).not.toContain("mcp-not-allowlisted");
   });
 
-  it("PRV-07 只改约定的账号窄字段，locale 等其它设置与 Built-in 文件不变", async () => {
+  it("PRV-07 不再写账号 Settings，locale 等其它设置与 Built-in 文件不变", async () => {
     await fixture.settings.update({ locale: "zh-CN", terminalInheritSystemProfile: false });
+    const settingsBefore = await fixture.settings.get();
     const builtinBefore = await readFile(fixture.builtin, "utf8");
     const result = await fixture.target.apply(
       customEnvelope("narrow-settings", {
@@ -411,18 +411,13 @@ describe("R3A-PRV-05/06/07/10/11 完整替换、allowlist 凭据、窄设置与�
         defaultModelSelection: selection,
         accountSettings: {
           providerFamilyDomain: "zai",
-          providerFamilyConnectionSelections: { zai: { kind: "individual-coding-plan" } },
+          providerFamilyConnectionSelections: {},
         },
       }),
     );
     expect(result.status).toBe("applied");
-    const settings = await fixture.settings.get();
-    expect(settings).toMatchObject({
-      locale: "zh-CN",
-      terminalInheritSystemProfile: false,
-      providerFamilyDomain: "zai",
-      providerFamilyConnectionSelections: { zai: { kind: "individual-coding-plan" } },
-    });
+    // 账号 Settings 已随云端账号链路移除；信封中的 accountSettings 不再落盘。
+    expect(await fixture.settings.get()).toEqual(settingsBefore);
     expect(await readFile(fixture.builtin, "utf8")).toBe(builtinBefore);
   });
 
@@ -514,7 +509,10 @@ describe("R3A-PRV-05/06/07/10/11 完整替换、allowlist 凭据、窄设置与�
   });
 
   it("PRV-02 Target 结果只会是 applied / already-applied / failed / rollback_failed 之一，失败不登记", async () => {
-    vi.spyOn(fixture.account, "refresh").mockRejectedValueOnce(new Error("R3_FIRST_APPLY_FAULT"));
+    // 账号 Provider 已删除；用仍在事务内的 Registry 刷新注入首次失败。
+    vi.spyOn(fixture.runtime.registryService, "refresh").mockRejectedValueOnce(
+      new Error("R3_FIRST_APPLY_FAULT"),
+    );
     const failed = await fixture.target.apply(envelope("first-apply-failed", "v2"));
     expect(failed).toMatchObject({ status: "failed", rolledBack: true });
     expect(await readFile(fixture.state, "utf8")).not.toContain("first-apply-failed");

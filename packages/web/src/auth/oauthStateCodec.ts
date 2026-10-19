@@ -1,13 +1,9 @@
 import { DEFAULT_ZCODE_ENDPOINT_ORIGIN } from "@zcode/shared";
 
 const PRODUCTION_WEB_REMOTE_ORIGIN = DEFAULT_ZCODE_ENDPOINT_ORIGIN;
-const WEB_REMOTE_CALLBACK_PATHS = new Set(["/remote/v4", "/remote/v4/"]);
-// 测试入口也经过登录门禁，必须保留原路径与扫码参数；OAuth 回调仍只使用已登记的 v4。
-const WEB_REMOTE_APP_PATHS = new Set([
-  ...WEB_REMOTE_CALLBACK_PATHS,
-  "/remote/__test__",
-  "/remote/__test__/",
-]);
+const WEB_REMOTE_CALLBACK_PATHS = new Set(["/web-remote/callback"]);
+// 3.16.1 起 Web 远控页面入口与 OAuth 回调都位于 /web-remote；旧 /remote/v4 不再由本端路由处理。
+const WEB_REMOTE_APP_PATHS = new Set(["/web-remote", "/web-remote/"]);
 const WEB_CALLBACK_PATHS = new Set([
   ...WEB_REMOTE_CALLBACK_PATHS,
   "/cn/share/callback",

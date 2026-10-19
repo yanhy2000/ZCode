@@ -76,6 +76,6 @@ export function resolveWebAuthDevReturnTo(
   surface: "remote" | "share" = "remote",
 ): string | undefined {
   return config.devOrigin
-    ? `${config.devOrigin}/${surface === "share" ? "share/callback" : "remote/v4"}`
+    ? `${config.devOrigin}/${surface === "share" ? "share/callback" : "web-remote/callback"}`
     : undefined;
 }

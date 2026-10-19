@@ -64,7 +64,7 @@ function createService(options?: {
         createNonce: () => "nonce-1",
         getCurrentHref: () =>
           options?.currentHref ??
-          "http://192.168.1.8:5173/remote/v4?app_version=3.13.0&sid=device-1&mid=mid-1&name=Desktop",
+          "http://192.168.1.8:5173/web-remote?app_version=3.13.0&sid=device-1&mid=mid-1&name=Desktop",
         getCurrentOrigin: () => options?.currentOrigin ?? "http://192.168.1.8:5173",
         replace: (url) => replaced.push(url),
       },
@@ -117,7 +117,7 @@ describe("WebAuthService", () => {
       runtime: {
         assign: (url) => assigned.push(url),
         createNonce: () => "nonce-1",
-        getCurrentHref: () => "https://zcode.z.ai/remote/v4",
+        getCurrentHref: () => "https://zcode.z.ai/web-remote",
         getCurrentOrigin: () => "https://zcode.z.ai",
         replace: () => undefined,
       },
@@ -130,7 +130,7 @@ describe("WebAuthService", () => {
       "https://chat.z.ai/api/oauth/authorize",
     );
     expect(authorizeUrl.searchParams.get("redirect_uri")).toBe(
-      "https://zcode.z.ai/remote/v4",
+      "https://zcode.z.ai/web-remote/callback",
     );
     expect(authorizeUrl.searchParams.get("client_id")).toBe("client_P8X5CMWmlaRO9gyO-KSqtg");
   });
@@ -139,7 +139,7 @@ describe("WebAuthService", () => {
     const { assigned, service, sessionStorage } = createService();
 
     service.startLogin({
-      devReturnTo: "http://192.168.1.8:5173/remote/v4",
+      devReturnTo: "http://192.168.1.8:5173/web-remote/callback",
     });
 
     const authorizeUrl = new URL(assigned[0]!);
@@ -149,14 +149,14 @@ describe("WebAuthService", () => {
       "https://chat.z.ai/api/oauth/authorize",
     );
     expect(authorizeUrl.searchParams.get("redirect_uri")).toBe(
-      "https://zcode.z.ai/remote/v4?app_version=3.13.0&sid=device-1&mid=mid-1&name=Desktop",
+      "https://zcode.z.ai/web-remote/callback?app_version=3.13.0&sid=device-1&mid=mid-1&name=Desktop",
     );
     expect(state).toEqual({
       nonce: "nonce-1",
       return_to:
-        "http://192.168.1.8:5173/remote/v4?app_version=3.13.0&sid=device-1&mid=mid-1&name=Desktop",
+        "http://192.168.1.8:5173/web-remote/callback?app_version=3.13.0&sid=device-1&mid=mid-1&name=Desktop",
       app_return_to:
-        "http://192.168.1.8:5173/remote/v4?app_version=3.13.0&sid=device-1&mid=mid-1&name=Desktop",
+        "http://192.168.1.8:5173/web-remote?app_version=3.13.0&sid=device-1&mid=mid-1&name=Desktop",
     });
   });
 
@@ -175,7 +175,7 @@ describe("WebAuthService", () => {
 
   it.each(
     (["zai", "bigmodel"] as const).flatMap((provider) =>
-      ["/remote/v4/", "/remote/__test__", "/remote/__test__/"].map((path) => ({
+      ["/web-remote/", "/web-remote"].map((path) => ({
         provider,
         path,
       })),
@@ -194,7 +194,7 @@ describe("WebAuthService", () => {
       const redirectUri = authorize.searchParams.get(
         provider === "bigmodel" ? "redirect" : "redirect_uri",
       )!;
-      expect(redirectUri).toBe(`${origin}/remote/v4?${query}`);
+      expect(redirectUri).toBe(`${origin}/web-remote/callback?${query}`);
       const callback = new URL(redirectUri);
       callback.searchParams.set(provider === "bigmodel" ? "authCode" : "code", "code-1");
       callback.searchParams.set("state", authorize.searchParams.get("state")!);
@@ -229,9 +229,9 @@ describe("WebAuthService", () => {
     const query = "app_version=3.14.0&sid=device-1&mid=mid-1&name=Desktop";
     const h = createService({
       currentOrigin: devOrigin,
-      currentHref: `${devOrigin}/remote/v4?${query}`,
+      currentHref: `${devOrigin}/web-remote?${query}`,
     });
-    h.service.startLogin({ provider: "bigmodel", devReturnTo: `${devOrigin}/remote/v4` });
+    h.service.startLogin({ provider: "bigmodel", devReturnTo: `${devOrigin}/web-remote/callback` });
     const authorize = new URL(h.assigned[0]!);
     const callback = new URL(authorize.searchParams.get("redirect")!);
     callback.searchParams.set("authCode", "code-1");
@@ -262,7 +262,7 @@ describe("WebAuthService", () => {
     expect(forwarded.searchParams.get("name")).toBe("Desktop");
     await h.reloadService().handleCallback(forwarded.toString());
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)).redirect_uri).toBe(
-      `https://zcode.z.ai/remote/v4?${query}`,
+      `https://zcode.z.ai/web-remote/callback?${query}`,
     );
   });
 
@@ -275,7 +275,7 @@ describe("WebAuthService", () => {
     vi.stubGlobal("fetch", fetchMock);
     const state = buildOAuthState({ nonce: "wrong-nonce" });
     await expect(
-      h.reloadService().handleCallback(`https://zcode.z.ai/remote/v4?authCode=code&state=${state}`),
+      h.reloadService().handleCallback(`https://zcode.z.ai/web-remote/callback?authCode=code&state=${state}`),
     ).rejects.toThrow(/CSRF/);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(h.sessionStorage.getItem("oauth_pending_redirect_uri")).toBe(pendingRedirect);
@@ -301,9 +301,9 @@ describe("WebAuthService", () => {
     vi.stubGlobal("fetch", fetchMock);
     await h
       .reloadService()
-      .handleCallback(`https://zcode.z.ai/remote/v4?code=code-1&state=${state}`);
+      .handleCallback(`https://zcode.z.ai/web-remote/callback?code=code-1&state=${state}`);
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)).redirect_uri).toBe(
-      "https://zcode.z.ai/remote/v4",
+      "https://zcode.z.ai/web-remote/callback",
     );
     expect(h.sessionStorage.getItem("oauth_pending_redirect_uri")).toBeNull();
   });
@@ -323,24 +323,26 @@ describe("WebAuthService", () => {
     const { replaced, service } = createService({
       allowDevReturnToRedirect: true,
       currentOrigin: "https://zcode.z.ai",
-      currentHref: "https://zcode.z.ai/remote/v4",
+      currentHref: "https://zcode.z.ai/web-remote",
     });
     const state = buildOAuthState({
       nonce: "nonce-1",
-      return_to: "http://192.168.1.8:5173/remote/v4",
-      app_return_to: "http://192.168.1.8:5173/remote/v4?sid=device-1",
+      return_to: "http://192.168.1.8:5173/web-remote/callback",
+      app_return_to: "http://192.168.1.8:5173/web-remote?sid=device-1",
     });
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await service.handleCallback(
-      `https://zcode.z.ai/remote/v4?code=code-1&state=${state}`,
+      `https://zcode.z.ai/web-remote/callback?code=code-1&state=${state}`,
     );
 
     expect(result).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
     const redirectUrl = new URL(replaced[0]!);
-    expect(redirectUrl.origin + redirectUrl.pathname).toBe("http://192.168.1.8:5173/remote/v4");
+    expect(redirectUrl.origin + redirectUrl.pathname).toBe(
+      "http://192.168.1.8:5173/web-remote/callback",
+    );
     expect(redirectUrl.searchParams.get("code")).toBe("code-1");
     expect(redirectUrl.searchParams.get("state")).toBe(state);
   });
@@ -350,7 +352,7 @@ describe("WebAuthService", () => {
     sessionStorage.setItem("oauth_pending_nonce", "nonce-1");
     const state = buildOAuthState({
       nonce: "nonce-1",
-      app_return_to: "http://192.168.1.8:5173/remote/v4?sid=device-1&ignored=1",
+      app_return_to: "http://192.168.1.8:5173/web-remote?sid=device-1&ignored=1",
     });
     vi.stubGlobal(
       "fetch",
@@ -369,11 +371,11 @@ describe("WebAuthService", () => {
     );
 
     const result = await service.handleCallback(
-      `http://192.168.1.8:5173/remote/v4?code=code-1&state=${state}`,
+      `http://192.168.1.8:5173/web-remote/callback?code=code-1&state=${state}`,
     );
 
     expect(result).toEqual({
-      appReturnTo: "/remote/v4?sid=device-1",
+      appReturnTo: "/web-remote?sid=device-1",
       userInfo: {
         id: "u_1",
         username: "Ada",
@@ -385,7 +387,7 @@ describe("WebAuthService", () => {
     expect(localStorage.getItem("oauth:active_provider")).toBe("zai");
     expect(sessionStorage.getItem("oauth_pending_nonce")).toBeNull();
     expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body)).redirect_uri).toBe(
-      "https://zcode.z.ai/remote/v4",
+      "https://zcode.z.ai/web-remote/callback",
     );
   });
 
@@ -409,7 +411,7 @@ describe("WebAuthService", () => {
     );
 
     await expect(
-      service.handleCallback(`http://192.168.1.8:5173/remote/v4?code=code-1&state=${state}`),
+      service.handleCallback(`http://192.168.1.8:5173/web-remote/callback?code=code-1&state=${state}`),
     ).rejects.toThrow(/access_token/);
 
     expect(localStorage.getItem("zcodejwttoken")).toBeNull();

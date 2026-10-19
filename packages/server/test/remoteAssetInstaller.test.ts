@@ -102,14 +102,15 @@ class ShellInstallerBackend extends InstallerBackend {
 
   override async exec(command: string): Promise<StdioStream> {
     this.commands.push(command);
-    // 仅把远端 HOME 路径映射到夹具目录，不改宿主环境；执行完整真实脚本以捕获 shell 退出码。
-    const isolatedCommand = command.replaceAll(
-      '"$HOME"',
-      quotePosixShellArg(toLocalShellPath(this.rootDir)),
-    );
-    const child = spawn(localShellCommand!, ["-c", `${this.prelude}\n${isolatedCommand}`], {
+    // 仅把远端 HOME 映射到夹具目录：通过子进程 HOME 注入，避免把本地绝对路径拼进
+    // `"$HOME"'/...'` 后产生相邻引号，在 Git Bash 下触发 `unexpected EOF` 的解析错误。
+    // 脚本走 stdin 而不是 `-c`：Windows 下 Node 只会转义命令行，msys 重新解析时可能再次破坏引号。
+    const child = spawn(localShellCommand!, [], {
       detached: process.platform !== "win32",
+      env: { ...process.env, HOME: toLocalShellPath(this.rootDir) },
     });
+    child.stdin.write(`${this.prelude}\n${command}\n`);
+    child.stdin.end();
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk: Buffer) => {
@@ -130,6 +131,16 @@ class ShellInstallerBackend extends InstallerBackend {
     const code = await new Promise<number>((resolve, reject) => {
       child.once("error", reject);
       child.once("close", (exitCode) => resolve(exitCode ?? 1));
+      // Windows 没有进程组回收：清理后的 `sleep 30` 子进程仍持有管道，close 会空等。
+      // 退出码已经确定，直接在 exit 后关闭本端管道收尾。
+      child.once("exit", (exitCode) => {
+        if (process.platform !== "win32") return;
+        setImmediate(() => {
+          child.stdout.destroy();
+          child.stderr.destroy();
+          resolve(exitCode ?? 1);
+        });
+      });
     });
     return createClosedStream([stdout], code, stderr);
   }

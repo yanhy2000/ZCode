@@ -281,7 +281,9 @@ function isWebOAuthCallback(params: URLSearchParams): boolean {
       window.location.pathname,
     ) &&
     params.has("state") &&
-    (params.has("code") || params.has("error"))
+    // BigModel 的回调参数名是 authCode，需先进入回调页再由 provider 归一化为 code；
+    // 合入 3.16.1 时该分支被上游覆盖，导致 BigModel 登录回落到分享/启动路由。
+    (params.has("code") || params.has("authCode") || params.has("error"))
   );
 }
 
@@ -1065,13 +1067,21 @@ function createUnsupportedHomeOnlyService<T extends object>(serviceName: string)
   ) as T;
 }
 
+const emptyHomeOnlyEvent = () => ({ dispose() {} });
+
 function createEmptyHomeOnlyService<T extends object>(handlers: Record<string, ServiceMethod>): T {
   return new Proxy(handlers, {
     get: (target, property) => {
       if (typeof property !== "string") {
         return undefined;
       }
-      return target[property] ?? (async () => undefined);
+      if (target[property]) return target[property];
+      // Bug 原因：bridge 服务由 ProxyChannel 生成，onDynamicXxx(arg) 同步返回 Event，onXxx 本身是 Event；
+      // 这里曾把所有未列出成员都当 RPC 方法返回 Promise，手机 home 侧栏订阅任务事件时直接崩溃。
+      // 3.16.1 合入时这段兜底被上游实现覆盖，按同一命名契约恢复，不逐个补订阅。
+      if (/^onDynamic[A-Z]/.test(property)) return () => emptyHomeOnlyEvent;
+      if (/^on[A-Z]/.test(property)) return emptyHomeOnlyEvent;
+      return async () => undefined;
     },
   }) as T;
 }

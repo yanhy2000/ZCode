@@ -457,12 +457,19 @@ export function resolveDefaultZCodeAgentCommand(
 
   // 顺序：env 显式覆盖 → monorepo dev 源码/dist（dev 改源码立刻生效，不会被远端历史装的 native binary
   // 抢先匹配）→ 桌面打包态 Electron Node runtime 跑 zcode.cjs → 已部署 native binary（远端 SSH 兜底）。
-  const bundled =
-    resolveBundledWorkspaceZCodeAgentCommand(context) ??
-    resolveElectronRuntimeZCodeAgentCommand(context);
+  //
+  // Bug 原因：monorepo 的 tsx 源码分支不带 storagePreparationEntry，但这里无条件把
+  // supportsStorageStartup 置 true，于是「在仓库目录里启动打包好的安装包」时 Host 会以
+  // unsupported_runtime 拒绝存储准备，界面直接卡在启动失败页。只有真正带存储入口的命令才能
+  // 宣称支持；否则优先回退到打包态的 Electron bundle（dev 资源目录没有 glm/zcode.cjs，
+  // 会自然落到原来的 tsx 分支，热更新行为不变）。
+  const workspaceBundled = resolveBundledWorkspaceZCodeAgentCommand(context);
+  const bundled = workspaceBundled?.storagePreparationEntry
+    ? workspaceBundled
+    : (resolveElectronRuntimeZCodeAgentCommand(context) ?? workspaceBundled);
   return applyPresentationSurfaceToCommand(
     bundled
-      ? { ...bundled, supportsStorageStartup: true }
+      ? { ...bundled, supportsStorageStartup: Boolean(bundled.storagePreparationEntry) }
       : resolveDeployedZCodeAgentBinaryCommand(context),
     context.presentationSurface,
   );

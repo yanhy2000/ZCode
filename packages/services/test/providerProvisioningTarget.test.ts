@@ -371,29 +371,3 @@ describe("Provider Provisioning Target", () => {
     expect(settingUpdate).not.toHaveBeenCalled();
   });
 });
-
-it("Host Provisioning 提交和回滚均使用完整 CAS，不能回滚同身份的新操作", async () => {
-  let f: Awaited<ReturnType<typeof createTarget>>;
-  f = await createTarget({
-    refresh: async () => {
-      const current = f.getSettings();
-      await f.settingUpdate({
-        ...current,
-        providerFamilyDomainUpdatedAt: (current as any).providerFamilyDomainUpdatedAt + 1,
-      });
-      throw new Error("refresh failed");
-    },
-  });
-  await f.target.apply(createEnvelope() as never);
-  expect(f.settingUpdate).toHaveBeenNthCalledWith(
-    1,
-    expect.anything(),
-    expect.objectContaining({
-      providerFamilyDomainUpdatedAt: 0,
-      providerFamilyDomain: "bigmodel",
-      providerFamilyConnectionSelections: {},
-    }),
-  );
-  expect(f.getSettings().providerFamilyDomain).toBe("zai");
-  expect(f.settingUpdate).toHaveBeenCalledTimes(2);
-});

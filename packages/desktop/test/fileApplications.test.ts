@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { accessMock, statMock, readdirMock, execFileMock } = vi.hoisted(() => ({
@@ -57,11 +59,12 @@ describe("file applications", () => {
   });
   it("支持用户 Applications 下安装的应用", async () => {
     const def = getFileApplicationDefs("darwin").find((def) => def.id === "pages")!;
+    // 生产代码用 join(homedir(), "Applications", ...) 生成候选；期望值必须走同一平台拼接。
+    const userApplication = join(homedir(), "Applications", "Pages.app");
     accessMock.mockImplementation(async (path: string) => {
-      if (!path.endsWith("/Applications/Pages.app") || path === "/Applications/Pages.app")
-        throw new Error("ENOENT");
+      if (path !== userApplication) throw new Error("ENOENT");
     });
-    expect(await resolveFileApplicationPath(def, "darwin")).toMatch(/\/Applications\/Pages.app$/);
+    expect(await resolveFileApplicationPath(def, "darwin")).toBe(userApplication);
   });
   it("Linux 从 PATH 查找可执行文件", async () => {
     accessMock.mockImplementation(async (path: string) => {

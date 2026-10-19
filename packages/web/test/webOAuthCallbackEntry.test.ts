@@ -66,7 +66,8 @@ async function bootstrap(path: string, query: string) {
 }
 
 describe("Web OAuth callback entry", () => {
-  for (const path of ["/share/callback", "/cn/share/callback", "/remote/v4", "/remote/v4/"]) {
+  // Relay V2 的 /remote/v4 页面入口已随 3.16.1 删除；V1 远控回调走 /web-remote/callback。
+  for (const path of ["/share/callback", "/cn/share/callback", "/web-remote/callback"]) {
     it.each(["authCode=bigmodel-code", "code=zai-code", "error=access_denied"])(
       `${path} 的 %s 渲染回调页并交给认证服务`,
       async (result) => {

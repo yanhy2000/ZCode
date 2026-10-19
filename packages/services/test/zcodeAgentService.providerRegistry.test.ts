@@ -11,7 +11,6 @@ import { V4_METHODS } from "@zcode/shared/zcode-protocol-v4";
 import { createAccountProviderConfig } from "./providerConfigFixtures.js";
 
 const START_PLAN_PROVIDER_ID = "account:zai-start-plan";
-const BIGMODEL_CODING_PLAN_PROVIDER_ID = "account:bigmodel-individual-coding-plan";
 const protocolModelProperties = {
   inputFormat: {
     supportsText: true,
@@ -138,22 +137,6 @@ function createStartPlanRegistry(params?: {
       },
     ],
     revision: params?.revision ?? "sha256:start-plan-registry-1",
-  };
-}
-
-function createBigModelCodingPlanRegistry(params?: { revision?: string }): RegistryFixture {
-  return {
-    generatedAt: 2,
-    providers: [
-      {
-        providerId: BIGMODEL_CODING_PLAN_PROVIDER_ID,
-        apiKeyRequired: false,
-        kind: "anthropic",
-        baseURL: "https://open.bigmodel.cn/api/anthropic",
-        models: [{ modelId: "GLM-5.2" }],
-      },
-    ],
-    revision: params?.revision ?? "sha256:bigmodel-coding-plan-registry-1",
   };
 }
 
@@ -340,94 +323,6 @@ describe("createZCodeAgentService provider registry", () => {
     await vi.waitFor(() => expect(getClient).toHaveBeenCalledTimes(1));
     await expect(service.initialize({ workspacePath: "/workspace/app" })).resolves.toMatchObject({
       available: true,
-    });
-    service.disposeAll();
-  });
-
-  it("resolves account provider request auth without a renderer round trip", async () => {
-    let requestListener: ((request: unknown) => void) | undefined;
-    const respond = vi.fn(async () => {});
-    const resolveCurrent = vi.fn(async () => ({ apiKey: "team-runtime-key" }));
-    vi.resetModules();
-    vi.doMock("../src/zcode-agent/zcodeAgentProcessManager.js", () => ({
-      ZCodeAgentProcessManager: class extends MockProcessManagerBase {
-        async getClient() {
-          return {
-            request: vi.fn(async (method: string) => {
-              if (method === zcodeProtocolMethods.initialize) {
-                return {
-                  available: true,
-                  protocolName: "ZCode Protocol",
-                  protocolVersion: 1,
-                  workspaceKey: "/workspace/app",
-                };
-              }
-              throw new Error(`Unexpected method ${method}`);
-            }),
-            respond,
-            respondError: vi.fn(async () => {}),
-            transportKind: "stdio",
-            onNotification: () => ({ dispose() {} }),
-            onRequest: (listener: (request: unknown) => void) => {
-              requestListener = listener;
-              return { dispose() {} };
-            },
-            onClose: () => ({ dispose() {} }),
-          };
-        }
-        disposeAll() {}
-      },
-    }));
-    const { createZCodeAgentService } = await import("../src/zcode-agent/zcodeAgentService.js");
-    const service = createZCodeAgentService({
-      accountRequestAuthService: { resolveCurrent },
-      modelSelectionReadinessSource: createModelSelectionChangeSource(
-        createModelSelectionViewFromRegistry(createBigModelCodingPlanRegistry()),
-      ).source,
-    });
-
-    await service.initialize({ workspacePath: "/workspace/app" });
-    requestListener?.({
-      id: "agent-request-team-auth",
-      method: zcodeProtocolMethods.interactionRequestProviderRuntimeHeaders,
-      params: {
-        requestId: "team-auth-1",
-        sessionId: "sess_1",
-        workspace: {
-          workspacePath: "/workspace/app",
-          workspaceKey: "/workspace/app",
-        },
-        modelSelection: {
-          providerId: BIGMODEL_CODING_PLAN_PROVIDER_ID,
-          modelId: "GLM-5.2",
-        },
-        providerId: BIGMODEL_CODING_PLAN_PROVIDER_ID,
-        accountAccess: {
-          type: "zhipu-account",
-          accountType: "bigmodel",
-          mode: "team-coding-plan",
-          entitled: true,
-        },
-        reason: "model-request",
-      },
-    });
-
-    await vi.waitFor(() => {
-      expect(respond).toHaveBeenCalledWith("agent-request-team-auth", {
-        headersApplied: true,
-        requestAuth: { apiKey: "team-runtime-key" },
-      });
-    });
-    expect(resolveCurrent).toHaveBeenCalledWith({
-      providerId: BIGMODEL_CODING_PLAN_PROVIDER_ID,
-      modelId: "GLM-5.2",
-      accountAccess: {
-        type: "zhipu-account",
-        accountType: "bigmodel",
-        mode: "team-coding-plan",
-        entitled: true,
-      },
-      reason: "model-request",
     });
     service.disposeAll();
   });

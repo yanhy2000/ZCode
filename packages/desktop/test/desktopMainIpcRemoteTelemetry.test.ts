@@ -1,3 +1,7 @@
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { InternalChannels, PlatformChannels, type RemoteTarget } from "@zcode/shared";
 import { isAllowedExternalOpenUrl } from "../src/main/desktopMainIpcRemote.js";
@@ -170,17 +174,29 @@ describe("remote workspace connect telemetry IPC", () => {
     const listener = h.listeners.get(PlatformChannels.OpenExternal);
     expect(listener).toBeDefined();
 
-    listener?.({}, "https://example.com/docs");
-    listener?.({}, "http://localhost:3000/index.html");
-    listener?.({}, "file:///tmp/secret");
-    listener?.({}, "javascript:alert(1)");
-    listener?.({}, "not a url");
+    // Windows 下 drive-less 的 file:///tmp/secret 不是合法绝对路径；用真实临时文件生成 URL，
+    // 期望值同样由 realpath 计算，避免硬编码 POSIX 分隔符或路径。
+    const directory = await mkdtemp(join(tmpdir(), "zcode-open-external-"));
+    try {
+      const filePath = join(directory, "secret.txt");
+      await writeFile(filePath, "secret");
+      const fileUrl = pathToFileURL(filePath).href;
 
-    expect(h.shellOpenExternal).toHaveBeenCalledTimes(2);
-    expect(h.shellOpenExternal).toHaveBeenCalledWith("https://example.com/docs");
-    expect(h.shellOpenExternal).toHaveBeenCalledWith("http://localhost:3000/index.html");
-    await vi.waitFor(() => expect(h.shellOpenPath).toHaveBeenCalledWith("/tmp/secret"));
-    expect(options.logger.warn).toHaveBeenCalledTimes(2);
+      listener?.({}, "https://example.com/docs");
+      listener?.({}, "http://localhost:3000/index.html");
+      listener?.({}, fileUrl);
+      listener?.({}, "javascript:alert(1)");
+      listener?.({}, "not a url");
+
+      expect(h.shellOpenExternal).toHaveBeenCalledTimes(2);
+      expect(h.shellOpenExternal).toHaveBeenCalledWith("https://example.com/docs");
+      expect(h.shellOpenExternal).toHaveBeenCalledWith("http://localhost:3000/index.html");
+      const expectedFilePath = await realpath(filePath);
+      await vi.waitFor(() => expect(h.shellOpenPath).toHaveBeenCalledWith(expectedFilePath));
+      expect(options.logger.warn).toHaveBeenCalledTimes(2);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it("keeps Coding Plan PayPal callback openExternal requests in the sender webview", async () => {
