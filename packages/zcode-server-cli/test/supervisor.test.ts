@@ -51,6 +51,30 @@ async function waitForState(supervisor: Supervisor, state: string): Promise<void
   throw new Error(`Timed out waiting for supervisor state ${state}, got ${supervisor.status().state}`);
 }
 
+/**
+ * 等到没有其它生命周期操作占用 Supervisor 时再 stop()。
+ *
+ * Supervisor 的 update/restart/uninstall 在客户端超时后仍会在后台跑完；这期间调用
+ * stop() 会抛 operation-in-progress（该错误自身标记 retryable）。固定 sleep 只能赌
+ * 机器速度，因此这里按 retryable 语义轮询重试，其它错误照常抛出。
+ */
+async function stopWhenLifecycleSettles(supervisor: Supervisor): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    try {
+      await supervisor.stop();
+      return;
+    } catch (error) {
+      const retryable = (error as { retryable?: boolean } | undefined)?.retryable === true;
+      if (!retryable) throw error;
+      await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    }
+  }
+  throw new Error(
+    `Timed out waiting for the in-flight lifecycle operation to settle, state=${supervisor.status().state}`,
+  );
+}
+
 describe("Supervisor lifecycle", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -215,8 +239,12 @@ describe("Supervisor lifecycle", () => {
     ).rejects.toThrow(/timed out/i);
     await waitForState(supervisor, "ready");
     expect(supervisor.status().pid).toBe(42);
-    await new Promise<void>((resolve) => setTimeout(resolve, 100));
-    await supervisor.stop();
+    // 客户端在 15ms 就超时了，但服务端 update 生命周期仍在跑 rollback。
+    // 原先固定等 100ms 再 stop()，在更慢或更抖的机器（CI）上 rollback 还没收尾，
+    // stop() 会撞上 assertLifecycleOperationCanStart 抛 operation-in-progress。
+    // 该错误本身标记 retryable，因此按它的语义重试到上一个操作真正结束，
+    // 而不是靠固定 sleep 赌时序。
+    await stopWhenLifecycleSettles(supervisor);
   });
 
   it("launches the recovered release after claiming a stale startup lock", async () => {
