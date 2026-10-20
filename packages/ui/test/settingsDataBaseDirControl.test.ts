@@ -91,6 +91,21 @@ vi.mock("@/settings/SettingsPageParts.js", () => ({
   }) => createElement("div", null, description, control, detail),
 }));
 
+// 常规页新增了“标题生成模型”行（TitleGenerationModelSetting），它经 useSettings 读全局偏好、
+// 经 useBaseWorkspaceServices 取模型候选。本测试只验证常规页其他开关的渲染，不套 ServiceProvider，
+// 因此按 settingsPageIntegratedTerminalShell 的同一范式把这两处 hook 打桩。
+vi.mock("@/hooks/useSettingService.js", () => ({
+  useSettings: () => ({ settings: undefined, update: vi.fn() }),
+}));
+
+vi.mock("@/hooks/useWorkspaceServices.js", () => ({
+  useBaseWorkspaceServices: () => ({ modelSelectionService: {} }),
+}));
+
+vi.mock("@/hooks/useModelSelectionView.js", () => ({
+  useModelSelectionServiceView: () => ({ state: { status: "unavailable" } }),
+}));
+
 vi.mock("@/i18n/IntlProvider.js", () => ({
   useZCodeIntl: () => ({
     intl: {
@@ -245,14 +260,17 @@ describe("GeneralSectionContent data directory control", () => {
     vi.resetModules();
   });
 
-  it("数据目录改为只读展示，避免继续手输路径", async () => {
+  // 本文件前两个用例承担 settingsPageHelpers.js 的首次 transform 成本（实测 2.4~5.5s），
+  // 而 packages/ui 用自己的 vitest.config.ts，不继承根配置的 testTimeout=30s，会卡在默认 5s 上。
+  // 后续用例复用已 transform 的模块只需 ~160ms，因此只对这两个用例放宽超时。
+  it("数据目录改为只读展示，避免继续手输路径", { timeout: 30_000 }, async () => {
     await renderGeneralSection();
 
     expect(capturedInputs.some((input) => input.readOnly === true)).toBe(true);
     expect(findButton("保存")?.disabled).toBe(true);
   });
 
-  it("ModelIO 全量保留默认关闭，并通过标准设置开关提交", async () => {
+  it("ModelIO 全量保留默认关闭，并通过标准设置开关提交", { timeout: 30_000 }, async () => {
     const onModelIoFullRetentionEnabledChange = vi.fn(async () => {});
 
     await renderGeneralSection({ onModelIoFullRetentionEnabledChange });

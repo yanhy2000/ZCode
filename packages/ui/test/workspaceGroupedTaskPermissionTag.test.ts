@@ -33,8 +33,11 @@ vi.mock("@/i18n/IntlProvider.js", () => ({
   }),
 }));
 
+// 任务行的“反馈问题”改走 useOpenIssueReport，它用强制版 usePlatform 取 openExternal，
+// 这里必须一并提供，否则渲染期直接抛「No "usePlatform" export」。
 vi.mock("@/hooks/usePlatform.js", () => ({
   useOptionalPlatform: () => undefined,
+  usePlatform: () => ({ openExternal: () => {} }),
 }));
 
 vi.mock("@/feedback/feedbackStore.js", () => ({

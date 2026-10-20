@@ -240,6 +240,12 @@ vi.mock("@/hooks/useModelSelectionView.js", () => ({
 
 vi.mock("@/v4/composer/useDraftConfigControl.js", () => ({
   buildDraftCreateConfigPayload: () => ({}),
+  // SessionPane 建会话时会用它注入全局“标题生成模型”，本文件测试的是 composer 连续性、
+  // 不关心标题模型，因此提供直通实现：未配置时原样返回，配置时按生产语义透传。
+  withTitleGenerationSelection: (
+    payload: { config?: Record<string, unknown> },
+    selection: unknown,
+  ) => (selection ? { ...payload, config: { ...payload.config, titleGenerationModelSelection: selection } } : payload),
   useDraftConfigControl: () => ({
     modelSelectionRead: useModelSelectionServiceView(null),
     captureAcceptedModelSelection: () => vi.fn(),
