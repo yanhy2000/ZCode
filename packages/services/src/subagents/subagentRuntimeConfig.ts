@@ -80,10 +80,18 @@ async function loadDocuments(
   );
   return next;
 }
-const profiles = (documents: Profiles) =>
-  [...documents]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .flatMap(([, parsed]) => (parsed.profile ? [parsed.profile] : []));
+// Bugfix: 缓存键是完整路径（大小写敏感），而 Windows/macOS 默认文件系统大小写不敏感。
+// 仅改文件名大小写的 rename（Researcher.MD → researcher.md）会让 watcher 收到 add 与
+// remove 两个事件，乱序或路径大小写对不上时 Map 里会同时留下两项，快照就出现同名的两条
+// profile（CI 上偶发）。这里在唯一出口按 name 收敛，与 applyRuntimePrecedence 的优先级
+// 语义一致：同一 name 只保留排序后最后一条，平台无关且幂等，不影响 watcher 本身。
+const profiles = (documents: Profiles) => {
+  const byName = new Map<string, NonNullable<ReturnType<typeof parseAgentProfileFromMarkdown>["profile"]>>();
+  for (const [, parsed] of [...documents].sort(([a], [b]) => a.localeCompare(b))) {
+    if (parsed.profile) byName.set(parsed.profile.name, parsed.profile);
+  }
+  return [...byName.values()];
+};
 
 /** Host 是解析结果的唯一 owner；每个父 turn 的 RPC 只复制已完成的内存 snapshot。 */
 export function createSubagentRuntimeConfigCache(reader: ConfigReader) {
