@@ -6,6 +6,7 @@ import {
 } from "../deps.js";
 import type {
   MessageId,
+  Model,
   ModelInputMessage,
   ModelSelection,
   SessionEvent,
@@ -16,8 +17,8 @@ import type { AgentRuntimeInternal } from "../internal.js";
 import { createRefreshRuntimeHeadersBeforeModelAttempt } from "./model-runtime-headers.js";
 import { recordModelUsageFact } from "./usage-observability.js";
 import { createRuntimeModel } from "./runtime-model.js";
+import { resolveNormalRequestMaxOutputTokens } from "./model-token-limits.js";
 import { cloneModelSelection } from "../model-selection.js";
-import { auxiliaryModelOptions } from "../../model/auxiliary-model-options.js";
 
 export const SESSION_TITLE_QUERY_SOURCE = "session_title";
 export const GOAL_SUMMARY_TITLE_QUERY_SOURCE = "goal_summary_title";
@@ -99,7 +100,7 @@ async function generateTitleCandidateImpl(
   const baseModel = createRuntimeModel(this, {
     selection: requestedModelSelection,
   });
-  const model = baseModel.bind(auxiliaryModelOptions(baseModel));
+  const model = baseModel.bind(titleRequestModelOptions(baseModel));
   const modelSelection = cloneModelSelection(requestedModelSelection);
   const modelTraceContext = createChildTraceContext(options.traceContext, {
     attributes: {
@@ -286,6 +287,24 @@ function positiveTimeoutMs(value: number | undefined): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0
     ? Math.floor(value)
     : TITLE_GENERATION_TIMEOUT_MS;
+}
+
+/**
+ * 标题 sidecar 的请求参数：只限制输出预算，推理档位跟随会话当前选择。
+ *
+ * 这里过去复用 auxiliaryModelOptions()（最低档 + 5,000 输出）。最低档在 MiniMax M3.1
+ * 这类“必须开启思考”的模型上被映射成 thinking.type=disabled，上游直接 400
+ * （invalid params ... requires adaptive thinking (2013)），标题请求每次都静默失败，
+ * 侧边栏就一直停在首条 query。档位映射由 provider 配置决定，core 不能假设最低档等于
+ * 安全的“关闭思考”，因此不再覆盖档位；输出预算与主请求取同一策略，避免思考预算
+ * 高于 max_tokens 时被同一类 400 拒绝（max_tokens 只是上限，不会真的多生成）。
+ */
+function titleRequestModelOptions(model: Model): { maxOutputTokens: number } {
+  return {
+    maxOutputTokens: resolveNormalRequestMaxOutputTokens({
+      modelMaxOutputTokens: model.optionSpecs.maxOutputTokens.max,
+    }),
+  };
 }
 
 function logTitleGenerationSkipped(

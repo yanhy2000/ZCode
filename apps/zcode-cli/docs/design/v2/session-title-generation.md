@@ -14,7 +14,7 @@ ZCode 目前在首次持久化 session 时直接从用户输入截断得到 `ses
 
 1. 仅本地 TUI root interactive session 的首条真实用户消息完成后，自动生成更可读的标题。
 2. 标题生成使用 `ModelRole.Lite`。如果未配置 `model.lite`，必须使用当前默认/main 模型，不能报错或强制用户配置第二模型。
-3. 标题生成默认禁用继承自主会话的 thinking/reasoning 控制字段，避免短 sidecar 请求跟随 high/max 思考档位变慢或浪费输出预算。
+3. 标题生成沿用会话当前的推理档位，只按主请求同一策略限制输出预算；不假设模型档位列表的最低项等于“安全的关闭思考”。
 4. AI 生成标题只能覆盖默认/首输入/旧 AI 标题，不能覆盖用户自定义标题。
 5. 标题结果写入 `SessionStorePort`，并由 SQLite adapter 持久化。
 6. 标题更新发出可观测的 session event，包含 traceId/sessionId/turnId/modelRef/source。
@@ -108,17 +108,13 @@ headless `--prompt` 和 `--target` 不传 `titleGeneration`，因此不会多发
 2. 如果没有 `model.lite`，使用当前默认/main provider/model。
 3. 两种情况下 event 中的 `modelRef.role` 都是 `lite`，表示请求用途是轻量 sidecar。
 
-provider options 与最终 provider/model 对齐；`model.lite` 没有配置时复用默认/main provider options。发送标题请求前会做 title 专用转换：
+provider options 与最终 provider/model 对齐；`model.lite` 没有配置时复用默认/main provider options。标题请求不再改写推理档位：
 
-- 保留 endpoint、apiFormat、metadata、extra body 中与连接或非思考行为有关的字段。
-- 先读取原始 reasoning options，再移除继承自主请求的 `effort`、`reasoningEffort`、`reasoning_effort`；禁止在删除后根据空 options 反推模型能力。
-- Anthropic namespace 如果带有 `thinking`，改为 `thinking.type = "disabled"`，并移除 effort。
-- OpenAI namespace 仅对明确支持 `none` 的 GPT 基础模型写入 `reasoningEffort = "none"`；其他模型只移除继承的 effort，不伪造 provider 不支持的禁用值。
-- OpenAI-compatible namespace 优先按已有形态禁用：`thinking.type = "disabled"` 或 `enable_thinking = false`。GLM-5.2 以及明确支持 `none` 的 GPT 基础模型如果原始 options 仅有 effort，则转换为 canonical `reasoningEffort = "none"`。
-- MiniMax M3 即使没有 reasoning options，也按已有 `apiFormat` 写入官方关闭参数：OpenAI Chat 使用 `openaiCompatible.thinking.type = "disabled"`，Anthropic 使用 `anthropic.thinking.type = "disabled"`，Responses 使用 `openai.reasoningEffort = "none"`。这只影响 title sidecar，不改变主请求或模型档位。
-- Kimi K3、GPT Pro/Codex、MiniMax M2.x 等没有安全 off 合同的模型只移除 inherited effort，不伪造 `none` 或其他关闭字段。其余没有 reasoning options 的模型保持原样。
+- 推理档位沿用会话当前 Selection（或在 `titleGeneration.modelSelection` 里显式指定的档位），不强制取模型档位列表的最低项 `reasoningLevel.values[0]`。
+- 输出预算复用主请求的 `resolveNormalRequestMaxOutputTokens` 策略（模型声明的 `maxOutputTokens.max`，缺失时 32,000）。
+- 原因（2026-10 修复）：最低档在部分 provider 上被映射成 `thinking.type = "disabled"`。MiniMax M3.1 这类模型强制 adaptive thinking，收到 disabled 直接返回 400（`invalid params ... requires adaptive thinking (2013)`），标题 sidecar 每次静默失败，侧边栏标题永久停在首条 query；固定的 5,000 输出预算还会在思考预算更大的模型上触发同类 400。`max_tokens` 只是上限，标题输出仍受清洗与长度限制约束，不会因此变长。
 
-这样主对话仍可使用用户选择的思考强度；标题、goal summary title 这些共享 title sidecar 的短请求不会继承主链路的 high/max thinking。
+主对话和标题 sidecar 使用同一套档位与预算，provider 侧请求形态一致，避免“主请求成功、标题请求 400”的分裂。
 
 ## Prompt 与输出清洗
 
@@ -168,7 +164,7 @@ interface SessionTitleUpdatedPayload {
 - generated 标题 CAS 不能覆盖 custom 标题。
 - 未配置 `model.lite` 时，标题请求使用 main provider/model 且 role 为 `lite`。
 - 配置 `model.lite` 时，标题请求使用 lite provider/model。
-- 标题请求会清洗 inherited thinking/reasoning provider options；主请求仍保留原始 provider options。
+- 标题请求沿用会话推理档位，输出预算与主请求策略一致（不压到最低档、不再固定 5,000）。
 - 标题模型失败时主 turn 仍成功，session title 保留首输入 fallback。
 - TUI 显式启用后 root interactive 首 turn 触发，child/fork/workflow/subagent 不触发。
 - headless prompt 和 ZCode app-server 默认不传 `titleGeneration`，不会触发标题模型请求。
