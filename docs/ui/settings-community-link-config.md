@@ -3,6 +3,12 @@
 > Todo103：本文保留 staging 的既定行为与历史验收记录；历史通过数不计为本次通过。
 > 本次整合证据另记在 todo103-staging-integration-ledger.md，未改变 Provider/Selection 边界。
 
+> **2026-10 自建 fork 变更：** 帮助菜单的“用户社群”入口已物理下线（上游 Feishu / Discord 属于云端
+> 营销入口），`community_urls` 不再有任何可见消费者，仅保留在 `config/default.json` 供旧版本和
+> `packages/web/src/communityUrl.ts` 的解析单测复用。“问题上报 / 反馈问题”也不再走内置表单，
+> 统一跳 `ZCODE_PROJECT_ISSUES_URL`，见 [workspace-header-help-menu.md](./workspace-header-help-menu.md)。
+> 本文以下内容记录云端配置链路的历史行为，重新启用社群入口前必须先确认它指向自建地址。
+
 帮助菜单里的“用户社群”入口与平台“问题反馈”统一从当前 endpoint 的
 `client/configs.data.configs.feedbackUrl` 读取；内置 `config/default.json` 用作默认值。
 

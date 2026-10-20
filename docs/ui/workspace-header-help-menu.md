@@ -16,11 +16,32 @@ Workspace header action 区在终端按钮左侧提供轻量帮助菜单，作�
 
 第一组从上到下：
 1. 产品文档：打开 `https://zcode.z.ai/docs`。
-2. 用户社群：走 `IPlatformService.openCommunity()`。
-3. 问题上报：打开内置反馈表单，保持 `type=bug`、`module=其它`、`includeLogs=true` 和截图行为。
-4. 给产品提需求：打开独立需求弹窗，保持 `type=feature`、`includeLogs=false`。
+2. 问题上报：打开本仓库 issue 页（见下节）。
 
 第二组仅桌面端展示，从上到下：导出日志、资源管理器、检查更新、关于 ZCode。检查更新仅 production 显示，保留已有动态文案及禁用状态；Preview 隐藏。关于始终为最后一项。
+
+### 云端入口下线（2026-10）
+
+“用户社群”（上游 Feishu / Discord）和“给产品提需求”（依赖上游需求后台）都是原厂云端能力，
+自建 fork 里两者都指向不存在的服务，已从帮助菜单物理移除；对应文案 key 保留在 i18n 中供旧版本
+和测试夹具复用，不再有可见入口。
+
+### 问题上报：跳转 GitHub Issue
+
+内置“提交反馈”表单最终 POST 到上游 feedback API（`resolveApiBaseUrl` → `ZCODE_FEEDBACK_API_BASE`
+或默认 `z.ai`），并依赖账号 JWT。自建 fork 不登录上游账号，提交必然失败，因此所有“问题上报 /
+反馈问题”入口统一改为打开 `ZCODE_PROJECT_ISSUES_URL`
+（`packages/ui/src/lib/productLinks.ts` → `https://github.com/yanhy2000/ZCode/issues`）。
+
+```text
+帮助菜单「问题上报」 ─┐
+命令面板「问题上报」 ─┤
+任务菜单「反馈问题」 ─┼→ ZCODE_PROJECT_ISSUES_URL → IPlatformService.openExternal()
+Header 更多「反馈问题」┤
+原生菜单 Feedback IPC ┘
+```
+
+日志仍通过第二组“导出日志”和任务菜单“复制日志路径”获取，由用户自行附到 issue 中，不做自动上传。
 
 “导出日志”复用 `titleBar.menu.help.exportLogs` 文案和 `createHelpMenuActionHandlers().exportLogs`，经 `IPlatformService.exportLogs()` 调用系统菜单使用的同一个主进程导出函数。沿用正在导出的 toast、失败提示及完成后在系统文件浏览器中定位日志包的行为，不新增导出实现。Web（含手机远控）没有本地导出能力，只保留第一组，不渲染导出日志或多余分隔线。
 
@@ -33,7 +54,7 @@ Workspace header action 区在终端按钮左侧提供轻量帮助菜单，作�
 
 更新状态链路：main updater（唯一 owner）→ 平台快照 / 状态事件 → 菜单展示；点击 → 现有桌面命令 → main updater。实时事件优先于较早发出的快照，卸载后不应用响应。
 
-验收：桌面任务页、草稿态和设置页的共享问号菜单均可打开关于窗口，中英文显示“关于 ZCode” / “About ZCode”；Web 不出现无效入口。
+验收：桌面任务页、草稿态和设置页的共享问号菜单均可打开关于窗口，中英文显示“关于 ZCode” / “About ZCode”；Web 不出现无效入口；两端点击“问题上报”都打开项目 issue 页。
 
 导出验收：组件单测覆盖桌面入口、共享动作和 Web 隐藏；`help-menu-about.test.ts` 的英文草稿态与中文设置页场景实际点击导出日志，验证主进程生成 ZIP 并请求系统定位、完成后关闭导出提示，继续验证菜单顺序及关于入口。系统定位调用在隔离 E2E 中拦截，实际归档仍执行。
 
@@ -41,10 +62,7 @@ Workspace header action 区在终端按钮左侧提供轻量帮助菜单，作�
 
 所有可见文案必须走 i18n；菜单项使用 lucide 图标，不硬编码中文到组件内。
 
-## 给产品提需求弹窗
+## 给产品提需求弹窗（入口已下线）
 
-- 不复用通用问题上报表单，避免截图、日志、问题描述等 bug 语义干扰用户。
-- 弹窗包含引导文案、必填的“需求描述”和“期望的解决方案”、可选联系方式。
-- “重置内容”位于底部左侧；“取消”和“提交需求”位于底部右侧。
-- 两个必填字段都有内容后才允许提交。
-- 提交时把两个字段组织成结构化 Markdown description，并通过 feedback service 创建 `feature` 类型工单。
+`FeatureRequestDialog` 组件与其 `type=feature` 提交流程仍然保留在代码里，但自建 fork 已没有可达入口。
+如需重新启用，必须先把 `feedback_url` 指向可用的自建后端。

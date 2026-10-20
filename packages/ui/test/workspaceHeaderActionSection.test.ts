@@ -212,9 +212,10 @@ describe("WorkspaceHeaderActionSection", () => {
     expect(html).not.toContain("chat.summaryPanel.toggle");
     expect(html).toContain("workspaceHeader.help.menu");
     expect(html).toContain("workspaceHeader.help.issueReport");
-    expect(html).toContain("workspaceHeader.help.productRequest");
-    expect(html).toContain("workspaceHeader.help.community");
     expect(html).toContain("workspaceHeader.help.docs");
+    // 云端入口（用户社群 / 给产品提需求）下线后不再出现在帮助菜单里。
+    expect(html).not.toContain("workspaceHeader.help.productRequest");
+    expect(html).not.toContain("workspaceHeader.help.community");
     expect(html).not.toContain("titleBar.menu.help.exportLogs");
     expect(html).toContain("terminal.toggle");
     expect(html).toContain("sidePane.expand");
@@ -263,15 +264,11 @@ describe("WorkspaceHeaderActionSection", () => {
     expect(html).toContain("sidePane.expand");
   });
 
-  it("routes help menu items to feedback, community, and docs entries", async () => {
+  it("routes help menu items to issue report and docs entries", async () => {
     capturedHeaderHelp.menuItems = [];
-    capturedHeaderHelp.openSubmit.mockClear();
-    capturedHeaderHelp.openFeatureRequest.mockClear();
-    capturedHeaderHelp.openCommunity.mockClear();
     capturedHeaderHelp.openExternal.mockClear();
     capturedHeaderHelp.exportLogs.mockClear();
     capturedHeaderHelp.captureWindowScreenshot.mockClear();
-    capturedHeaderHelp.captureWindowScreenshot.mockResolvedValue(capturedHeaderHelp.screenshot);
     const { WorkspaceHeaderActionSection } =
       await import("@/WorkspaceHeaderSections/WorkspaceHeaderActionSection.js");
 
@@ -285,32 +282,24 @@ describe("WorkspaceHeaderActionSection", () => {
       }),
     );
 
-    expect(capturedHeaderHelp.menuItems).toHaveLength(4);
-    await capturedHeaderHelp.menuItems[2]?.onSelect?.();
-    capturedHeaderHelp.menuItems[1]?.onSelect?.();
+    // 帮助组顺序：产品文档在前，问题上报在后。
+    expect(capturedHeaderHelp.menuItems).toHaveLength(2);
+    await capturedHeaderHelp.menuItems[1]?.onSelect?.();
     capturedHeaderHelp.menuItems[0]?.onSelect?.();
-    capturedHeaderHelp.menuItems[3]?.onSelect?.();
 
     expect(capturedHeaderHelp.captureWindowScreenshot).not.toHaveBeenCalled();
-    expect(capturedHeaderHelp.openSubmit).toHaveBeenNthCalledWith(
+    expect(capturedHeaderHelp.openExternal).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({
-        type: "bug",
-        includeLogs: true,
-        screenshots: [],
-      }),
+      "https://github.com/yanhy2000/ZCode/issues",
     );
-    expect(capturedHeaderHelp.openFeatureRequest).toHaveBeenCalledTimes(1);
-    expect(capturedHeaderHelp.openCommunity).toHaveBeenCalledTimes(1);
-    expect(capturedHeaderHelp.openExternal).toHaveBeenCalledWith("https://zcode.z.ai/docs");
+    expect(capturedHeaderHelp.openExternal).toHaveBeenNthCalledWith(2, "https://zcode.z.ai/docs");
     expect(capturedHeaderHelp.exportLogs).not.toHaveBeenCalled();
   });
 
-  it("opens issue report without screenshots when window screenshot fails", async () => {
+  it("opens the issue report URL without capturing a screenshot", async () => {
     capturedHeaderHelp.menuItems = [];
-    capturedHeaderHelp.openSubmit.mockClear();
+    capturedHeaderHelp.openExternal.mockClear();
     capturedHeaderHelp.captureWindowScreenshot.mockReset();
-    capturedHeaderHelp.captureWindowScreenshot.mockRejectedValue(new Error("capture failed"));
     const { WorkspaceHeaderActionSection } =
       await import("@/WorkspaceHeaderSections/WorkspaceHeaderActionSection.js");
 
@@ -324,15 +313,12 @@ describe("WorkspaceHeaderActionSection", () => {
       }),
     );
 
-    await capturedHeaderHelp.menuItems[2]?.onSelect?.();
+    await capturedHeaderHelp.menuItems[1]?.onSelect?.();
 
-    expect(capturedHeaderHelp.openSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "bug",
-        includeLogs: true,
-        screenshots: [],
-      }),
+    expect(capturedHeaderHelp.openExternal).toHaveBeenCalledWith(
+      "https://github.com/yanhy2000/ZCode/issues",
     );
+    expect(capturedHeaderHelp.captureWindowScreenshot).not.toHaveBeenCalled();
   });
 
   it("passes SSH remote context to the editor button group", async () => {

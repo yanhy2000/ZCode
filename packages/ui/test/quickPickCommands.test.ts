@@ -15,7 +15,6 @@ function createHandlers() {
     openMcpSettings: vi.fn(),
     switchTheme: vi.fn(),
     openFeedback: vi.fn(),
-    openCommunity: vi.fn(),
     openProductDocs: vi.fn(),
     login: vi.fn(),
     logout: vi.fn(),
@@ -39,7 +38,6 @@ describe("createQuickPickCommands", () => {
   it("通用模式过滤技术面板命令并保留浏览器和普通命令", () => {
     const commands = createQuickPickCommands({
       allowOpenWorkspace: true,
-      canOpenCommunity: true,
       isSidebarVisible: true,
       isLoggedIn: false,
       supportsTerminal: false,
@@ -60,7 +58,6 @@ describe("createQuickPickCommands", () => {
   it("creates the starter command registry in stable sections", () => {
     const commands = createQuickPickCommands({
       allowOpenWorkspace: true,
-      canOpenCommunity: true,
       isSidebarVisible: true,
       isLoggedIn: false,
       themeTarget: "dark",
@@ -83,7 +80,6 @@ describe("createQuickPickCommands", () => {
       "skills-settings",
       "mcp-settings",
       "feedback",
-      "community",
       "product-docs",
       "login",
     ]);
@@ -155,7 +151,6 @@ describe("createQuickPickCommands", () => {
   it("keeps unavailable workspace opening visible but disabled", () => {
     const commands = createQuickPickCommands({
       allowOpenWorkspace: false,
-      canOpenCommunity: true,
       isSidebarVisible: true,
       isLoggedIn: false,
       themeTarget: "dark",
@@ -171,7 +166,6 @@ describe("createQuickPickCommands", () => {
   it("matches the sidebar toggle icon to the current sidebar state", () => {
     const closedSidebarCommands = createQuickPickCommands({
       allowOpenWorkspace: true,
-      canOpenCommunity: true,
       isSidebarVisible: false,
       isLoggedIn: false,
       themeTarget: "dark",
@@ -187,7 +181,6 @@ describe("createQuickPickCommands", () => {
   it("omits embedded browser commands when the shell does not support browser tabs", () => {
     const commands = createQuickPickCommands({
       allowOpenWorkspace: true,
-      canOpenCommunity: true,
       isSidebarVisible: true,
       isLoggedIn: false,
       supportsEmbeddedBrowser: false,
@@ -204,7 +197,6 @@ describe("createQuickPickCommands", () => {
     const handlers = createHandlers();
     const command = createQuickPickCommands({
       allowOpenWorkspace: true,
-      canOpenCommunity: true,
       isSidebarVisible: true,
       isLoggedIn: false,
       themeTarget: "dark",
@@ -221,7 +213,6 @@ describe("createQuickPickCommands", () => {
     const handlers = createHandlers();
     const commands = createQuickPickCommands({
       allowOpenWorkspace: true,
-      canOpenCommunity: true,
       isSidebarVisible: true,
       isLoggedIn: false,
       themeTarget: "dark",
@@ -239,7 +230,6 @@ describe("createQuickPickCommands", () => {
   it("has locale messages for every visible command label", () => {
     const commands = createQuickPickCommands({
       allowOpenWorkspace: true,
-      canOpenCommunity: true,
       isSidebarVisible: true,
       isLoggedIn: false,
       themeTarget: "light",
@@ -289,7 +279,6 @@ describe("createQuickPickCommands", () => {
   it("uses logout instead of login for authenticated users", () => {
     const commands = createQuickPickCommands({
       allowOpenWorkspace: true,
-      canOpenCommunity: false,
       isSidebarVisible: true,
       isLoggedIn: true,
       themeTarget: "dark",
@@ -302,7 +291,6 @@ describe("createQuickPickCommands", () => {
       sectionId: "app",
       titleId: "quickPick.command.logout",
     });
-    expect(commands.some((command) => command.id === "community")).toBe(false);
   });
 
   it("uses connection wording for app auth commands", () => {

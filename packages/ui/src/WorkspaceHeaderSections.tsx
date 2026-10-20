@@ -35,9 +35,8 @@ import {
 } from "@/lib/remoteWorkspaceHistory.js";
 import { resolveWorkspaceHeaderProvider } from "@/lib/workspaceHeaderProvider.js";
 import { toast } from "@/components/ui/toast.js";
-import { useFeedbackStore } from "@/feedback/feedbackStore.js";
 import { useModelTrajectoryStore } from "@/store/modelTrajectoryStore.js";
-import { buildTaskFeedbackDescription } from "@/lib/taskFeedbackDraft.js";
+import { useOpenIssueReport } from "@/hooks/useOpenIssueReport.js";
 import { resolveGitBranchTriggerLabel } from "@/git-branch-switcher/display.js";
 import type {
   WorkspaceHeaderState,
@@ -111,7 +110,7 @@ export function WorkspaceHeaderTitleSection({
   compact = false,
 }: WorkspaceHeaderTitleSectionProps) {
   const { intl } = useZCodeIntl();
-  const openFeedbackSubmit = useFeedbackStore((state) => state.openSubmit);
+  const openIssueReport = useOpenIssueReport();
   const confirmDialog = useConfirmDialog();
   const services = useWorkspaceServices(
     workspaceAbsPath,
@@ -245,39 +244,11 @@ export function WorkspaceHeaderTitleSection({
     ? variant === "draft"
     : activeTaskId === null;
 
-  const handleOpenTaskFeedback = async () => {
-    const taskTitle =
-      activeTaskTitle ||
-      intl.formatMessage({
-        id: activeTaskMeta?.forkedFromTaskId
-          ? "taskList.forkedUntitled"
-          : "taskList.untitled",
-      });
-    // Header 更多菜单缺少当前任务的反馈入口，用户只能复制日志再手动新建反馈。
-    // 这里打开反馈表单时预填任务标题、路径和日志线索，截图和诊断日志由用户主动选择。
-    openFeedbackSubmit({
-      title: intl
-        .formatMessage(
-          { id: "feedback.submit.template.section.taskFeedbackTitle" },
-          { title: taskTitle },
-        )
-        .slice(0, 80),
-      type: "bug",
-      module: "Agent任务执行失败",
-      severity: "P2-中",
-      includeLogs: true,
-      description: buildTaskFeedbackDescription({
-        taskTitle,
-        taskId: resolvedTaskActionTaskId ?? undefined,
-        workspacePath: workspaceAbsPath,
-        taskSessionPath: taskSessionFile.path,
-        taskLogPath: taskNativeSessionLogFile.path,
-        formatMessage: (id: string, values?: Record<string, string>) =>
-          intl.formatMessage({ id }, values),
-      }),
-      screenshots: [],
-    });
-    toast(intl.formatMessage({ id: "taskList.feedbackOpened" }));
+  const handleOpenTaskFeedback = () => {
+    // Header 更多菜单的“反馈问题”过去打开内置反馈表单并预填任务上下文，但该表单
+    // 依赖上游账号 JWT，自建 fork 提交必然失败；改为跳转项目 issue 页，
+    // 任务路径/日志仍可通过同一菜单的复制入口带走。
+    openIssueReport();
   };
 
   const handleStartRenameTask = () => {

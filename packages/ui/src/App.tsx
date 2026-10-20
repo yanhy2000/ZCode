@@ -37,7 +37,6 @@ import {
 import { createQuickPickCommands } from "@/quickpick/quickPickCommands.js";
 import { CommandCenterDialog } from "@/command-center/CommandCenterDialog.js";
 import { FeedbackHost } from "@/feedback/FeedbackHost.js";
-import { useFeedbackStore } from "@/feedback/feedbackStore.js";
 import {
   resolveQuickPickConversationNavigation,
   selectQuickPickConversationTaskIds,
@@ -48,7 +47,7 @@ import {
   type SettingsSectionId,
 } from "@/lib/settingsNavigation.js";
 import { runWorkspaceVisibleCommand } from "@/lib/workspaceVisibleCommand.js";
-import { ZCODE_PRODUCT_DOCS_URL } from "@/lib/productDocs.js";
+import { ZCODE_PRODUCT_DOCS_URL, ZCODE_PROJECT_ISSUES_URL } from "@/lib/productLinks.js";
 import appLogoUrl from "@/assets/provider-icons/logo-zai.svg";
 import { resolveTheme } from "@/useTheme.js";
 import { WorkspaceShellLayout } from "@/app-shell/WorkspaceShellLayout.js";
@@ -345,7 +344,6 @@ export function App({
     useState<ChatSearchResultHighlightRequest | null>(null);
   const [fileChangeFindState, setFileChangeFindState] = useState(createTaskFindNavigationState);
   const [fileChangeFindMatchCount, setFileChangeFindMatchCount] = useState(0);
-  const [canOpenCommunityFromQuickPick, setCanOpenCommunityFromQuickPick] = useState(false);
   const [gitSelectedSourceId, setGitSelectedSourceId] = useState<GitChangeSourceId>("unstaged");
   const [gitRefreshVersion, setGitRefreshVersion] = useState(0);
   const { browserRestoreUrls, handleBrowserUrlChange } = useTaskSidePaneMemoryBridge({
@@ -667,28 +665,28 @@ export function App({
   const handleOpenQuickPick = useCallback(() => {
     setIsQuickPickOpen((open) => !open);
   }, []);
-  const openFeedbackSubmit = useFeedbackStore((state) => state.openSubmit);
-  const openFeedbackTickets = useFeedbackStore((state) => state.openTickets);
   const isLoggedIn = Boolean(user);
   const handleOpenFeedback = useCallback(() => {
-    void platform.openFeedback();
+    // 命令面板的“问题上报”不再打开内置反馈表单（它依赖上游账号 JWT，
+    // 自建 fork 提交必然失败），统一跳到项目 issue 页。
+    platform.openExternal(ZCODE_PROJECT_ISSUES_URL);
   }, [platform]);
 
   useEffect(() => {
-    // 内置反馈中心合并了"提交反馈 / 我的反馈"两个 Tab，
-    // 老的 OpenTicketsPanel IPC 仍然兼容（直接打开列表），未来如果还需要单独入口可以复用。
+    // 原生菜单（macOS 应用菜单）和旧 tickets IPC 都还发这两个事件；
+    // 内置反馈中心没有可用的后端，统一改成打开项目 issue 页。
     const disposeFeedbackDialog = platform.onOpenFeedbackDialog?.(() => {
-      openFeedbackSubmit();
+      platform.openExternal(ZCODE_PROJECT_ISSUES_URL);
     });
     const disposeTicketsPanel = platform.onOpenTicketsPanel?.(() => {
-      openFeedbackTickets();
+      platform.openExternal(ZCODE_PROJECT_ISSUES_URL);
     });
     return () => {
       disposeFeedbackDialog?.();
       disposeTicketsPanel?.();
     };
-  }, [openFeedbackSubmit, openFeedbackTickets, platform]);
-  const handleOpenCommunity = useCallback(() => platform.openCommunity(), [platform]);
+  }, [platform]);
+
   const handleOpenProductDocs = useCallback(() => {
     platform.openExternal(ZCODE_PRODUCT_DOCS_URL);
   }, [platform]);
@@ -1023,34 +1021,12 @@ export function App({
       : null,
   });
 
-  useEffect(() => {
-    let disposed = false;
-
-    void platform.canOpenCommunity(locale).then(
-      (visible) => {
-        if (!disposed) {
-          setCanOpenCommunityFromQuickPick(visible);
-        }
-      },
-      () => {
-        if (!disposed) {
-          setCanOpenCommunityFromQuickPick(false);
-        }
-      },
-    );
-
-    return () => {
-      disposed = true;
-    };
-  }, [locale, platform]);
-
   const quickPickCommands = useMemo(
     () =>
       createQuickPickCommands({
         supportsTerminal: !isOfficeMode,
         supportsReview: !isOfficeMode,
         allowOpenWorkspace,
-        canOpenCommunity: canOpenCommunityFromQuickPick,
         isSidebarVisible,
         supportsEmbeddedBrowser,
         // quick pick 命令只关心登录态布尔值。
@@ -1077,7 +1053,6 @@ export function App({
           },
           switchTheme: handleSwitchTheme,
           openFeedback: handleOpenFeedback,
-          openCommunity: handleOpenCommunity,
           openProductDocs: handleOpenProductDocs,
           login: onLogin,
           logout: onLogout,
@@ -1092,8 +1067,6 @@ export function App({
     [
       allowOpenWorkspace,
       isOfficeMode,
-      canOpenCommunityFromQuickPick,
-      handleOpenCommunity,
       handleOpenFeedback,
       handleOpenProductDocs,
       handleOpenSettingsSection,

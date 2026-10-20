@@ -9,10 +9,8 @@ import {
   BookOpenIcon,
   CircleHelpIcon,
   DownloadIcon,
-  LightbulbIcon,
   InfoIcon,
   MessageSquareIcon,
-  UsersIcon,
   RefreshCwIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
@@ -26,7 +24,6 @@ import {
 } from "@/components/ui/dropdown-menu.js";
 import { cn } from "@/components/lib/utils.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
-import { useFeedbackStore } from "@/feedback/feedbackStore.js";
 import { useDesktopUpdateMenu } from "@/hooks/useDesktopUpdateMenu.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -47,17 +44,11 @@ export function WorkspaceHelpMenuButton({
   const platform = usePlatform();
   const [open, setOpen] = useState(false);
   const updateMenu = useDesktopUpdateMenu(isDesktop);
-  const openFeedbackSubmit = useFeedbackStore((state) => state.openSubmit);
-  const openFeatureRequest = useFeedbackStore((state) => state.openFeatureRequest);
   const helpMenuLabel = intl.formatMessage({ id: "workspaceHeader.help.menu" });
   const helpMenuActions = createHelpMenuActionHandlers({
     platform,
     intl,
-    openSubmit: openFeedbackSubmit,
   });
-  const handleOpenCommunity = () => {
-    void platform.openCommunity();
-  };
   const handleOpenResourceManager = () => {
     void platform.executeDesktopCommand(DesktopCommandIds.OpenResourceManager);
   };
@@ -95,17 +86,11 @@ export function WorkspaceHelpMenuButton({
           <BookOpenIcon className="size-4" />
           {intl.formatMessage({ id: "workspaceHeader.help.docs" })}
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={handleOpenCommunity}>
-          <UsersIcon className="size-4" />
-          {intl.formatMessage({ id: "workspaceHeader.help.community" })}
-        </DropdownMenuItem>
+        {/* 用户社群（上游 Feishu/Discord）和给产品提需求（依赖上游需求后台）都属于云端入口，
+            自建 fork 里两者都指向不存在的服务，直接下线，只保留跳到项目 issue 的问题上报。 */}
         <DropdownMenuItem onSelect={helpMenuActions.openIssueReport}>
           <MessageSquareIcon className="size-4" />
           {intl.formatMessage({ id: "workspaceHeader.help.issueReport" })}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={openFeatureRequest}>
-          <LightbulbIcon className="size-4" />
-          {intl.formatMessage({ id: "workspaceHeader.help.productRequest" })}
         </DropdownMenuItem>
         {/* Windows/Linux 没有原生菜单栏，自绘标题栏箭头菜单也已下线，
             资源管理器只能从这里进；Web 端没有该窗口，不渲染。 */}

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { DesktopCommandIds, TID_WORKSPACE_HELP_MENU_RESOURCE_MANAGER } from "@zcode/shared";
+import { ZCODE_PROJECT_ISSUES_URL } from "@/lib/productLinks.js";
 
 vi.mock("@/i18n/IntlProvider.js", () => ({
   useZCodeIntl: () => ({
@@ -69,15 +70,6 @@ vi.mock("@/ControlHintTooltip.js", () => ({
 vi.mock("@/components/ui/toast.js", () => ({
   toast: captured.toast,
   dismissToast: captured.dismissToast,
-}));
-
-vi.mock("@/feedback/feedbackStore.js", () => ({
-  useFeedbackStore: (
-    selector: (state: {
-      openSubmit: (draft?: unknown) => void;
-      openFeatureRequest: () => void;
-    }) => unknown,
-  ) => selector({ openSubmit: vi.fn(), openFeatureRequest: vi.fn() }),
 }));
 
 vi.mock("@/hooks/useDesktopUpdateMenu.js", () => ({
@@ -204,9 +196,7 @@ describe("WorkspaceHelpMenuButton", () => {
       const html = await render(desktop);
       expect(captured.menuItems.map((item) => item.label)).toEqual([
         "workspaceHeader.help.docs",
-        "workspaceHeader.help.community",
         "workspaceHeader.help.issueReport",
-        "workspaceHeader.help.productRequest",
         ...(desktop
           ? [
               "titleBar.menu.help.exportLogs",
@@ -220,17 +210,24 @@ describe("WorkspaceHelpMenuButton", () => {
     }
   });
 
-  it("桌面端与 Web 端都保留原有帮助项", async () => {
+  it("问题上报直接跳转项目 issue，不再打开内置反馈表单", async () => {
+    for (const isDesktop of [true, false]) {
+      await render(isDesktop);
+      captured.openExternal.mockClear();
+      const item = captured.menuItems.find(
+        (entry) => entry.label === "workspaceHeader.help.issueReport",
+      );
+      expect(item).toBeDefined();
+      await item!.onSelect?.();
+      expect(captured.openExternal).toHaveBeenCalledExactlyOnceWith(ZCODE_PROJECT_ISSUES_URL);
+    }
+  });
+
+  it("用户社群和给产品提需求随云端入口一起下线", async () => {
     for (const isDesktop of [true, false]) {
       const html = await render(isDesktop);
-      for (const id of [
-        "workspaceHeader.help.issueReport",
-        "workspaceHeader.help.productRequest",
-        "workspaceHeader.help.community",
-        "workspaceHeader.help.docs",
-      ]) {
-        expect(html).toContain(id);
-      }
+      expect(html).not.toContain("workspaceHeader.help.community");
+      expect(html).not.toContain("workspaceHeader.help.productRequest");
     }
   });
 });

@@ -178,8 +178,6 @@ describe("WindowsCaptionMenuButton", () => {
   });
 
   it("includes help actions migrated from the shared question-mark menu", async () => {
-    capturedWindowsCaptionMenu.openSubmit.mockClear();
-    capturedWindowsCaptionMenu.openFeatureRequest.mockClear();
     capturedWindowsCaptionMenu.openExternal.mockClear();
     capturedWindowsCaptionMenu.exportLogs.mockClear();
     capturedWindowsCaptionMenu.captureWindowScreenshot.mockClear();
@@ -187,15 +185,14 @@ describe("WindowsCaptionMenuButton", () => {
     const html = await renderButton("header");
 
     expect(html).toContain("titleBar.menu.help.feedback");
-    expect(html).toContain("workspaceHeader.help.productRequest");
     expect(html).toContain("workspaceHeader.help.docs");
     expect(html).toContain("titleBar.menu.help.exportLogs");
+    // 用户社群 / 给产品提需求是上游云端入口，自建 fork 已下线。
+    expect(html).not.toContain("workspaceHeader.help.productRequest");
+    expect(html).not.toContain("sidebar.menu.community");
 
     await capturedWindowsCaptionMenu.menuItems
       .find((item) => item.label === "titleBar.menu.help.feedback")
-      ?.onSelect?.();
-    capturedWindowsCaptionMenu.menuItems
-      .find((item) => item.label === "workspaceHeader.help.productRequest")
       ?.onSelect?.();
     capturedWindowsCaptionMenu.menuItems
       .find((item) => item.label === "workspaceHeader.help.docs")
@@ -205,15 +202,11 @@ describe("WindowsCaptionMenuButton", () => {
       ?.onSelect?.();
 
     expect(capturedWindowsCaptionMenu.captureWindowScreenshot).not.toHaveBeenCalled();
-    expect(capturedWindowsCaptionMenu.openSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "bug",
-        includeLogs: true,
-        screenshots: [],
-      }),
+    expect(capturedWindowsCaptionMenu.openExternal).toHaveBeenNthCalledWith(
+      1,
+      "https://github.com/yanhy2000/ZCode/issues",
     );
-    expect(capturedWindowsCaptionMenu.openFeatureRequest).toHaveBeenCalledTimes(1);
-    expect(capturedWindowsCaptionMenu.openExternal).toHaveBeenCalledWith("https://zcode.z.ai/docs");
+    expect(capturedWindowsCaptionMenu.openExternal).toHaveBeenNthCalledWith(2, "https://zcode.z.ai/docs");
     expect(capturedWindowsCaptionMenu.exportLogs).toHaveBeenCalledTimes(1);
   });
 

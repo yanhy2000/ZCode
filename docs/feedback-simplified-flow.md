@@ -1,5 +1,10 @@
 # Feedback 简化提交流程
 
+> **2026-10 自建 fork 变更：** 本文描述的提交流程依赖上游 feedback API（`/feedback/ticket`）与账号
+> JWT，自建 fork 无法使用。帮助菜单、命令面板、任务菜单和 Header 更多菜单的“问题上报 / 反馈问题”
+> 已统一改为打开 `ZCODE_PROJECT_ISSUES_URL`。`FeedbackCenter` / `FeatureRequestDialog` 仍留在
+> 代码里，但目前没有可达入口；重新启用前必须先把 `feedback_url` 指向可用的自建后端。
+
 ## 背景
 
 旧反馈提交流程要求用户填写标题、类型、模块、影响程度等字段。这个流程更像内部工单表单，用户在 AI 时代只应该描述问题本身，客户端自动补齐排障上下文。

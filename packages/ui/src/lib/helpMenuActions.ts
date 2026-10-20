@@ -1,11 +1,10 @@
 import type { IPlatformService } from "@zcode/shared";
 import type { IntlInstance } from "@/i18n/IntlProvider.js";
-import type { FeedbackSubmitDraft } from "@/feedback/feedbackStore.js";
 import { runExportLogsAction } from "@/lib/exportLogsAction.js";
-import { ZCODE_PRODUCT_DOCS_URL } from "@/lib/productDocs.js";
+import { ZCODE_PRODUCT_DOCS_URL, ZCODE_PROJECT_ISSUES_URL } from "@/lib/productLinks.js";
 
 export interface HelpMenuActionHandlers {
-  openIssueReport: () => Promise<void>;
+  openIssueReport: () => void;
   openProductDocs: () => void;
   exportLogs: () => void;
 }
@@ -13,21 +12,16 @@ export interface HelpMenuActionHandlers {
 export function createHelpMenuActionHandlers({
   platform,
   intl,
-  openSubmit,
 }: {
-  platform: Pick<IPlatformService, "captureWindowScreenshot" | "exportLogs" | "openExternal">;
+  platform: Pick<IPlatformService, "exportLogs" | "openExternal">;
   intl: IntlInstance;
-  openSubmit: (draft?: FeedbackSubmitDraft) => void;
 }): HelpMenuActionHandlers {
   return {
-    openIssueReport: async () => {
-      openSubmit({
-        type: "bug",
-        module: "其它",
-        severity: "P2-中",
-        includeLogs: true,
-        screenshots: [],
-      });
+    openIssueReport: () => {
+      // 这里过去打开内置“提交反馈”表单，最终 POST 到上游 feedback API 并依赖账号 JWT；
+      // 自建 fork 不登录上游账号，提交必然失败。问题上报改为直接跳转项目 issue 页，
+      // 用户可以在那边附上「导出日志」产出的文件。
+      platform.openExternal(ZCODE_PROJECT_ISSUES_URL);
     },
     openProductDocs: () => {
       platform.openExternal(ZCODE_PRODUCT_DOCS_URL);

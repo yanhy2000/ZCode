@@ -17,10 +17,8 @@ import { getTaskListAttention, getTaskListRowActivity } from "@/v4/taskListRowAc
 import { TaskListItemContextMenu } from "@/TaskListItemContextMenu.js";
 import { TaskInteractionBadge } from "@/TaskInteractionBadge.js";
 import { useTaskListItemContextActions } from "@/useTaskListItemContextActions.js";
-import { useFeedbackStore } from "@/feedback/feedbackStore.js";
 import { useModelTrajectoryStore } from "@/store/modelTrajectoryStore.js";
-import { buildTaskFeedbackDescription } from "@/lib/taskFeedbackDraft.js";
-import { toast } from "@/components/ui/toast.js";
+import { useOpenIssueReport } from "@/hooks/useOpenIssueReport.js";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
 import { useV4SplitPaneEntry } from "@/v4/splitPaneEntryContext.js";
 import { buildWorkbenchSessionKey, useWorkbenchGroupStore } from "@/v4/workbenchGroupStore.js";
@@ -791,7 +789,7 @@ export function TaskListItemContextMenuContent({
   );
   // 当前 focused session、已有 group 与 pane 上限统一由 shell owner 裁决；row 不再直接写 layout store。
   const canOpenInSplitPane = splitPaneEntry.canOpenSession(splitPaneTarget);
-  const openFeedbackSubmit = useFeedbackStore((state) => state.openSubmit);
+  const openIssueReport = useOpenIssueReport();
   const {
     taskSessionFile,
     taskNativeSessionLogFile,
@@ -818,41 +816,12 @@ export function TaskListItemContextMenuContent({
       id: task.forkedFromTaskId ? "taskList.forkedUntitled" : "taskList.untitled",
     });
 
-  const handleOpenTaskFeedback = useCallback(async () => {
-    // 任务右键菜单之前只能复制日志/路径，反馈时缺少任务上下文。
-    // 这里复用反馈中心 draft，只预填脱敏后的任务线索，附件由用户主动选择。
-    openFeedbackSubmit({
-      title: intl
-        .formatMessage(
-          { id: "feedback.submit.template.section.taskFeedbackTitle" },
-          { title: taskTitle },
-        )
-        .slice(0, 80),
-      type: "bug",
-      module: "Agent任务执行失败",
-      severity: "P2-中",
-      includeLogs: true,
-      description: buildTaskFeedbackDescription({
-        taskTitle,
-        taskId: task.taskId,
-        workspacePath,
-        taskSessionPath: taskSessionFile.path,
-        taskLogPath: taskNativeSessionLogFile.path,
-        formatMessage: (id: string, values?: Record<string, string>) =>
-          intl.formatMessage({ id }, values),
-      }),
-      screenshots: [],
-    });
-    toast(intl.formatMessage({ id: "taskList.feedbackOpened" }));
-  }, [
-    intl,
-    openFeedbackSubmit,
-    task.taskId,
-    taskNativeSessionLogFile.path,
-    taskSessionFile.path,
-    taskTitle,
-    workspacePath,
-  ]);
+  const handleOpenTaskFeedback = useCallback(() => {
+    // 任务右键菜单过去把任务上下文预填进内置反馈表单，但那个表单最终 POST 到上游
+    // feedback API 并依赖账号 JWT，自建 fork 提交必然失败。这里统一跳项目 issue 页，
+    // 任务日志/会话路径仍可通过同菜单的复制入口带走。
+    openIssueReport();
+  }, [openIssueReport]);
 
   return (
     <TaskListItemContextMenu

@@ -53,7 +53,6 @@ interface QuickPickCommandHandlers {
   openMcpSettings: () => void;
   switchTheme: () => void;
   openFeedback: () => void | Promise<void>;
-  openCommunity: () => void | Promise<void>;
   openProductDocs: () => void | Promise<void>;
   login?: () => void | Promise<void>;
   logout?: () => void | Promise<void>;
@@ -67,7 +66,6 @@ interface QuickPickCommandHandlers {
 
 interface CreateQuickPickCommandsOptions {
   allowOpenWorkspace: boolean;
-  canOpenCommunity: boolean;
   isSidebarVisible: boolean;
   isLoggedIn: boolean;
   supportsEmbeddedBrowser?: boolean;
@@ -85,7 +83,6 @@ interface CreateQuickPickCommandsOptions {
 
 export function createQuickPickCommands({
   allowOpenWorkspace,
-  canOpenCommunity,
   isSidebarVisible,
   isLoggedIn,
   supportsEmbeddedBrowser = true,
@@ -247,17 +244,6 @@ export function createQuickPickCommands({
     ],
     run: handlers.openFeedback,
   });
-
-  if (canOpenCommunity) {
-    commands.push({
-      id: "community",
-      sectionId: "app",
-      titleId: "quickPick.command.community",
-      icon: "community",
-      keywords: ["community", "users", "chat", "用户社群", "社群"],
-      run: handlers.openCommunity,
-    });
-  }
 
   commands.push({
     id: "product-docs",
