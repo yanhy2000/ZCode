@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
+  Blocks,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -92,6 +93,7 @@ export function WebRemoteControlMobileTaskHome({
   initialResult,
   onNavigateHome,
   onNavigateToChat,
+  onOpenPluginStore,
   onOpenTask,
   preferences,
   onPreferencesChange,
@@ -117,6 +119,8 @@ export function WebRemoteControlMobileTaskHome({
   ) => void;
   onNavigateHome?: () => void;
   onNavigateToChat?: () => void;
+  /** 手机远控首页的「插件市场」入口；未提供时不渲染该按钮（例如内嵌到别处时）。 */
+  onOpenPluginStore?: () => void;
   onOpenTask?: (task: WebRemoteControlTaskTarget) => void;
   preferences: WebRemoteControlMobileTaskHomePreferences;
   onPreferencesChange: (preferences: WebRemoteControlMobileTaskHomePreferences) => void;
@@ -401,6 +405,22 @@ export function WebRemoteControlMobileTaskHome({
         <div className="rounded-lg border border-card-border bg-card p-3 text-ui-base/relaxed text-foreground-subtle">
           {intl.formatMessage({ id: "webRemoteControl.mobileHome.notice" })}
         </div>
+
+        {/* 修复原因：手机远控首页之前没有任何插件市场入口，用户在手机上完全打不开插件市场
+            （桌面侧栏的入口在手机壳下不渲染）。这里补一个与首页卡片同风格的入口。 */}
+        {onOpenPluginStore ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="lg"
+            className="mt-3 w-full justify-start gap-2 border border-card-border bg-card text-foreground hover:bg-surface-hover hover:text-foreground"
+            data-testid="web-remote-mobile-plugin-store-open"
+            onClick={onOpenPluginStore}
+          >
+            <Blocks className="size-4" />
+            {intl.formatMessage({ id: "workspace.openPluginsSettings" })}
+          </Button>
+        ) : null}
 
         <div className="mt-4 flex items-start justify-between gap-3">
           <div className="min-w-0">

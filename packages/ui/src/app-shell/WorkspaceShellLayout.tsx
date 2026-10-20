@@ -1277,13 +1277,11 @@ export const WorkspaceShellLayout = memo(
     const canPrimaryNavigationBack =
       workspaceMainView === "plugin-store" || canTaskNavBack;
     useEffect(() => {
-      if (
-        isWebRemoteControlShell &&
-        (workspaceMainView === "automations" ||
-          workspaceMainView === "plugin-store")
-      ) {
-        // 修复原因：手机远控复用桌面 shell 时可能保留上一次主视图状态；
-        // 远控不承载 Automations，必须立即回落到 continuous/replayable 边界之外的聊天页。
+      // 修复原因：手机远控复用桌面 shell 时可能保留上一次主视图状态。
+      // 远控不承载 Automations（见 docs/off-peak-task/decisions.md D37），必须立即回落到聊天页；
+      // plugin-store 已在远控链路验证可用（pluginManagementService 能过 relay 桥），不再打回 chat，
+      // 否则点击「插件市场」后视图立刻被重置，表现为按钮无响应。
+      if (isWebRemoteControlShell && workspaceMainView === "automations") {
         onWorkspaceMainViewChange("chat");
       }
     }, [isWebRemoteControlShell, onWorkspaceMainViewChange, workspaceMainView]);
@@ -2157,6 +2155,30 @@ export const WorkspaceShellLayout = memo(
             chatOverlay={
               workspaceMainView === "chat" ? renderChatFindDialog() : undefined
             }
+            // 修复原因：手机壳下桌面侧栏（含插件市场入口）不渲染，商店页改由手机壳自己的
+            // plugin-store 页承载；这里只传内容，标题栏与返回按钮由 WebRemoteControlMobileShell 提供。
+            // 元素只有被手机壳真正渲染到某一页时才会挂载，因此不会提前拉取市场列表。
+            pluginStoreContent={
+              <ScopedErrorBoundary
+                scope="plugin-store-mobile"
+                resetKeys={workspaceOnlyResetKeys}
+                variant="panel"
+                className="min-h-full"
+              >
+                <div className="mx-auto flex w-full max-w-4xl flex-col px-4 py-4 md:px-6 md:py-6">
+                  <PluginStorePage
+                    isWebRemoteControl
+                    key={`plugin-store:${pluginStoreOpenVersion}`}
+                    workspacePath={workspaceAbsPath}
+                    workspaceIdentity={workspaceIdentity}
+                    // Bug 根因：独立插件页曾绕过切回聊天页的包装回调，任务虽被创建，
+                    // 视图仍停在插件详情，用户看到“立即试用”与示例 Prompt 点击无反应。
+                    onCreateTask={handleCreateTaskInChat}
+                    onManageInstalled={handleManageInstalledPlugins}
+                  />
+                </div>
+              </ScopedErrorBoundary>
+            }
             chatContent={
               workspaceMainView === "automations" &&
                 !isWebRemoteControlShell ? (
@@ -2211,34 +2233,6 @@ export const WorkspaceShellLayout = memo(
                           />
                         </div>
                       </ScopedErrorBoundary>
-                    </div>
-                  </AutomationsMainBreadcrumbFrame>
-                </main>
-              ) : workspaceMainView === "plugin-store" &&
-                !isWebRemoteControlShell ? (
-                <main className="flex h-full min-h-0 flex-1 flex-col bg-background">
-                  <AutomationsMainBreadcrumbFrame
-                    isDesktop={Boolean(isDesktop)}
-                    sectionLabel={intl.formatMessage({
-                      id: "workspace.openPluginsSettings",
-                    })}
-                    ariaLabel={intl.formatMessage({
-                      id: "settings.breadcrumbLabel",
-                    })}
-                  >
-                    <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
-                      <div className="mx-auto flex w-full max-w-4xl flex-col px-4 py-4 md:px-6 md:py-6">
-                        <PluginStorePage
-                          isWebRemoteControl={isWebRemoteControlShell}
-                          key={`plugin-store:${pluginStoreOpenVersion}`}
-                          workspacePath={workspaceAbsPath}
-                          workspaceIdentity={workspaceIdentity}
-                          // Bug 根因：独立插件页曾绕过切回聊天页的包装回调，任务虽被创建，
-                          // 视图仍停在插件详情，用户看到“立即试用”与示例 Prompt 点击无反应。
-                          onCreateTask={handleCreateTaskInChat}
-                          onManageInstalled={handleManageInstalledPlugins}
-                        />
-                      </div>
                     </div>
                   </AutomationsMainBreadcrumbFrame>
                 </main>
@@ -2716,8 +2710,7 @@ export const WorkspaceShellLayout = memo(
                         </div>
                       </AutomationsMainBreadcrumbFrame>
                     </main>
-                  ) : workspaceMainView === "plugin-store" &&
-                    !isWebRemoteControlShell ? (
+                  ) : workspaceMainView === "plugin-store" ? (
                     <main className="flex h-full min-h-0 flex-1 flex-col bg-background">
                       <AutomationsMainBreadcrumbFrame
                         isDesktop={Boolean(isDesktop)}

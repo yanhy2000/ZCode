@@ -136,6 +136,26 @@ pinned 分区与普通分组。
 3. 主体继续使用 Root 注入的 V4 chat content（最终由 `packages/ui/src/v4/SessionPane.tsx` 承载会话）。
 4. terminal、browser、side pane 的移动端展示规则沿用现有远控策略，第一版不主动扩展。
 
+### 插件市场页
+
+2026-10-20 补充：手机首页增加「插件市场」入口，点开进入手机壳自己的 `plugin-store` 页。
+
+背景：桌面侧栏的插件入口在手机壳下不渲染（手机没有 sidebar），而插件市场在远控链路里是可用的，
+此前手机端没有任何入口，用户在手机上完全打不开插件市场。
+
+1. 内容来自 Root 注入的 `pluginStoreContent`（渲染 `PluginStorePage`，`isWebRemoteControl`）。
+   未注入内容时首页不渲染入口，避免出现点不开的死按钮。
+2. 顶栏与聊天页保持一致：返回按钮 + 标题（`workspace.openPluginsSettings`）+ 主题菜单。
+   返回按钮与浏览器返回键同源，都回到首页。
+3. 页面自己拥有滚动容器（`overflow-y-auto [scrollbar-gutter:stable]`）；
+   内容列继续使用插件市场统一的 `max-w-4xl` 宽度契约。
+4. 「管理已安装」仍打开 Settings 覆盖层（`openSettingsTab`），Settings 是 Root 级覆盖层，
+   手机远控下同样可达，不需要手机专用的二级管理页。
+
+不在手机端承载的能力见「端侧边界」：Automations 在手机 `/remote` 仍然完全隐藏
+（[off-peak decisions D37](../off-peak-task/decisions.md)）——自动化的项目候选只来自本地
+workspace tab，手机上的 tab 全是远端 identity，放开会出现“能看不能建”的半残入口。
+
 ### 聊天页交互浮层边界
 
 手机远控聊天页复用桌面会话组件，并保持与桌面一致的浮层层级和操作方式；手机端只收紧
@@ -294,8 +314,8 @@ desktop task selection -> existing query-cache optimistic clear（保持不变�
 建议新增或调整以下 UI 文件：
 
 1. `packages/ui/src/WebRemoteControlMobileShell.tsx`
-   - 手机远控两页壳层。
-   - 管理 `home/chat` 页面状态。
+   - 手机远控壳层。
+   - 管理 `home/chat/plugin-store` 页面状态与对应的 history state。
    - 管理返回首页。
    - 消费跨 workspace 点击带来的一次性 `mobileNavigationIntent`。
    - 持有切换中 overlay。
@@ -459,7 +479,7 @@ pinned?: boolean;
 第一版不需要引入真实 URL 路由，可以在 mobile shell 内部用 React state：
 
 ```text
-currentMobilePage: "home" | "chat"
+currentMobilePage: "home" | "chat" | "plugin-store"
 ```
 
 进入聊天：
@@ -469,11 +489,19 @@ currentMobilePage: "home" | "chat"
 3. 设置 `currentMobilePage = "chat"`。
 4. 如果当前 history state 不是 `{ zcodeMobilePage: "chat" }`，补一层 chat history state。
 
+进入插件市场（2026-10-20 补充，与进入聊天同构）：
+
+1. 用户点击首页的插件市场入口。
+2. 设置 `currentMobilePage = "plugin-store"`。
+3. 如果当前 history state 不是 `{ zcodeMobilePage: "plugin-store" }`，补一层该 state；
+   重复点击不重复 push。
+
 返回首页：
 
 1. 点击 header 返回按钮。
-2. 如果当前 history state 是 `{ zcodeMobilePage: "chat" }`，调用 `history.back()`，由 `popstate` 回到 home。
-3. 如果当前没有 chat history state，直接设置 `currentMobilePage = "home"` 作为兜底。
+2. 如果当前 history state 是 `{ zcodeMobilePage: "chat" }` 或 `{ zcodeMobilePage: "plugin-store" }`，
+   调用 `history.back()`，由 `popstate` 回到 home。
+3. 如果当前没有这些 history state，直接设置 `currentMobilePage = "home"` 作为兜底。
 4. 保留当前 active task 的选中态。
 
 浏览器返回键：
@@ -482,9 +510,11 @@ currentMobilePage: "home" | "chat"
 2. 只有用户从 `home` 点击 task 并成功进入 `chat` 时，调用一次 `history.pushState({ zcodeMobilePage: "chat" }, "")`。
 3. 如果当前已经是这层 `chat` state，不重复 push，避免同一个 task 多次点击堆叠历史。
 4. `popstate` 命中 `{ zcodeMobilePage: "chat" }` 时设置 `currentMobilePage = "chat"`；从 chat 点返回按钮时用 `history.back()` 回到 home，而不是直接改 state。
-5. `popstate` 回到非 `zcodeMobilePage` state 时设置 `currentMobilePage = "home"`，并放行浏览器后续默认返回行为。
-6. 跨 workspace task 点击成功并重新挂载 Root 后，仍按“用户点击进入 chat”的规则补一层 `chat` state；这层 state 来自点击流程的一次性 `mobileNavigationIntent`，扫码初始 `initialTaskId` 不补这层 state。
-7. mobile shell unmount 时移除 `popstate` listener。
+5. `popstate` 命中 `{ zcodeMobilePage: "plugin-store" }` 时设置 `currentMobilePage = "plugin-store"`，
+   刷新页面时同样用这层 state 恢复到插件市场页而不是跳回首页。
+6. `popstate` 回到非 `zcodeMobilePage` state 时设置 `currentMobilePage = "home"`，并放行浏览器后续默认返回行为。
+7. 跨 workspace task 点击成功并重新挂载 Root 后，仍按“用户点击进入 chat”的规则补一层 `chat` state；这层 state 来自点击流程的一次性 `mobileNavigationIntent`，扫码初始 `initialTaskId` 不补这层 state。
+8. mobile shell unmount 时移除 `popstate` listener。
 
 不要把 workspace/task 状态塞进 URL，避免和扫码入口及配对态互相耦合。
 
@@ -546,15 +576,19 @@ pnpm lint
    - 扫码初始 task 只展开首页 card 和选中 task row，不进入 chat。
    - 用户点击 task 进入 chat 时只补一层 history state，浏览器返回回到 home。
    - 跨 workspace 点击后重新挂载 Root 时消费一次性 `mobileNavigationIntent` 进入 chat，并在消费后清空。
-4. `packages/shared/test/webRemoteControl.test.ts`
+4. `packages/ui/test/webRemoteControlMobileShell.test.ts`
+   - 提供 `pluginStoreContent` 时首页出现插件市场入口，不提供时不渲染（避免死按钮）。
+   - `plugin-store` history state 能被识别，刷新后恢复到插件市场页而不是首页。
+   - 锁住主视图回落口径：`plugin-store` 不再被打回 chat，Automations 仍在远控下回落（D37）。
+5. `packages/shared/test/webRemoteControl.test.ts`
    - 如新增 `displayStatus`，补 schema/类型兼容测试。
-5. `packages/ui/test/webRemoteControlTaskIndex.test.ts`
+6. `packages/ui/test/webRemoteControlTaskIndex.test.ts`
    - `buildWebRemoteControlTaskTargets()` 按 sessions-index activity → task runtime →
      `ZCodeTaskMeta.status` 的优先级计算 `displayStatus`。
    - 覆盖 live phase 与 stale runtime/persisted cache 在 running、completed、error 三个方向上的冲突。
    - activity 缺失或为兼容 `draft` 时保持原有 runtime/persisted fallback，持久 `running` 仍不得制造假
      running。
-6. `packages/desktop/test/webRemoteControlManagerExternalRelay.test.ts`
+7. `packages/desktop/test/webRemoteControlManagerExternalRelay.test.ts`
    - 同一 task 只改变 `title`、`unreadAt`、`displayStatus`、`pinned`、`archived` 或
      `remoteSessionId` 时必须推送 `workspace-list-updated`。
    - 同一 workspace 只改变 `connectionState`、`remoteSessionId` 或 `lastConnectionError` 时必须推送；

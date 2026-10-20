@@ -19,7 +19,7 @@ import type { WebRemoteControlTerminalTransportState } from "@/root/types.js";
 import type { WebRemoteControlWorkspaceSwitcherApi } from "@/root/types.js";
 import { useWebRemoteControlTerminalTransportState } from "@/webRemoteControlTerminalTransportState.js";
 
-type WebRemoteControlMobilePage = "home" | "chat";
+type WebRemoteControlMobilePage = "home" | "chat" | "plugin-store";
 
 interface WebRemoteControlMobileHistoryState {
   zcodeMobilePage?: WebRemoteControlMobilePage;
@@ -35,6 +35,16 @@ export function isWebRemoteControlMobileChatHistoryState(
   );
 }
 
+export function isWebRemoteControlMobilePluginStoreHistoryState(
+  state: unknown,
+): state is WebRemoteControlMobileHistoryState {
+  return (
+    typeof state === "object" &&
+    state !== null &&
+    (state as WebRemoteControlMobileHistoryState).zcodeMobilePage === "plugin-store"
+  );
+}
+
 function pushWebRemoteControlMobileChatHistory() {
   if (typeof window === "undefined") {
     return;
@@ -45,6 +55,18 @@ function pushWebRemoteControlMobileChatHistory() {
   }
 
   window.history.pushState({ zcodeMobilePage: "chat" }, "");
+}
+
+function pushWebRemoteControlMobilePluginStoreHistory() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (isWebRemoteControlMobilePluginStoreHistoryState(window.history.state)) {
+    return;
+  }
+
+  window.history.pushState({ zcodeMobilePage: "plugin-store" }, "");
 }
 
 function resolveInitialWebRemoteControlMobilePage(
@@ -63,6 +85,14 @@ function resolveInitialWebRemoteControlMobilePage(
     return "chat";
   }
 
+  // 同理：插件市场页刷新后也要留在原页，而不是跳回任务首页。
+  if (
+    typeof window !== "undefined" &&
+    isWebRemoteControlMobilePluginStoreHistoryState(window.history.state)
+  ) {
+    return "plugin-store";
+  }
+
   return "home";
 }
 
@@ -78,6 +108,7 @@ export function WebRemoteControlMobileShell({
   onCloseSidePane,
   onSelectTask,
   onStartDraftInWorkspace,
+  pluginStoreContent,
   renderChatHeader,
   sidePaneContent,
   switcher,
@@ -104,6 +135,11 @@ export function WebRemoteControlMobileShell({
   chatContent: ReactNode;
   chatOverlay?: ReactNode;
   sidePaneContent?: ReactNode;
+  /**
+   * 手机端「插件市场」页面内容。桌面侧栏的插件入口在手机壳下不渲染，
+   * 改由任务首页的入口切到该页；未提供时首页不显示插件入口。
+   */
+  pluginStoreContent?: ReactNode;
   webRemoteControlTerminalTransportState?: WebRemoteControlTerminalTransportState;
 }) {
   const { intl } = useZCodeIntl();
@@ -127,6 +163,13 @@ export function WebRemoteControlMobileShell({
     pushWebRemoteControlMobileChatHistory();
   }, []);
 
+  // 修复原因：手机远控首页补了「插件市场」入口后，需要一个与 chat 同构的第三页，
+  // 并同样把页面写进 history.state，刷新后不会莫名其妙回到任务首页。
+  const navigateToPluginStore = useCallback(() => {
+    setCurrentPage("plugin-store");
+    pushWebRemoteControlMobilePluginStoreHistory();
+  }, []);
+
   const handleTaskHomePreferencesChange = useCallback(
     (preferences: WebRemoteControlMobileTaskHomePreferences) => {
       // Bugfix: 手机远控任务首页进入 task 后只是卸载组件，shell 内存 state 足够保留排序；
@@ -143,7 +186,8 @@ export function WebRemoteControlMobileShell({
     setHomeRefreshKey((key) => key + 1);
     if (
       typeof window !== "undefined" &&
-      isWebRemoteControlMobileChatHistoryState(window.history.state)
+      (isWebRemoteControlMobileChatHistoryState(window.history.state) ||
+        isWebRemoteControlMobilePluginStoreHistoryState(window.history.state))
     ) {
       window.history.back();
       return;
@@ -166,7 +210,11 @@ export function WebRemoteControlMobileShell({
     }
 
     const handlePopState = (event: PopStateEvent) => {
-      const nextPage = isWebRemoteControlMobileChatHistoryState(event.state) ? "chat" : "home";
+      const nextPage = isWebRemoteControlMobileChatHistoryState(event.state)
+        ? "chat"
+        : isWebRemoteControlMobilePluginStoreHistoryState(event.state)
+          ? "plugin-store"
+          : "home";
       setCurrentPage(nextPage);
       if (nextPage === "home") {
         setHomeRefreshKey((key) => key + 1);
@@ -227,6 +275,8 @@ export function WebRemoteControlMobileShell({
           onCrossWorkspaceSwitchingChange={setSwitchingWorkspace}
           onNavigateHome={navigateHome}
           onNavigateToChat={navigateToChat}
+          // 只有调用方提供了商店内容时才给出入口，避免出现点不开的死按钮。
+          onOpenPluginStore={pluginStoreContent ? navigateToPluginStore : undefined}
           preferences={taskHomePreferences}
           onPreferencesChange={handleTaskHomePreferencesChange}
           refreshKey={homeRefreshKey}
@@ -234,6 +284,34 @@ export function WebRemoteControlMobileShell({
           onStartDraftInWorkspace={onStartDraftInWorkspace}
           switcher={switcher}
         />
+      ) : currentPage === "plugin-store" ? (
+        // 修复原因：手机壳没有桌面侧栏，插件市场需要一页自己的容器；顶栏与聊天页保持一致，
+        // 返回按钮走 navigateHome，因此浏览器返回键与页面返回按钮行为一致。
+        <section
+          className="flex h-full min-h-0 min-w-0 flex-col bg-background text-foreground"
+          data-mobile-page="plugin-store"
+        >
+          <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-header px-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={intl.formatMessage({
+                id: "webRemoteControl.mobileShell.backHome",
+              })}
+              onClick={navigateHome}
+            >
+              <ArrowLeft className="size-4" />
+            </Button>
+            <span className="min-w-0 flex-1 truncate text-ui-base font-medium">
+              {intl.formatMessage({ id: "workspace.openPluginsSettings" })}
+            </span>
+            <WebRemoteControlThemeMenu />
+          </div>
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+            {pluginStoreContent}
+          </div>
+        </section>
       ) : (
         <section
           className="flex h-full min-h-0 min-w-0 flex-col bg-background text-foreground"

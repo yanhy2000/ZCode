@@ -14,6 +14,12 @@ const workspaceShellSource = readFileSync(
   ),
   "utf8",
 );
+const mobileShellSource = readFileSync(
+  fileURLToPath(
+    new URL("../src/WebRemoteControlMobileShell.tsx", import.meta.url),
+  ),
+  "utf8",
+);
 
 describe("Workspace Sidebar terminology", () => {
   it("names the plugin entry as the plugin marketplace", () => {
@@ -28,10 +34,16 @@ describe("Workspace Sidebar terminology", () => {
   });
 
   it("uses the plugin marketplace terminology for desktop and mobile detail breadcrumbs", () => {
+    // 桌面路径的插件市场仍走 breadcrumb frame，因此 sectionLabel 只剩一份；
+    // 手机远控路径的标题改由 WebRemoteControlMobileShell 自己的页面顶栏给出，
+    // 术语是否一致在下面单独校验，避免覆盖丢失。
     expect(
       workspaceShellSource.match(
         /sectionLabel=\{intl\.formatMessage\(\{\s*id: "workspace\.openPluginsSettings",\s*\}\)\}/g,
       ),
-    ).toHaveLength(2);
+    ).toHaveLength(1);
+    expect(mobileShellSource).toContain(
+      'intl.formatMessage({ id: "workspace.openPluginsSettings" })',
+    );
   });
 });

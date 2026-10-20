@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   WebRemoteControlMobileShell,
   isWebRemoteControlMobileChatHistoryState,
+  isWebRemoteControlMobilePluginStoreHistoryState,
 } from "@/WebRemoteControlMobileShell.js";
 import { persistWebRemoteControlMobileTaskHomePreferences } from "@/WebRemoteControlMobileTaskHome.js";
 import type {
@@ -158,7 +159,9 @@ const workspaceList: WebRemoteControlWorkspaceListResult = {
   ] satisfies WebRemoteControlTaskTarget[],
 };
 
-function renderMobileShellWithInitialWorkspaceList() {
+function renderMobileShellWithInitialWorkspaceList(
+  extraProps: Record<string, unknown> = {},
+) {
   return renderToStaticMarkup(
     createElement(WebRemoteControlMobileShell, {
       activeTaskId: null,
@@ -171,6 +174,7 @@ function renderMobileShellWithInitialWorkspaceList() {
         listWorkspaces: vi.fn(async () => workspaceList),
         switchWorkspace: vi.fn(async () => {}),
       },
+      ...extraProps,
     }),
   );
 }
@@ -356,5 +360,78 @@ describe("WebRemoteControlMobileShell", () => {
     expect(isWebRemoteControlMobileChatHistoryState({ zcodeMobilePage: "chat" })).toBe(true);
     expect(isWebRemoteControlMobileChatHistoryState({ zcodeMobilePage: "home" })).toBe(false);
     expect(isWebRemoteControlMobileChatHistoryState(null)).toBe(false);
+  });
+
+  it("recognizes the mobile plugin store browser history state", () => {
+    expect(isWebRemoteControlMobilePluginStoreHistoryState({ zcodeMobilePage: "plugin-store" })).toBe(
+      true,
+    );
+    expect(isWebRemoteControlMobilePluginStoreHistoryState({ zcodeMobilePage: "chat" })).toBe(false);
+    expect(isWebRemoteControlMobilePluginStoreHistoryState(null)).toBe(false);
+  });
+
+  it("offers a plugin store entry on the mobile home page when store content is provided", () => {
+    // 回归原因：桌面侧栏的插件市场入口在手机壳下不渲染，首页又没有入口，
+    // 手机上完全打不开插件市场（用户反馈「远控 web 端插件市场打不开」）。
+    const html = renderMobileShellWithInitialWorkspaceList({
+      pluginStoreContent: createElement("div", { "data-testid": "plugin-store-content" }),
+    });
+
+    expect(html).toContain('data-testid="web-remote-mobile-plugin-store-open"');
+    expect(html).toContain("workspace.openPluginsSettings");
+  });
+
+  it("hides the plugin store entry when no store content is provided", () => {
+    const html = renderMobileShellWithInitialWorkspaceList();
+
+    expect(html).not.toContain('data-testid="web-remote-mobile-plugin-store-open"');
+  });
+
+  it("renders the plugin store page inside the mobile shell and restores it from history", () => {
+    vi.stubGlobal("window", {
+      history: {
+        state: { zcodeMobilePage: "plugin-store" },
+        back: vi.fn(),
+        pushState: vi.fn(),
+      },
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(WebRemoteControlMobileShell, {
+        activeTaskId: null,
+        activeWorkspacePath: "/workspace/app",
+        chatContent: createElement("main", { "data-testid": "chat-content" }),
+        onSelectTask: vi.fn(),
+        pluginStoreContent: createElement("div", { "data-testid": "plugin-store-content" }),
+        renderChatHeader: () => createElement("header", { "data-testid": "chat-header" }),
+        switcher: {
+          listWorkspaces: vi.fn(async () => ({ workspaces: [] })),
+          switchWorkspace: vi.fn(async () => {}),
+        },
+      }),
+    );
+
+    expect(html).toContain('data-mobile-page="plugin-store"');
+    expect(html).toContain('data-testid="plugin-store-content"');
+    expect(html).toContain("webRemoteControl.mobileShell.backHome");
+  });
+
+  it("keeps plugin-store a supported remote main view while automations stay out of scope", () => {
+    // 回归原因：WorkspaceShellLayout 曾把 plugin-store 与 automations 一起打回 chat，
+    // 点击「插件市场」后视图立刻回到聊天页，表现为按钮无响应。
+    // 同时锁住 D37：手机 /remote 仍不承载 Automations，撤销时不能顺手把它放开。
+    const source = readFileSync(
+      resolve(process.cwd(), "packages/ui/src/app-shell/WorkspaceShellLayout.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("pluginStoreContent={");
+    expect(source).not.toContain('workspaceMainView === "plugin-store" &&\n                !isWebRemoteControlShell');
+    expect(source).not.toContain(
+      '(workspaceMainView === "automations" ||\n          workspaceMainView === "plugin-store")',
+    );
+    expect(source).toContain('isWebRemoteControlShell && workspaceMainView === "automations"');
   });
 });

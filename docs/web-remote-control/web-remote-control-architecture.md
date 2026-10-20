@@ -455,8 +455,10 @@ Mobile web 连接流程：
    此时不创建 workspace bridge，也不开放依赖工作区服务的任务操作。没有可选工作区时显示错误页。
 6. 目标可建立 bridge 时发送 `workspace-bridge-open`，用 `createAcknowledgedWebRemoteControlRelayProtocol()`
    将 `rpc-frame` / `rpc-frame-ack` app payload 适配为 `IMessagePassingProtocol`，维护分片、ACK 与传输恢复。
-7. `connectViaProtocol()` 后渲染 `Root`；窄屏由 `WebRemoteControlMobileShell` 管理首页/聊天页，
+7. `connectViaProtocol()` 后渲染 `Root`；窄屏由 `WebRemoteControlMobileShell` 管理首页/聊天页/插件市场页，
    宽屏使用远控侧栏。初始 workspace 的选择与页面落点是两种状态，不能把选中 task 等同于自动进入聊天。
+   手机端的插件市场入口在首页，内容由 `WorkspaceShellLayout` 以 `pluginStoreContent` 注入；
+   Automations 在手机 `/remote` 仍然不承载（见 [off-peak decisions D37](../off-peak-task/decisions.md)）。
 
 `/web-remote` 仍是 ZAI OAuth 登录与等待页入口；`remoteControlToken` / `relayOrigin` 只属于旧 `/web-remote` 行为，不适用于新的 `/remote`、`/remote/v3` 或 `/remote/v4` QR route。
 
