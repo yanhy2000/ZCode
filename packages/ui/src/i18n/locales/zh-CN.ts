@@ -1215,7 +1215,7 @@ const zhCN: Record<string, string> = {
   "welcome.loggingIn": "登录中...",
   "welcome.loginFailed": "登录失败",
   "login.title": "欢迎来到 ZCode",
-  "login.description": "连接账号，开始使用 ZCode",
+  "login.description": "配置模型后即可开始使用 ZCode",
   "login.oauth.activeProviderHint": "当前已登录提供方：{provider}。新登录会替换当前登录身份。",
   "login.oauth.loadingProviders": "正在加载登录提供方...",
   "login.oauth.noProviders": "当前没有可用的登录提供方，请稍后重试。",
@@ -6612,7 +6612,7 @@ const zhCN: Record<string, string> = {
   "chat.error.collapseDetails": "收起详情",
   "chat.error.feedback": "反馈问题",
   "chat.error.feedbackOpened": "已打开反馈，并自动带上报错现场",
-  "chat.error.noAvailableModel": "当前没有可用模型。请开通编程套餐或配置自定义模型。",
+  "chat.error.noAvailableModel": "当前没有可用模型。请在设置中配置模型或 API Key。",
   "chat.error.remoteNoAvailableModel":
     "此远程设备尚无可用模型，请先在本机配置模型，保存后会自动同步到远程设备",
   "chat.error.sendFailed": "发送失败，请稍后重试。",
