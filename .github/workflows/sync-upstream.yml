@@ -42,10 +42,24 @@ jobs:
           echo "base=$base" >> "$GITHUB_OUTPUT"
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
           echo "[upstream] base=v$base latest=$latest"
+          # Bug 原因：上游会先合入源码同步、之后才补打 tag（3.16.1 就是以 `0a1fc56d` 合入、至今没有 `v3.16.1`），
+          # 此时「最新稳定 tag」会低于本地基线。原判断是「tag 与基线不相等就要求同步」，于是基线领先上游 tag
+          # 时每天都会误报 `Upstream tag v3.15.1 is newer than base v3.16.1` 并让 workflow 变红。
+          # 这里改成按版本号大小比较：只有上游 tag 严格高于基线才要求同步，相等/领先一律视为已跟上。
+          newest="$(printf '%s\n%s\n' "v$base" "$latest" | sort -V | tail -n1)"
           if [ "$latest" = "v$base" ]; then
-            echo "new=false" >> "$GITHUB_OUTPUT"
+            state="current"
+          elif [ "$newest" = "v$base" ]; then
+            state="ahead"
           else
+            state="behind"
+          fi
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+          echo "[upstream] state=$state"
+          if [ "$state" = "behind" ]; then
             echo "new=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Notify Feishu (optional)
@@ -92,9 +106,21 @@ jobs:
       - name: Report up-to-date
         if: steps.upstream.outputs.new == 'false'
         shell: bash
+        env:
+          LATEST: ${{ steps.upstream.outputs.latest }}
+          BASE: ${{ steps.upstream.outputs.base }}
+          STATE: ${{ steps.upstream.outputs.state }}
         run: |
           {
             echo "### Upstream sync"
             echo ""
-            echo "Current base matches the latest upstream stable tag."
+            if [ "$STATE" = "ahead" ]; then
+              echo "- Current base: v$BASE"
+              echo "- Latest upstream tag: $LATEST"
+              echo ""
+              echo "基线领先于最新上游稳定 tag：上游可能已合入源码同步但尚未补打 tag（3.16.1 即此情况），"
+              echo "无需同步。等上游补 tag 后本工作流会自动恢复「相等」判定。"
+            else
+              echo "Current base matches the latest upstream stable tag."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
