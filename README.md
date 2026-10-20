@@ -4,6 +4,8 @@
 
 本项目不是官方项目，与 Z.ai / ZCode 官方没有隶属关系。官方说明和上游文档见 [README_OFFICIAL.md](./README_OFFICIAL.md)（英文版：[README_OFFICIAL.en.md](./README_OFFICIAL.en.md)）。
 
+> **配套自建远控中继**：[yanhy2000/zcode-WebRemote](https://github.com/yanhy2000/zcode-WebRemote) —— 自托管的 V1 中继（`/ws`）与手机端页面（`/remote/v4`）服务，可完全脱离官方 relay 与账号体系。
+
 ## 当前状态
 
 - 上游基线：`v3.15.1`
@@ -27,7 +29,7 @@
 | **第三方模型**：✅ | ✅ | ✅ 保留 |
 | **工作流**：✅ 云端灰度 | ✅ 云端灰度 | ✅ 始终提供，默认始终开启（已切断云端开关，可切换模式） |
 | **插件市场**：✅ 官方 CDN + GitHub | ✅ 默认开启 | ✅ 保留开启 |
-| **手机远控**：✅ 厂商 relay | 🚧 客户端支持，relay 依赖厂商 | ✅ 保留厂商 relay |
+| **手机远控**：✅ 厂商 relay | 🚧 客户端支持，relay 依赖厂商 | ✅ 保留厂商 relay；可切换自建中继（[zcode-WebRemote](https://github.com/yanhy2000/zcode-WebRemote)） |
 | **电脑控制 / CUA**：✅ | 🚧 占位实现 | 🚧 计划后续寻找方案 |
 | **账号 / 套餐 / 支付 / 分享 / 设置同步**：✅ | ❌ 服务端不完整 | ❌ 计划删除登录 |
 | **余额 / 用量**：✅ 官方套餐展示 | ❌ | 🚧 计划第三方余额 + 本地统计 |
@@ -57,6 +59,11 @@
 - 不接受官方客户端的遥测、强制更新和云端控制。
 - 保留官方开源版的完整桌面、Agent 和工具能力，继续使用第三方模型。
 - 更新节奏和功能改动由自己控制，上游更新按 tag 合并。
+
+## 相关项目
+
+- 自建远控中继（配套）：[yanhy2000/zcode-WebRemote](https://github.com/yanhy2000/zcode-WebRemote)
+- 上游原项目：[zai-org/ZCode](https://github.com/zai-org/ZCode)
 
 ## 许可与声明
 
