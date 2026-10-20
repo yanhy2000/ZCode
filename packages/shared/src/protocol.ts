@@ -6,6 +6,7 @@ import type { ZCodeProvider } from "./zcode-task-types-core.js";
 import type { WorkspacePurpose } from "./workspacePurpose.js";
 import type { DynamicWorkflowMode } from "./dynamic-workflow-feature.js";
 import type { EmbeddedBrowserViewportPreference } from "./browser-use/command-metadata.js";
+import type { ModelSelection } from "./model-selection.js";
 
 // ── Domain types ──
 
@@ -351,6 +352,11 @@ export interface AppSettings {
   nativeSearchEnhancementsEnabled?: boolean;
   /** 新建或冷恢复 Session 是否启用 Memory；默认关闭。 */
   memoryEnabled?: boolean;
+  /**
+   * 标题生成 sidecar 的可选模型覆盖（含思考强度）；缺省表示跟随会话当前模型与档位。
+   * 只影响 session_title / goal_summary_title 请求，不改变主对话链路。
+   */
+  titleGenerationModelSelection?: ModelSelection;
   onboardingOccupation?:
     | "office"
     | "developer"

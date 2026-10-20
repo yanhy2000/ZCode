@@ -1916,6 +1916,10 @@ export const zcodeSessionCreateParamsSchema = z
     persistence: zcodeSessionPersistenceSchema.optional(),
     thoughtLevel: nonEmptyString.optional(),
     titleGenerationEnabled: z.boolean().optional(),
+    // 标题生成 sidecar 的模型覆盖（含思考强度）。缺省 = 跟随会话当前模型与档位。
+    // 只在 session/create 生效：标题 sidecar 的第一条 query 就发生在这个会话里，
+    // resume 复用已持久化的 runtime 配置，不需要重复下发。
+    titleGenerationModelSelection: modelSelectionSchema.optional(),
     mcpServers: z.array(zcodeProtocolMcpServerSchema).optional(),
     toolAllowlist: z.array(nonEmptyString).optional(),
     toolDenylist: z.array(nonEmptyString).optional(),

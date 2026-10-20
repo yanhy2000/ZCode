@@ -54,6 +54,11 @@ async function createSession(
     offPeakToolEnabled: payload.offPeakToolEnabled,
     dynamicWorkflowEnabled: payload.dynamicWorkflowEnabled,
     dynamicWorkflowMode: payload.dynamicWorkflowMode,
+    // 标题模型是 runtime 创建期配置：必须在 record 建立时进入 runtimeConfig，
+    // 不能等首发后补写（那时标题 sidecar 已经在首条 query 上触发过了）。
+    ...(payload.config?.titleGenerationModelSelection
+      ? { titleGenerationModelSelection: payload.config.titleGenerationModelSelection }
+      : {}),
   });
   // createSession.config 消费——草稿态 UI 的先行选择（模型/思考深度/
   // 模式）在首发之前应用并补发事件，首条 turn 即用所选配置。必须在 firstInput 之前。

@@ -152,6 +152,7 @@ type ZCodeSessionRecordParams = (
       // 自动化会话会在创建期关闭标题二次生成，而 create/resume
       // 共用 record 初始化函数；resume 兼容分支也必须声明该策略字段。
       titleGenerationEnabled?: ZCodeSessionCreateParams["titleGenerationEnabled"];
+      titleGenerationModelSelection?: ZCodeSessionCreateParams["titleGenerationModelSelection"];
     })
 ) & { taskType?: SessionTaskType };
 
@@ -3401,7 +3402,14 @@ async function createRecord(
       // 永远命中，模型生成 title 的请求从不触发，侧边栏标题一直停在 first_input 的用户 query。
       // 这里补一份默认配置开启；具体是否生成仍由 runtime 按 parent/taskType/turnNumber 把关。
       // automation 执行会话显式关闭二次命名，避免回答内容覆盖原始用户 query 标题。
-      titleGeneration: params.titleGenerationEnabled === false ? { enabled: false } : {},
+      // 用户在设置里指定的标题模型（含思考强度）随创建参数下发；缺省时不写 modelSelection，
+      // 由 core 回落到会话当前 Selection，避免在草稿会话创建时固化一份旧模型。
+      titleGeneration:
+        params.titleGenerationEnabled === false
+          ? { enabled: false }
+          : params.titleGenerationModelSelection
+            ? { modelSelection: params.titleGenerationModelSelection }
+            : {},
       workingDirectory: workspace.workspacePath,
       // 身份隔离与路径执行分开：core 只把 identity 写入 session.workspace_id，
       // workingDirectory 仍是远端机器上的实际路径；本地 workspace 保持 undefined。

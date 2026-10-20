@@ -32,6 +32,7 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useOptionalServices } from "@/hooks/useServices.js";
 import { ProactiveSuggestionsSetting } from "@/settings/ProactiveSuggestionsSetting.js";
 import { DynamicWorkflowModeSetting } from "@/settings/DynamicWorkflowModeSetting.js";
+import { TitleGenerationModelSetting } from "@/settings/TitleGenerationModelSetting.js";
 import { normalizeInterfaceMode, type InterfaceMode } from "@/lib/interfaceMode.js";
 import {
   createSettingsPageConfig,
@@ -714,6 +715,14 @@ export function GeneralSectionContent({
               }}
             />
           }
+        />
+        {/* 标题生成模型：自带 settings 读写与候选列表，避免继续膨胀本组 props。 */}
+        <SettingsRow
+          label={intl.formatMessage({ id: "settings.titleGenerationModel" })}
+          description={intl.formatMessage({
+            id: "settings.titleGenerationModelDescription",
+          })}
+          control={<TitleGenerationModelSetting />}
         />
         <SettingsRow
           label={intl.formatMessage({ id: "settings.messageStreamShowReasoning" })}

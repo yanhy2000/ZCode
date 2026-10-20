@@ -230,6 +230,8 @@ export interface ZCodeAgentCreateSessionParams extends ZCodeAgentWorkspaceTarget
   thoughtLevel?: string;
   /** automation 执行会话关闭模型二次命名，保持首条用户 query 作为稳定标题。 */
   titleGenerationEnabled?: boolean;
+  /** 标题生成 sidecar 的模型覆盖（含思考强度）；缺省跟随会话当前模型。 */
+  titleGenerationModelSelection?: ModelSelection;
   mcpServers?: ZCodeAgentMcpServer[];
   toolAllowlist?: string[];
   toolDenylist?: string[];

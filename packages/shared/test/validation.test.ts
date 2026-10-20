@@ -481,6 +481,31 @@ describe("hostResponseMessageSchema", () => {
     expect(explicitDisabled.memoryEnabled).toBe(false);
   });
 
+  it("keeps the title generation model optional and validates its shape", () => {
+    // 缺省表示“跟随会话模型与思考强度”，这是新装的默认形态。
+    expect(appSettingsSchema.parse({}).titleGenerationModelSelection).toBeUndefined();
+
+    const selection = {
+      providerId: "glm",
+      modelId: "glm-5.3-flash",
+      options: { reasoningLevel: "low" },
+    };
+    expect(
+      appSettingsSchema.parse({ titleGenerationModelSelection: selection })
+        .titleGenerationModelSelection,
+    ).toEqual(selection);
+
+    // Selection 形状严格：缺 provider 或带未知键都必须被拒绝，避免半截配置落盘。
+    expect(
+      appSettingsSchema.safeParse({ titleGenerationModelSelection: { modelId: "m" } }).success,
+    ).toBe(false);
+    expect(
+      appSettingsSchema.safeParse({
+        titleGenerationModelSelection: { providerId: "p", modelId: "m", unknown: 1 },
+      }).success,
+    ).toBe(false);
+  });
+
   it("defaults AskUserQuestion auto-resolution to on and validates boolean patches", () => {
     const defaults = appSettingsSchema.parse({});
     const explicitEnabled = appSettingsSchema.parse({

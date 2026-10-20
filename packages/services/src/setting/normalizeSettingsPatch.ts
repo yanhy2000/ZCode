@@ -87,5 +87,14 @@ export function normalizeSettingsPatch(patch: Partial<AppSettings>): Partial<App
     normalizedPatch.dynamicWorkflowMode = undefined;
   }
 
+  if (
+    "titleGenerationModelSelection" in normalizedPatch &&
+    normalizedPatch.titleGenerationModelSelection == null
+  ) {
+    // 设置页选回“跟随会话模型”等于删除覆盖；RPC 会吞掉 undefined，
+    // 这里显式归一，避免旧的标题模型继续留在 setting.json 里生效。
+    normalizedPatch.titleGenerationModelSelection = undefined;
+  }
+
   return normalizedPatch;
 }

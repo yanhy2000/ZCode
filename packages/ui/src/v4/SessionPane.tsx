@@ -85,6 +85,7 @@ import { resolveProviderLabel } from "@/lib/registryProviderView.js";
 import {
   buildDraftCreateConfigPayload,
   useDraftConfigControl,
+  withTitleGenerationSelection,
 } from "@/v4/composer/useDraftConfigControl.js";
 import type { ModelSelectionSource } from "@/v4/composer/V4ComposerToolbar.js";
 import { formatModelChangeLabel } from "@/v4/composer/modelTriggerDisplay.js";
@@ -1411,6 +1412,12 @@ export function SessionPane({
   );
   const { settings: sharedSettings } = useSettings();
   const appFollowupMode = resolveAppFollowupMode(sharedSettings);
+  // 标题模型是 app-global 设置，但只在 createSession 时作为 runtime 创建期配置下发一次。
+  // 用 ref 读最新值：createSession 的派发闭包可能比设置变更更早建立。
+  const titleGenerationModelSelectionRef = useRef(
+    sharedSettings?.titleGenerationModelSelection,
+  );
+  titleGenerationModelSelectionRef.current = sharedSettings?.titleGenerationModelSelection;
   const messageStreamShowReasoning = sharedSettings?.messageStreamShowReasoning ?? true;
   const messageStreamShowTodos = sharedSettings?.messageStreamShowTodos ?? false;
   const toolGroupingExploreEnabled = sharedSettings?.toolGroupingExploreEnabled ?? true;
@@ -2818,7 +2825,10 @@ export function SessionPane({
         );
         const createAck = await dispatchSubmissionCommand(
           "createSession",
-          { workspaceId: workspaceKey, ...draftConfigPayload },
+          {
+            workspaceId: workspaceKey,
+            ...withTitleGenerationSelection(draftConfigPayload, titleGenerationModelSelectionRef.current),
+          },
           null,
         );
         if (createAck.status !== "accepted") {
@@ -2909,7 +2919,10 @@ export function SessionPane({
         // 不做任何附件上传，也不会让非 ready 附件绕过 composer 门禁。
         const createAck = await dispatchSubmissionCommand(
           "createSession",
-          { workspaceId: workspaceKey, ...draftConfigPayload },
+          {
+            workspaceId: workspaceKey,
+            ...withTitleGenerationSelection(draftConfigPayload, titleGenerationModelSelectionRef.current),
+          },
           null,
         );
         if (createAck.status !== "accepted") {

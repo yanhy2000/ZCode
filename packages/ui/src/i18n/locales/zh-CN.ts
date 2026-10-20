@@ -2393,6 +2393,11 @@ const zhCN: Record<string, string> = {
     "在消息流中展示完整的模型思考内容；关闭时每轮仍展示第一次思考。",
   "settings.messageStreamShowTodos": "显示待办",
   "settings.messageStreamShowTodosDescription": "在消息流中展示 Todo 工具卡片。",
+  "settings.titleGenerationModel": "标题生成模型",
+  "settings.titleGenerationModelDescription":
+    "新对话的首条消息会用这个模型生成会话标题。默认跟随会话当前的模型与思考强度。",
+  "settings.titleGenerationModelInherit": "跟随会话模型",
+  "settings.titleGenerationModelUnavailable": "模型列表不可用",
   "settings.toolGroupingExplore": "分组探索工具",
   "settings.toolGroupingExploreDescription": "将连续的读取和搜索工具聚合为 Explore 分组。",
   "settings.toolGroupingTerminal": "分组终端命令",

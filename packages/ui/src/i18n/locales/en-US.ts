@@ -2551,6 +2551,11 @@ const enUS: Record<string, string> = {
     "Show full reasoning inside the message stream. When off, the first reasoning item in each turn remains visible.",
   "settings.messageStreamShowTodos": "Show todos",
   "settings.messageStreamShowTodosDescription": "Show Todo tool cards inside the message stream. ",
+  "settings.titleGenerationModel": "Title generation model",
+  "settings.titleGenerationModelDescription":
+    "The first message of a new conversation uses this model to generate the session title. Defaults to the conversation's current model and reasoning level.",
+  "settings.titleGenerationModelInherit": "Follow session model",
+  "settings.titleGenerationModelUnavailable": "Model list unavailable",
   "settings.toolGroupingExplore": "Group exploration tools",
   "settings.toolGroupingExploreDescription":
     "Group consecutive reads and searches into an Explore section.",

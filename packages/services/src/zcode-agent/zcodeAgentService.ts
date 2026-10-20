@@ -384,6 +384,7 @@ interface PendingSessionRuntimePreferencesRequest extends PendingPermissionReque
 type SessionCreateCompatField =
   | "persistence"
   | "thoughtLevel"
+  | "titleGenerationModelSelection"
   | "mcpServers"
   | "toolAllowlist"
   | "toolDenylist"
@@ -405,6 +406,8 @@ type SessionSendCompatField =
 const SESSION_CREATE_OPTIONAL_COMPAT_FIELDS = new Set<SessionCreateCompatField>([
   "persistence",
   "thoughtLevel",
+  // 标题模型覆盖：旧 app-server 不认时省略后按「跟随会话模型」继续，不让 create 硬失败。
+  "titleGenerationModelSelection",
   "mcpServers",
   // CUA 工具隔离新增：buildSessionCreateParams 会带 toolAllowlist/toolDenylist。若旧 app-server
   // 的 .strict() schema 不认，需可降级重试而不是整个 createSession 硬失败。
@@ -662,6 +665,12 @@ function buildSessionCreateParams(
       : {}),
     ...(params.titleGenerationEnabled !== undefined
       ? { titleGenerationEnabled: params.titleGenerationEnabled }
+      : {}),
+    // 标题模型覆盖与 OmittedFields 门控：旧 app-server 的 strict schema 不认这个字段时，
+    // 兼容重试会把它列入 omittedFields 并重发，缺省即回到「跟随会话模型」。
+    ...(params.titleGenerationModelSelection !== undefined &&
+    !omittedFields.has("titleGenerationModelSelection")
+      ? { titleGenerationModelSelection: params.titleGenerationModelSelection }
       : {}),
     // desktop-continuous 首发/恢复走 session service，不经过 legacy task adapter。
     // 之前这里没有把 UI 已解析的 MCP 带进 strict protocol params，runtimeConfig 只能看到空 MCP。

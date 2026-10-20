@@ -278,6 +278,13 @@ export interface V4CommandCoreHost {
     dynamicWorkflowEnabled?: boolean;
     /** 与布尔同行的灰度 mode（launch.md「On demand: activation」）；缺省按 alwaysOn。 */
     dynamicWorkflowMode?: DynamicWorkflowMode;
+    /**
+     * 标题生成 sidecar 的模型覆盖（含思考强度），来自 createSession.config；
+     * 缺省 = 跟随会话当前模型与档位。属 runtime 创建期配置，必须在建 record 时写入。
+     */
+    titleGenerationModelSelection?: NonNullable<
+      CommandPayloadMap["createSession"]["config"]
+    >["titleGenerationModelSelection"];
   }): Promise<{ sessionId: string }>;
   /** 从父会话稳定落盘边界创建隐藏 selection_side_chat child。 */
   createSelectionSideSession?(

@@ -507,3 +507,22 @@ export function buildDraftCreateConfigPayload(
   }
   return Object.keys(config).length > 0 ? { config } : {};
 }
+
+/**
+ * 把设置里的「标题生成模型」并入 createSession payload。
+ *
+ * 标题模型是 app-global 设置，不是草稿态选择：它不影响主对话的模型/档位，只决定
+ * session_title sidecar 用哪个 Selection。它必须在 createSession 时随 config 下发——
+ * 标题 sidecar 在首条 query 上触发，错过创建时机后就没有第二次写入机会。
+ * 未配置时不带该键，由 CLI 回落到会话当前 Selection。
+ */
+export function withTitleGenerationSelection<T extends { config?: Record<string, unknown> }>(
+  payload: T,
+  selection: ModelSelection | undefined,
+): T {
+  if (!selection) return payload;
+  return {
+    ...payload,
+    config: { ...payload.config, titleGenerationModelSelection: selection },
+  };
+}

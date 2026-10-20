@@ -12,6 +12,7 @@ import {
   embeddedBrowserViewportPreferenceSchema,
 } from "./browser-use/command-metadata.js";
 import { providerFamilyConnectionSelectionSettingsSchema } from "./provider-family-connection-selection.js";
+import { modelSelectionSchema } from "./model-selection.js";
 
 /** 引导职业枚举；单独导出供 onboarding 记录回填 settings 时做窄化校验。 */
 const appSettingsOccupationSchema = z.enum([
@@ -493,6 +494,9 @@ const appSettingsObjectSchema = z.object({
   onboardingOccupation: appSettingsOccupationSchema.nullish(),
   proactiveSuggestionsEnabled: z.boolean().optional(),
   memoryEnabled: z.boolean().default(false),
+  // 标题生成 sidecar 的可选模型覆盖（含思考强度）。缺省表示跟随会话当前模型与档位。
+  // 只影响 session_title / goal_summary_title 请求，不改变主对话链路。
+  titleGenerationModelSelection: modelSelectionSchema.optional(),
   lastWorkspaceSession: z.array(appWorkspaceSessionEntrySchema).default([]),
   lastActiveTabIndex: z.number().int().nonnegative().default(0),
   lastActiveTaskByWorkspace: z.record(z.string(), z.string()).optional(),
@@ -583,6 +587,8 @@ export const appSettingsPatchSchema = z.object({
     .nullish(),
   proactiveSuggestionsEnabled: z.boolean().optional(),
   memoryEnabled: z.boolean().optional(),
+  // 清除覆盖时上层传 undefined（经 normalizeSettingsPatch 归一），回到「跟随会话模型」。
+  titleGenerationModelSelection: modelSelectionSchema.optional(),
   lastWorkspaceSession: z.array(appWorkspaceSessionEntrySchema).optional(),
   lastActiveTabIndex: z.number().int().nonnegative().optional(),
   lastActiveTaskByWorkspace: z.record(z.string(), z.string()).optional(),

@@ -167,6 +167,42 @@ describe("v4 原生 createSession", () => {
     expect(createSessionRecord).toHaveBeenCalledWith({ workspaceId: "/w", mcpServers });
   });
 
+  it("创建 draft record 时透传标题模型覆盖", async () => {
+    // 标题 sidecar 在首条 query 上触发，模型覆盖必须随 createSession 进入 runtimeConfig，
+    // 错过创建时机后没有第二次写入机会。
+    const record = makeRecord({ app: makeApp(), persistence: "deferred" });
+    const { host, createSessionRecord } = makeCreateHost(record);
+    const titleGenerationModelSelection = {
+      providerId: "glm",
+      modelId: "glm-5.3-flash",
+      options: { reasoningLevel: "low" },
+    };
+
+    await new V4CommandExecutor(host).execute(
+      envelope(
+        "createSession",
+        { workspaceId: "/w", config: { titleGenerationModelSelection } },
+        "draft-title-model",
+      ),
+    );
+
+    expect(createSessionRecord).toHaveBeenCalledWith({
+      workspaceId: "/w",
+      titleGenerationModelSelection,
+    });
+  });
+
+  it("未配置标题模型时不写该键，由 CLI 回落到会话 Selection", async () => {
+    const record = makeRecord({ app: makeApp(), persistence: "deferred" });
+    const { host, createSessionRecord } = makeCreateHost(record);
+
+    await new V4CommandExecutor(host).execute(
+      envelope("createSession", { workspaceId: "/w" }, "draft-no-title-model"),
+    );
+
+    expect(createSessionRecord).toHaveBeenCalledWith({ workspaceId: "/w" });
+  });
+
   it.each([false, true])(
     "Guarded 配置失败会清理新草稿且不执行（首发=%s）",
     async (withFirstInput) => {

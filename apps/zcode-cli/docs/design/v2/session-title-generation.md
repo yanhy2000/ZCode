@@ -104,13 +104,27 @@ headless `--prompt` 和 `--target` 不传 `titleGeneration`，因此不会多发
 
 模型选择顺序：
 
-1. 如果配置了 `model.lite`，使用 `model.lite` 的 provider/model。
-2. 如果没有 `model.lite`，使用当前默认/main provider/model。
-3. 两种情况下 event 中的 `modelRef.role` 都是 `lite`，表示请求用途是轻量 sidecar。
+1. 调用方显式给出的 Selection（ZCode Protocol `session/create` 的 `titleGenerationModelSelection`，
+   来自 Desktop 设置页「标题生成模型」，含思考强度），完整保留 provider/model 与 reasoningLevel。
+2. 如果配置了 `model.lite`，使用 `model.lite` 的 provider/model。
+3. 如果没有 `model.lite`，使用当前默认/main provider/model。
+4. 以上都没有时使用会话当前 Selection。
+
+事件中的 `modelRef.role` 都是 `lite`，表示请求用途是轻量 sidecar。
+
+```text
+设置页「标题生成模型」 → AppSettings.titleGenerationModelSelection（app-global 偏好）
+    → V4 createSession.config.titleGenerationModelSelection
+    → runtimeConfig.titleGeneration.modelSelection（runtime 创建期一次性写入）
+    → title-generation-sidecar 取 config.titleGeneration?.modelSelection ?? 会话 Selection
+```
+
+未配置时不写 `modelSelection`，由 core 回落到会话当前 Selection。必须保留这个缺省语义：
+草稿会话创建时固化一份模型，会让之后切换模型只更新主链路，标题 sidecar 继续用旧模型。
 
 provider options 与最终 provider/model 对齐；`model.lite` 没有配置时复用默认/main provider options。标题请求不再改写推理档位：
 
-- 推理档位沿用会话当前 Selection（或在 `titleGeneration.modelSelection` 里显式指定的档位），不强制取模型档位列表的最低项 `reasoningLevel.values[0]`。
+- 推理档位沿用最终 Selection 的档位（设置页显式配置、或会话当前 Selection），不强制取模型档位列表的最低项 `reasoningLevel.values[0]`。
 - 输出预算复用主请求的 `resolveNormalRequestMaxOutputTokens` 策略（模型声明的 `maxOutputTokens.max`，缺失时 32,000）。
 - 原因（2026-10 修复）：最低档在部分 provider 上被映射成 `thinking.type = "disabled"`。MiniMax M3.1 这类模型强制 adaptive thinking，收到 disabled 直接返回 400（`invalid params ... requires adaptive thinking (2013)`），标题 sidecar 每次静默失败，侧边栏标题永久停在首条 query；固定的 5,000 输出预算还会在思考预算更大的模型上触发同类 400。`max_tokens` 只是上限，标题输出仍受清洗与长度限制约束，不会因此变长。
 
