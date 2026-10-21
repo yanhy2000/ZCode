@@ -151,11 +151,15 @@ Windows 的 AUMID 与 NSIS 安装标识都取自它（`resolveWindowsAppUserMode
 
 ### 需要同步改的测试（按字面量断言）
 
-- `packages/desktop/test/desktopProductIdentity.test.ts`：`appId`、`productName`、产物名断言。
+- `packages/desktop/test/desktopProductIdentity.test.ts`：`appId`（`dev.zcode.app` /
+  `dev.zcode.app.preview`）、`productName`（`ZCode` / `ZCode Preview`）、产物名后缀断言。
 - `packages/desktop/test/desktopLinuxDeepLinkRegistration.test.ts`：`productName: "ZCode Preview"`。
-- `packages/desktop/test/macosReleaseAppDoctor.test.ts`：`createReleaseApp(rootDir, productName = "ZCode")`。
-- `packages/desktop/test/appARMSBootstrap.test.ts`：`executableName: "zcode-preview"`。
-- `packages/desktop/test/desktopRuntimeEnv.test.ts`：`runtimeApplicationName` 默认值。
+- `packages/desktop/test/macosReleaseAppDoctor.test.ts`：`createReleaseApp(rootDir, productName = "ZCode")`
+  的默认参数与 `${productName}.app` 路径断言。
+- `packages/desktop/test/appARMSBootstrap.test.ts`：`applicationName: "ZCode Preview"` /
+  `"ZCode Dev"` 与 `executableName: "zcode-preview"` 的崩溃事件过滤用例。
+- `packages/desktop/test/desktopRuntimeEnv.test.ts`：`runtimeApplicationName` 断言
+  （`"ZCode E2E"`、`"ZCode Preview"`）与 `runtimeUserDataPath` 的 `join("/mock/appData", "ZCode Preview")`。
 - 所有断言 `ZCode-<version>-win-x64.exe` 产物名的用例（`electron-builder` 相关测试）。
 
 ---
