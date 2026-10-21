@@ -19,6 +19,20 @@
 | `~/.zcode` 数据目录字面量 | 3511 | 885 | **否**（改了丢用户数据） |
 | 文件路径含 `zcode` | 5468（其中 5020 在 `apps/zcode-cli/`） | — | 否 |
 
+### 按「显示串」再筛一层（这才是真正要动的代码）
+
+上面第一行 2368 个文件里，绝大多数是**注释**提到 ZCode。用 `\bZCode($|[^A-Za-z])`
+（排除 `ZCodeAgent`、`ZCodeAboutLogo` 这类标识符）在 `packages/{ui,shared,desktop}/src` 实测：
+
+| 分类 | 文件数 | 说明 |
+| --- | --- | --- |
+| 代码里真有显示串 | **63** | 需要改（部分字符串如协议名 `ZCode Protocol` 可能保留） |
+| 只在注释里出现 | 157 | **不需要改**（注释描述历史实现，改了反而误导） |
+| 两者都有 | 14 | 已在 63 内 |
+
+非注释代码行合计 330 处。加上测试 18 文件、构建资源 22 个图标，
+**方案 A 实际改动面约 100 个文件，不是 250**。
+
 ### 关键结构性事实
 
 1. **55 个 workspace 包，54 个 `private: true`，0 个有 `publishConfig`。**
@@ -107,8 +121,9 @@ Windows 的 AUMID 与 NSIS 安装标识都取自它（`resolveWindowsAppUserMode
 - **改**：`productName`、`appId`、`linuxExecutableName` / `linuxPackageName`、`artifactName`、
   `runtimeApplicationName`、i18n 品牌串、README / 文档标题、图标资源（`packages/desktop/build/`）。
 - **不改**：`@zcode/*` 作用域、`ZCODE_*` 环境变量、`~/.zcode`、`zcode://` scheme、
-  `apps/zcode-cli/`、内部变量名与类型名。
-- **成本**：1~2 个工作日（含一次 Windows 构建 + 沙箱回归）。diff 约 250 文件。
+  `apps/zcode-cli/`、内部变量名与类型名、以及只描述历史实现的注释。
+- **成本**：1~2 个工作日（含一次 Windows 构建 + 沙箱回归）。实测改动面约 100 文件
+  （63 个有显示串的源文件 + 18 个测试 + 22 个图标 + 文档）。
 - **额外工作**：写一次 `%APPDATA%` 迁移，或明确放弃旧数据。
 
 ### 方案 B：全量改名
@@ -166,5 +181,5 @@ Windows 的 AUMID 与 NSIS 安装标识都取自它（`resolveWindowsAppUserMode
 
 ## 7. 一句话建议
 
-**只改「用户看得见的名字」，别动「机器认得的标识」。** 前者 250 个文件、1~2 天、风险可控；
+**只改「用户看得见的名字」，别动「机器认得的标识」。** 前者约 100 个文件、1~2 天、风险可控；
 后者 5000+ 文件、1~2 周、会和上游彻底分叉，换不来任何实际收益。
