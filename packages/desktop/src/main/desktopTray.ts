@@ -7,6 +7,7 @@ import {
   type DesktopCommandId,
   type Locale,
 } from "@zcode/shared";
+import { runtimeApplicationName } from "./desktopRuntimeEnv.js";
 
 let desktopTray: Tray | null = null;
 let rebuildDesktopTrayContextMenu: (() => void) | null = null;
@@ -65,7 +66,11 @@ export function createDesktopTray(options: {
       });
   };
   const rebuildContextMenu = () => {
-    desktopTray?.setToolTip(getLabel(desktopMenuMessageIds.trayTooltip));
+    // 托盘悬停提示显示安装身份（`ZCode Dev`），而不是 i18n 里的产品名 `ZCode`：
+    // 正式身份与官方 ZCode 并存时，托盘图标必须能分辨是哪个版本。
+    // 用运行时身份常量而不是 app.getName()，避免依赖 Electron 实例状态（也便于单测）。
+    // 菜单项文案保持产品口径（「打开 ZCode」等），避免应用内文案与品牌不一致。
+    desktopTray?.setToolTip(runtimeApplicationName);
     desktopTray?.setContextMenu(
       Menu.buildFromTemplate([
         {
