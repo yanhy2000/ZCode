@@ -13,7 +13,8 @@
 - 构建：GitHub Actions 手动触发
 - 当前身份：`ZCode` 正式版（替换同机官方安装，不再使用 `ZCode Preview`）
 - 当前版本：`1.0.0+3.15.1`（私有版本 `1.0.0` + 官方基线 `3.15.1`）
-- Windows 产物：`ZCode-1.0.0+3.15.1-win-x64.exe`
+- 最新发布：[`v1.0.0+3.15.1`](https://github.com/yanhy2000/ZCode/releases/tag/v1.0.0%2B3.15.1)（2026-10-21）
+- Windows 产物：`ZCode-1.0.0+3.15.1-win-x64.exe`（153,280,198 字节；同页附 `SHA256SUMS.txt`）
 
 ### 查看上游是否有新版本
 
@@ -77,6 +78,14 @@ git diff --stat v3.15.1..<新tag>
 - **手机远控的 Web 端是独立产物**：桌面安装包自带 UI，Web 端用 `zcode-WebRemote` 仓库里
   `public/` 的静态构建。改完 `packages/ui` 后只打包桌面版不会更新 Web 端，
   需在 `packages/web` 重新构建并部署（命令见该仓库 `docs/WEB_FRONTEND.md`）。
+
+## 文档
+
+- [`docs/specs/selfhost-runtime.md`](./docs/specs/selfhost-runtime.md)：产品规则与验收清单
+- [`docs/selfhosting/local-verification.md`](./docs/selfhosting/local-verification.md)：Windows 构建与沙箱验收
+- [`docs/selfhosting/repository-settings.md`](./docs/selfhosting/repository-settings.md)：仓库权限与开关
+- [`docs/selfhosting/rebranding.md`](./docs/selfhosting/rebranding.md)：改包名（品牌重命名）的成本评估与方案
+- [`docs/windows-test-compatibility.md`](./docs/windows-test-compatibility.md)：Windows 测试兼容与已知失败模式
 
 ## 为什么自维护
 

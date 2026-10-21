@@ -4,6 +4,8 @@
 
 本仓库以 `zai-org/ZCode` 的稳定 tag 为上游基线，产出仅供自己使用的 Windows 安装包。构建不再连接官方更新、强更、遥测和内置 Provider 云刷新链路；插件市场与手机远控保持原样。
 
+上游基线自 2026-10-21 起**冻结在 `v3.15.1`**：`Sync upstream` 工作流不再定时运行（`schedule` 已移除，GitHub 侧为 `disabled_manually`）。需要上游某个具体能力时手动 `git fetch upstream --tags` 并评估单个 tag，不做常规跟随。
+
 ## 版本规则
 
 - 版本号格式为 `<私有版本>+<官方基线版本>`，两者都是 `major.minor.patch`，例如 `1.0.0+3.15.1`。
@@ -76,6 +78,21 @@
 - `autoDownloadAndInstallUpdates`（自动下载并安装更新）
 
 旧的 setting.json 中出现这些键时按未知字段忽略，不参与任何行为。
+
+### 标题生成模型
+
+- 设置 → 常规新增「标题生成模型」一行，包含模型选择器与「思考级别」两个控件，位于同一行、右侧对齐。
+- 该行的控件列使用 `controlLayout="wide"`（280px）而非默认 192px：两个控件并排时默认宽度会把思考级别挤出容器。
+- 模型名过长时选择器自适应收缩并在内部省略号截断（触发按钮 `max-w-52`，内层 span 需一并 `truncate`——`RollingToolbarLabel` 的内层是 `whitespace-nowrap`，只在外层截断无效）。
+- 未配置时使用会话默认模型生成标题；已配置时标题请求使用该模型，并**继承会话当前的思考级别**。
+- 行末提供「清除」操作，清除后回到默认（`titleGenerationModelSelection: undefined`）。
+- 生成时机：根会话、`turnNumber === 0`、无父会话、输入不少于 `MIN_GENERATED_TITLE_INPUT_CHARS = 10`、`titleSource !== "custom"`，且该轮成功结束后才触发。
+
+### 问题反馈入口
+
+- 帮助菜单、任务菜单、命令面板中的「问题上报」统一打开 `https://github.com/yanhy2000/ZCode/issues`（`ui/src/lib/productLinks.ts` 的 `ZCODE_PROJECT_ISSUES_URL`）。
+- 对话错误横幅、V4 会话订阅错误面板、远控连接失败面板的反馈按钮行为一致：先把脱敏后的描述复制到剪贴板，再打开 issue 页；复制成功提示「已复制问题描述」，失败时只提示已打开反馈页面。
+- 内置反馈提交表单已物理删除（`packages/ui/src/feedback/**`、`FeedbackHost` 挂载、`baseFeedbackService` 装配）；不再向官方 feedback API 提交任何内容，也不依赖账号 JWT。
 
 ## 遥测
 
@@ -212,3 +229,7 @@
 32. Highspeed 移除后 UI 无残留：输入框不出现加速描边/粒子/模型锁定/倒计时，会话行不出现 Highspeed 标签、节省时间或来源 footer，左下角不出现分享卡；普通发送、编辑重发与队列提升不再走抽卡 prepare。协议层 `highspeedMeta` / `setHighspeedMetrics` 字段保留但不产生新数据。
 33. Highspeed 移除不影响本地用量统计：`usage-stats` 的本地 App 用量聚合（`model_usage/turn_usage/tool_usage`）行为不变，只删除加速卡专用的普通 TPS 请求类型。
 34. 桌面侧无账号 Provider 专属分支：模型设置的可禁用开关对所有 Provider 生效（不再对账号 Provider 隐藏），GLM-5.3 视觉徽标不因账号套餐隐藏；`packages/ui` 不出现 `zhipu-account` 引用，i18n 不存在 `settings.modelProvider.accountProviderConfigMissing`；桌面 Host 不向 CLI 下发账号配置（不存在账号配置同步接线）。
+35. 标题生成可配置：设置 → 常规存在「标题生成模型」行，含模型选择器与思考级别两个控件，且两者都不被容器裁切；模型名超长时选择器内部省略号截断，思考级别保持完整可见。清除后回到默认模型。
+36. 标题生成实际生效：配置模型后，根会话首轮（输入 ≥ 10 字符）成功结束会生成标题；请求继承会话思考级别，不出现 `requires adaptive thinking; thinking.type="disabled"` 之类的 400。
+37. 反馈入口统一：帮助菜单、任务菜单、命令面板、对话错误横幅、V4 订阅错误面板、远控连接失败面板的反馈动作都跳转 GitHub issue 页；仓库中不存在 `packages/ui/src/feedback/**`、`FeedbackHost` 或 `baseFeedbackService` 的生产挂载。
+38. Web 端（`zcode-WebRemote/public`）设置页与桌面端一致，包含「标题生成模型」行；Web 产物需按 `packages/web` 的构建命令单独重建，仅重打桌面包不会更新 Web 端。
