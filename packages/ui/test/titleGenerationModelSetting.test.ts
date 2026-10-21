@@ -45,8 +45,24 @@ vi.mock("@/lib/modelSelectionGroups.js", () => ({
 }));
 
 vi.mock("@/ModelConfigSelect.js", () => ({
-  ModelConfigSelect: ({ triggerLabel }: { triggerLabel: string }) =>
-    createElement("span", { "data-testid": "model-trigger" }, triggerLabel),
+  ModelConfigSelect: ({
+    triggerLabel,
+    triggerClassName,
+    triggerLabelClassName,
+  }: {
+    triggerLabel: string;
+    triggerClassName?: string;
+    triggerLabelClassName?: string;
+  }) =>
+    createElement(
+      "span",
+      {
+        "data-testid": "model-trigger",
+        "data-trigger-class": triggerClassName,
+        "data-label-class": triggerLabelClassName,
+      },
+      triggerLabel,
+    ),
 }));
 
 vi.mock("@/settings/SubagentReasoningField.js", () => ({
@@ -113,5 +129,21 @@ describe("TitleGenerationModelSetting", () => {
     } finally {
       captured.state = { status: "ready" };
     }
+  });
+
+  it("下拉框按内容自适应并限制最大宽度，长模型名截断且不挤压思考级别", async () => {
+    const { TitleGenerationModelSetting } = await import(
+      "@/settings/TitleGenerationModelSetting.js"
+    );
+
+    const html = renderToStaticMarkup(createElement(TitleGenerationModelSetting));
+
+    // 触发器跟随内容宽度（w-auto），并保留 max-w-52 上限；不能用 w-fit 撑破父列。
+    expect(html).toContain("w-auto");
+    expect(html).toContain("max-w-52");
+    // RollingToolbarLabel 内部是 whitespace-nowrap 的 span，只在触发器上截断不够，
+    // 必须把截断下沉到子 span，否则长模型名仍会把思考级别挤出可视区。
+    // React 会把属性里的 & 转义成 &amp;，这里按渲染结果断言。
+    expect(html).toContain("[&amp;_span]:truncate");
   });
 });

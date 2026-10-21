@@ -716,8 +716,11 @@ export function GeneralSectionContent({
             />
           }
         />
-        {/* 标题生成模型：自带 settings 读写与候选列表，避免继续膨胀本组 props。 */}
+        {/* 标题生成模型：自带 settings 读写与候选列表，避免继续膨胀本组 props。
+            用 wide 布局：默认控件列只有 192px，而这里是“模型下拉 + 思考级别”两个控件并排，
+            窄列会把思考级别挤出可视区（与 DynamicWorkflowModeSetting 同一根因）。 */}
         <SettingsRow
+          controlLayout="wide"
           label={intl.formatMessage({ id: "settings.titleGenerationModel" })}
           description={intl.formatMessage({
             id: "settings.titleGenerationModelDescription",

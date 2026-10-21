@@ -111,7 +111,9 @@ export function TitleGenerationModelSetting() {
   };
 
   return (
-    <div className="flex min-w-0 max-w-full items-center gap-2">
+    // 两个控件并排共享同一行：下拉框按内容宽度自适应（长模型名截断），
+    // 思考级别固定不压缩，避免窄列下被挤出可视区。
+    <div className="flex min-w-0 max-w-full items-center justify-end gap-2">
       <ModelConfigSelect
         modelGroups={modelGroups}
         normalizedValue={normalizedValue}
@@ -126,16 +128,18 @@ export function TitleGenerationModelSetting() {
         contentAlign="end"
         focusSelectorOnClose={null}
         labelVisibilityClassName="inline-flex min-w-0"
-        triggerClassName="h-8 w-fit max-w-52 min-w-0 justify-between rounded-lg border border-input-border bg-input px-3 py-1.5 text-foreground hover:border-input-border-hover hover:bg-input focus-visible:border-input-border-focused focus-visible:bg-input-focused"
-        triggerLabelClassName="inline-flex min-w-0 truncate text-left"
+        triggerClassName="h-8 w-auto min-w-0 max-w-52 shrink justify-between rounded-lg border border-input-border bg-input px-3 py-1.5 text-foreground hover:border-input-border-hover hover:bg-input focus-visible:border-input-border-focused focus-visible:bg-input-focused"
+        triggerLabelClassName="inline-flex min-w-0 truncate text-left [&_span]:min-w-0 [&_span]:truncate"
       />
-      <SubagentReasoningField
-        intl={intl}
-        state={thoughtState}
-        disabled={false}
-        labelVisibilityClassName="hidden sm:inline-flex"
-        onValueCommit={handleThoughtLevelCommit}
-      />
+      <div className="shrink-0">
+        <SubagentReasoningField
+          intl={intl}
+          state={thoughtState}
+          disabled={false}
+          labelVisibilityClassName="hidden sm:inline-flex"
+          onValueCommit={handleThoughtLevelCommit}
+        />
+      </div>
     </div>
   );
 }
