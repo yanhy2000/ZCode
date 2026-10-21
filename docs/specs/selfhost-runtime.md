@@ -10,7 +10,7 @@
 
 - 版本号格式为 `<私有版本>+<官方基线版本>`，两者都是 `major.minor.patch`，例如 `1.0.0+3.15.1`。
 - 根 `package.json` 与 `apps/zcode-cli/package.json` 使用同一个版本号；桌面构建元数据、CLI `__CLI_VERSION__` 与安装包文件名都从它派生。
-- Windows 安装包命名为 `ZCode-<version>-win-<arch>.exe`，例如 `ZCode-1.0.0+3.15.1-win-x64.exe`。
+- Windows 安装包命名为 `ZCode-Dev-<version>-win-<arch>.exe`，例如 `ZCode-Dev-1.0.0+3.15.1-win-x64.exe`。
 - Release tag 为 `v<version>`，例如 `v1.0.0+3.15.1`；tag 必须与 `package.json` 完全一致。
 - 版本比较按“私有版本优先，官方基线次之”的二元组进行。SemVer 会忽略 `+` 之后的 build metadata，因此更新检查不得直接使用 `semver.gt`。
 
@@ -24,15 +24,30 @@
 ## 产品身份与数据目录
 
 - 发布与手动 Windows 构建固定使用 production 身份：
-  - `productName`：`ZCode`
-  - `appId` / Windows AUMID：`dev.zcode.app`
-  - Linux executable / package：`zcode`
-- 快捷方式、开始菜单、托盘、About、卸载项只显示 `ZCode`，不出现 `Preview`。
-- 正式身份会替换同机已安装的官方 ZCode，不能再与官方版并排安装。
-- Electron 用户数据使用 `%APPDATA%\ZCode`，业务数据继续使用 `~/.zcode`；两者都不因身份切换而迁移。
-- 首次从官方版或 Preview 版切换过来前，先备份 `%APPDATA%\ZCode` 和 `%USERPROFILE%\.zcode`。如果官方安装版本高于当前上游基线，必须先确认数据格式可回退，不能只依赖安装包覆盖。
+  - `productName`：`ZCode Dev`
+  - `appId` / Windows AUMID：`dev.zcode.app.dev`
+  - Linux executable / package：`zcode-dev`
+  - 产物名基名：`ZCode-Dev`（`productName` 的空白替换为连字符）
+- **安装身份与官方 `ZCode` 完全独立，两者可以并排安装、同时运行，不互相替换。**
+  `appId` 决定 NSIS 安装标识与 Windows AUMID，`productName` 决定安装目录、开始菜单、任务栏与
+  卸载项；两项都不同，Shell 不会把两者当成同一个应用。
+- **名称显示分工**（两个版本同时运行时必须可分辨）：
+  - 对外身份显示 `ZCode Dev`：快捷方式、开始菜单、任务栏悬停 / Alt+Tab（`index.html` 的 `<title>`）、
+    托盘悬停提示、关于页、Web 远控端浏览器标签。
+  - 应用内界面显示 `ZCode`：设置、对话、菜单项文案等 i18n 文案保持不变。
+- Electron 用户数据使用 `%APPDATA%\ZCode Dev`（由 `runtimeApplicationName` 推导），
+  与官方的 `%APPDATA%\ZCode` 分开，因此单实例锁互不影响。
+- **业务数据继续使用 `~/.zcode`，与官方版共享**（会话、Provider 配置、凭据、插件）。
+  这是有意选择：本版与官方 `v3.15.1` 的数据库 schema 完全一致（迁移文件逐字节相同），
+  凭据写入带文件锁与原子写且损坏时先备份再报错，数据库迁移只往前补。
+  约束：**不得用两个版本同时打开同一个会话**（界面状态可能互相覆盖，数据本身不损坏）。
+- 本地开发态使用 `ZCode Dev Local`（不与安装版抢 `%APPDATA%` 与单实例锁）；
+  e2e 通过 `ZCODE_DESKTOP_APPLICATION_NAME` 覆盖为独立身份。
+- 从旧的 `ZCode` 身份自建包升级时，`appId` 已变化会被识别成两个应用，需先卸载旧版。
 - `ZCODE_PREVIEW_IDENTITY` 只保留给 `ZCODE_ENV=test` 的本地/e2e 构建；发布与手动 Windows 构建必须显式产出 production 身份。
 - `Build Windows` 不提供 `product_identity` 输入；`release.yml` 直接复用正式身份构建。
+- 产物文件名不得包含空格：上传 GitHub Release 时空格会被规范化为点号，
+  与 `SHA256SUMS.txt` 记录的原名不一致，导致用户按校验和核对失败。
 
 ## 更新检查
 
@@ -196,7 +211,7 @@
 ## 验收
 
 1. `package.json`、CLI 包、桌面构建元数据都是 `1.0.0+3.15.1`。
-2. Windows 构建产物名为 `ZCode-1.0.0+3.15.1-win-x64.exe`，CI 校验该名称。
+2. Windows 构建产物名为 `ZCode-Dev-1.0.0+3.15.1-win-x64.exe`，CI 按 `resolveDesktopProductIdentity` 解析出的产品名校验该名称；文件名不得含空格。
 3. 打包应用启动后不访问官方更新/强更接口。
 4. 帮助菜单和托盘菜单都能触发 GitHub Release 检查，并覆盖上述成功与失败分支。
 5. 设置页不再出现预览版更新、自动下载安装两个开关。
@@ -204,7 +219,7 @@
 7. 内置 Provider 云刷新关闭：Host 装配不传 `zcodeBuiltinEnvironment`，不构造 Endpoint-scoped source 与 remote synchronizer，启动与运行期都不请求 `/api/v1/client/configs`、不下载官方 CDN 配置；内置 Provider 配置只来自 `config/provider/zcode-builtin.json`（`refreshZCodeBuiltin()` 返回 `skipped`），第三方 Provider 配置仍可正常加载。
 8. 工作流入口默认可见；读取该能力时不请求 `/api/v1/client/configs`，设置中的模式切换仍然生效：切换设置页面或重启后设置行仍显示用户的选择，Host 用同一结论下发 CLI 策略（关闭时 `enabled:false`）。
 9. Desktop Host 固定使用 desktop presentation surface，不请求 `desktopContextPrompt` 灰度，也不读取 `ZCODE_DESKTOP_CONTEXT_PROMPT_ENABLED`。
-10. Windows 产物只包含正式身份：安装包名 `ZCode-<version>-win-x64.exe`，解包目录存在 `ZCode.exe`，不存在 `ZCode Preview.exe`，`app.asar` 内 `zcodeProductFlavor` 为 `production`。
+10. Windows 产物只包含正式身份：安装包名 `ZCode-Dev-<version>-win-x64.exe`，解包目录存在 `ZCode Dev.exe`，不存在 `ZCode Preview.exe`，`app.asar` 内 `zcodeProductFlavor` 为 `production`。
 11. `pnpm typecheck`、`pnpm lint`、相关单测通过。
 12. desktop preload 纳入 `pnpm typecheck`；preload 不得引用未导入的符号，已移除能力（如 ARMS 补丁）残留调用不得阻断启动状态 IPC 注册。
 13. 无可用模型横幅只保留“配置”入口，不展示 Coding Plan“升级”按钮；提示文案不再要求开通编程套餐。
@@ -233,3 +248,8 @@
 36. 标题生成实际生效：配置模型后，根会话首轮（输入 ≥ 10 字符）成功结束会生成标题；请求继承会话思考级别，不出现 `requires adaptive thinking; thinking.type="disabled"` 之类的 400。
 37. 反馈入口统一：帮助菜单、任务菜单、命令面板、对话错误横幅、V4 订阅错误面板、远控连接失败面板的反馈动作都跳转 GitHub issue 页；仓库中不存在 `packages/ui/src/feedback/**`、`FeedbackHost` 或 `baseFeedbackService` 的生产挂载。
 38. Web 端（`zcode-WebRemote/public`）设置页与桌面端一致，包含「标题生成模型」行；Web 产物需按 `packages/web` 的构建命令单独重建，仅重打桌面包不会更新 Web 端。
+39. 并排安装：在已安装官方 `ZCode` 的机器上安装本版后，官方版仍在、可正常启动；两者的开始菜单项、任务栏项、卸载项各自独立，互不覆盖。
+40. 同时运行：两个版本可同时启动（`%APPDATA%\ZCode Dev` 与 `%APPDATA%\ZCode` 不同，单实例锁互不影响）。
+41. 名称可分辨：任务栏悬停 / Alt+Tab、托盘悬停提示、关于页、Web 远控端浏览器标签均显示 `ZCode Dev`；应用内设置与对话界面仍显示 `ZCode`。
+42. 数据共享安全性：本版与 `v3.15.1` 的 `session-store` 迁移文件无差异；凭据写入经 `withFileLock` + 原子写，损坏时先 `backupCorruptFile` 再报错。约束「不得两版同时打开同一会话」有文档说明。
+43. 产物名可校验：安装包文件名不含空格，与 `SHA256SUMS.txt`、`latest.yml` 中记录的名称完全一致。

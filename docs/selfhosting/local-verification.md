@@ -13,19 +13,25 @@
 | 强更闸门 | 已跳过 |
 | 遥测 | 已移除上报链路 |
 
-正式身份会替换同机的官方 ZCode，不能与官方版并排安装。业务数据仍在 `~/.zcode`，Electron 用户数据仍在
-`%APPDATA%\ZCode`，身份切换不会自动迁移或备份这两个目录。
+安装身份是独立的 `ZCode Dev`（`appId` = `dev.zcode.app.dev`），**可与官方 ZCode 并排安装、同时运行**，
+不会替换官方版本。Electron 用户数据在 `%APPDATA%\ZCode Dev`，与官方的 `%APPDATA%\ZCode` 分开。
+业务数据仍在 `~/.zcode`，与官方版共享（schema 完全一致，凭据写入有锁与原子写）；
+唯一约束是不要用两个版本同时打开同一个会话。
 
 ## 产物
 
 GitHub Actions 的 `Build Windows` 运行会产出：
 
 ```text
-ZCode-1.0.0+3.15.1-win-x64.exe
+ZCode-Dev-1.0.0+3.15.1-win-x64.exe
 *.exe.blockmap
 latest.yml
 SHA256SUMS.txt
 ```
+
+产物基名是 `productName`（`ZCode Dev`）把空白替换成连字符得到的 `ZCode-Dev`。
+**产物名不得包含空格**：上传到 GitHub Release 时空格会被规范化成点号，
+与 `SHA256SUMS.txt` 里记录的原名不一致，用户按校验和核对会失败。
 
 产物名里的版本必须等于根 `package.json` 版本。如果出现 `0.x`、`0.0.0`、`3.15.1`（缺少私有版本）或
 `3.15.1-self.*`，本次验收直接判失败并记录产物全名。
@@ -47,19 +53,23 @@ Get-Content .\SHA256SUMS.txt
 
 优先使用 Windows Sandbox 或独立虚拟机。不要在正式数据目录上直接验收。
 
-如果必须在当前系统测试：
+因为安装身份独立，本版**可以直接装在本机官方 ZCode 旁边**，不需要先卸载官方版；
+两者的 `%APPDATA%` 目录、开始菜单项、卸载项都分开。
 
-1. 先备份 `%APPDATA%\ZCode` 和 `%USERPROFILE%\.zcode`。
-2. 卸载官方 ZCode，或使用独立数据目录启动：
+如果要在隔离数据下验收：
+
+1. 备份 `%APPDATA%\ZCode Dev` 和 `%USERPROFILE%\.zcode`（业务数据与官方共享，改动会同时影响两边）。
+2. 用独立数据目录启动：
 
 ```powershell
-$env:ZCODE_DATA_BASE_DIR = "D:\zcode-self-test"
-$env:ZCODE_DESKTOP_USER_DATA_DIR = "D:\zcode-self-test\userData"
-& "$env:LOCALAPPDATA\Programs\ZCode\ZCode.exe"
+$env:ZCODE_DATA_BASE_DIR = "D:\zcode-dev-test"
+$env:ZCODE_DESKTOP_USER_DATA_DIR = "D:\zcode-dev-test\userData"
+& "$env:LOCALAPPDATA\Programs\ZCode Dev\ZCode Dev.exe"
 ```
 
-3. 确认官方 ZCode 与自维护版不要同时运行。
-4. 如果官方安装版本高于当前上游基线，先确认数据格式可以回退，不要只依赖覆盖安装。
+3. 两个版本可以同时运行，但**不要同时打开同一个会话**（界面状态可能互相覆盖，数据本身不损坏）。
+4. 如果官方安装版本高于当前上游基线，先确认数据格式可以回退：本版 schema 与 `v3.15.1` 一致，
+   被更高版本迁移过的库不一定能回退。
 
 ## 冒烟清单
 
@@ -112,8 +122,9 @@ CI 在打包前后都会检查：
 
 - 根 `package.json` 版本符合 `X.Y.Z+X.Y.Z`，CLI 包版本与根一致。
 - `packages/desktop/scripts/build-metadata.mjs` 解析出的桌面版本等于根版本。
-- 最终安装包名为 `ZCode-<version>-win-x64.exe`。
-- 解包目录存在 `ZCode.exe`，不存在 `ZCode Preview.exe`。
+- 最终安装包名为 `ZCode-Dev-<version>-win-x64.exe`（产品名由 `resolveDesktopProductIdentity` 解析，
+  CI 不再硬编码 `ZCode`，改名时无需同步修改 workflow）。
+- 解包目录存在 `ZCode Dev.exe`，不存在 `ZCode Preview.exe`。
 - `app.asar` 内 `zcodeProductFlavor` 为 `production`，应用版本等于根版本。
 
 因此本地验收只需要确认实际安装包和运行时显示与 CI 一致，不需要再单独追版本号来源。
