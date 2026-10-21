@@ -56,7 +56,9 @@ interface AboutSnapshotOptions {
   };
 }
 
-const ABOUT_APPLICATION_NAME = "ZCode Desktop App";
+// 关于页显示安装身份 `ZCode Dev`，与开始菜单 / 任务栏保持一致；
+// 应用内其余界面（设置、对话、帮助菜单标题栏）仍使用产品名 `ZCode`。
+const ABOUT_APPLICATION_NAME = "ZCode Dev";
 // 自定义 About 内容本体是 256x280；原生窗口如果同尺寸会让内容贴满透明窗口边界。
 // 这里给 BrowserWindow 额外留出背景呼吸空间，避免正式 About 看起来比 demo 更局促。
 const ABOUT_WINDOW_WIDTH = 256;
@@ -72,18 +74,18 @@ const ABOUT_MESSAGES: Record<
   }
 > = {
   "zh-CN": {
-    aboutTitle: "关于 ZCode",
+    aboutTitle: "关于 ZCode Dev",
     versionLabel: "版本",
     okButtonLabel: "确定",
     optimizedForAppleSilicon: "已针对 Apple Silicon 优化。",
-    copyright: (year) => `版权所有 © ${year} ZCode。`,
+    copyright: (year) => `版权所有 © ${year} ZCode Dev。`,
   },
   "en-US": {
-    aboutTitle: "About ZCode",
+    aboutTitle: "About ZCode Dev",
     versionLabel: "version",
     okButtonLabel: "OK",
     optimizedForAppleSilicon: "Optimized for Apple Silicon.",
-    copyright: (year) => `Copyright © ${year} ZCode.`,
+    copyright: (year) => `Copyright © ${year} ZCode Dev.`,
   },
 };
 

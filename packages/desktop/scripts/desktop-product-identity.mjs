@@ -8,12 +8,19 @@
  */
 export const ZCODE_PREVIEW_IDENTITY_ENV = "ZCODE_PREVIEW_IDENTITY";
 
+/**
+ * 正式身份使用 `ZCode Dev`，与官方 `ZCode` 并排安装、互不覆盖。
+ *
+ * 兼容性原因：本 fork 早期版本曾用 `ZCode` / `dev.zcode.app` 身份发布，装过那些版本的用户
+ * 直接升级会因为 appId 变化而变成「两个应用」。这里不做迁移（量小且属个人自用版），
+ * 但要求：换身份之后不要再改回去，否则开始菜单、任务栏固定项会再次错位。
+ */
 const PRODUCTION_IDENTITY = Object.freeze({
   flavor: "production",
-  appId: "dev.zcode.app",
-  productName: "ZCode",
-  linuxExecutableName: "zcode",
-  linuxPackageName: "zcode",
+  appId: "dev.zcode.app.dev",
+  productName: "ZCode Dev",
+  linuxExecutableName: "zcode-dev",
+  linuxPackageName: "zcode-dev",
   cuaHelperInstallVariant: null,
 });
 

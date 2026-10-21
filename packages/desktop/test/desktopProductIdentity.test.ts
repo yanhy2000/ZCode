@@ -78,14 +78,29 @@ describe("desktop product identity", () => {
     expect(resolveDesktopProductIdentity({ ZCODE_ENV: "production" })).toBe(
       desktopProductIdentities.production,
     );
+    // 正式身份是 `ZCode Dev`：与官方 `ZCode` 的 appId/productName 都不同，
+    // 因此两者可以并排安装、同时运行（单实例锁按 userData 目录区分）。
     expect(desktopProductIdentities.production).toEqual({
       flavor: "production",
-      appId: "dev.zcode.app",
-      productName: "ZCode",
-      linuxExecutableName: "zcode",
-      linuxPackageName: "zcode",
+      appId: "dev.zcode.app.dev",
+      productName: "ZCode Dev",
+      linuxExecutableName: "zcode-dev",
+      linuxPackageName: "zcode-dev",
       cuaHelperInstallVariant: null,
     });
+  });
+
+  it("正式身份不能与官方 ZCode 冲突", () => {
+    // 这条用例把「为什么改名」固化下来：appId 或 productName 一旦回到官方值，
+    // 安装包就会覆盖官方 ZCode，任务栏/开始菜单也会被判定为同一个应用。
+    expect(desktopProductIdentities.production.appId).not.toBe("dev.zcode.app");
+    expect(desktopProductIdentities.production.productName).not.toBe("ZCode");
+    expect(desktopProductIdentities.production.appId).not.toBe(
+      desktopProductIdentities.preview.appId,
+    );
+    expect(desktopProductIdentities.production.productName).not.toBe(
+      desktopProductIdentities.preview.productName,
+    );
   });
 
   it("自维护发布构建显式关闭 Preview 后保持正式身份", () => {

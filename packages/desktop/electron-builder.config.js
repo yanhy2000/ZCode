@@ -853,8 +853,9 @@ export default {
   },
   win: {
     target: ["nsis"],
-    // 自维护产物固定用 ZCode-<私有版本>+<官方基线>-win-<arch>.exe，便于和官方安装包区分。
-    artifactName: `ZCode-\${version}-win-\${arch}${desktopArtifactEnvSuffix}.\${ext}`,
+    // 身份改名后（`ZCode Dev`）产物名必须跟着变，否则会和官方 `ZCode-*.exe` 混在同一目录。
+    // 这里复用 buildDesktopArtifactName，与 mac/linux 共用同一套 `<productName>-<version>-<platform>-<arch>` 规则。
+    artifactName: buildDesktopArtifactName("win"),
     signExts: [".node", ".dll"],
     // Bugfix: Windows CI 之前完全依赖 electron-builder 内置 signtool.exe，
     // 一旦 runner 的证书链路要求改走 vsigntool，打包阶段就会在内置签名环节卡死。
