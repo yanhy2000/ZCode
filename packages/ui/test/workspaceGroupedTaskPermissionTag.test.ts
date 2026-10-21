@@ -40,11 +40,6 @@ vi.mock("@/hooks/usePlatform.js", () => ({
   usePlatform: () => ({ openExternal: () => {} }),
 }));
 
-vi.mock("@/feedback/feedbackStore.js", () => ({
-  useFeedbackStore: (selector: (state: { openSubmit: () => void }) => unknown) =>
-    selector({ openSubmit: vi.fn() }),
-}));
-
 vi.mock("@/useTaskListItemContextActions.js", () => ({
   useTaskListItemContextActions: () => ({
     taskSessionFile: { loading: false, path: null, exists: false },

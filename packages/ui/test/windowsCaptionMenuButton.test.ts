@@ -30,8 +30,6 @@ const capturedWindowsCaptionMenu = vi.hoisted(() => {
       label: string;
       onSelect: (() => void | Promise<void>) | undefined;
     }>,
-    openSubmit: vi.fn(),
-    openFeatureRequest: vi.fn(),
     openExternal: vi.fn(),
     exportLogs: vi.fn(async () => ({ success: true })),
     captureWindowScreenshot: vi.fn(async () => screenshot),
@@ -80,19 +78,6 @@ vi.mock("@/components/ui/dropdown-menu.js", () => ({
 vi.mock("@/components/ui/toast.js", () => ({
   dismissToast: vi.fn(),
   toast: vi.fn(() => 1),
-}));
-
-vi.mock("@/feedback/feedbackStore.js", () => ({
-  useFeedbackStore: (
-    selector: (state: {
-      openSubmit: (draft?: unknown) => void;
-      openFeatureRequest: () => void;
-    }) => unknown,
-  ) =>
-    selector({
-      openSubmit: capturedWindowsCaptionMenu.openSubmit,
-      openFeatureRequest: capturedWindowsCaptionMenu.openFeatureRequest,
-    }),
 }));
 
 vi.mock("@/hooks/usePlatform.js", () => ({

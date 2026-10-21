@@ -6,7 +6,7 @@ import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
 import type { RemoteConnectionLogEntry } from "@/hooks/useRemoteConnectionLogs.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import { useFeedbackStore } from "@/feedback/feedbackStore.js";
+import { useReportErrorToIssue } from "@/hooks/useReportErrorToIssue.js";
 import {
   isRemoteConnectionLogScrolledToLatest,
   scrollRemoteConnectionLogsToLatestIfFollowing,
@@ -28,7 +28,7 @@ export function RemoteConnectionConnectingStep({
   onRetry: () => void;
 }) {
   const { intl } = useZCodeIntl();
-  const openFeedbackSubmit = useFeedbackStore((state) => state.openSubmit);
+  const reportErrorToIssue = useReportErrorToIssue();
   const logContainerRef = useRef<HTMLDivElement | null>(null);
   const shouldFollowLatestLogRef = useRef(true);
   const latestLogId = logs.at(-1)?.id;
@@ -59,21 +59,14 @@ export function RemoteConnectionConnectingStep({
   }, [logs.length, latestLogId, latestLogTimestamp]);
 
   const handleOpenFeedback = async () => {
-    // 远程连接失败时用户看到的是连接日志现场。
-    // 反馈入口只预填脱敏后的错误摘要，附件由用户主动选择。
-    openFeedbackSubmit({
-      title:
-        errorMessage.slice(0, 80) ||
-        intl.formatMessage({ id: "feedback.submit.template.section.remoteConnectFailed" }),
-      type: "bug",
-      module: kind === "ssh" ? "SSH连接失败" : kind === "wsl" ? "WSL连接失败" : "Agent任务执行失败",
-      severity: "P2-中",
-      includeLogs: true,
-      description: buildRemoteConnectionFeedbackDescription(errorMessage, logs, (id, values) =>
+    // 远程连接失败时用户看到的是连接日志现场。反馈入口不再打开内置表单
+    // （它 POST 到上游 feedback API，未登录上游账号必然失败），改为把脱敏后的
+    // 错误摘要与连接日志复制到剪贴板，再打开项目 issue 页由用户粘贴。
+    await reportErrorToIssue(
+      buildRemoteConnectionFeedbackDescription(errorMessage, logs, (id, values) =>
         intl.formatMessage({ id }, values),
       ),
-      screenshots: [],
-    });
+    );
   };
 
   return (

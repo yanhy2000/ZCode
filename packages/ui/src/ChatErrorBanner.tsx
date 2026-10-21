@@ -25,7 +25,7 @@ import {
 } from "./components/ui/dialog.js";
 import { cn } from "./components/lib/utils.js";
 import { toast } from "./components/ui/toast.js";
-import { useFeedbackStore } from "@/feedback/feedbackStore.js";
+import { useReportErrorToIssue } from "@/hooks/useReportErrorToIssue.js";
 import { getProviderBusinessErrorMessageId } from "@/lib/providerBusinessError.js";
 import { buildErrorFeedbackDescription } from "@/lib/errorFeedbackDraft.js";
 import { isSuspiciousEmptyModelResultMessage } from "@/lib/providerBusinessError.js";
@@ -147,7 +147,7 @@ export function ChatErrorBanner({
   onOpenModelSettings?: () => void;
 }) {
   const { intl } = useZCodeIntl();
-  const openFeedbackSubmit = useFeedbackStore((state) => state.openSubmit);
+  const reportErrorToIssue = useReportErrorToIssue();
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const actionButtonClassName = "shrink-0";
   const iconButtonClassName = "shrink-0";
@@ -159,22 +159,17 @@ export function ChatErrorBanner({
   }
 
   const handleOpenFeedback = async () => {
-    openFeedbackSubmit({
-      title: localizedErrorMessage.slice(0, 80),
-      type: "bug",
-      module: "模型调用报错",
-      severity: "P2-中",
-      includeLogs: true,
-      description: buildErrorFeedbackDescription({
+    // 反馈入口不再打开内置表单（它 POST 到上游 feedback API，未登录上游账号必然失败），
+    // 改为把脱敏后的报错现场复制到剪贴板并打开项目 issue 页。
+    await reportErrorToIssue(
+      buildErrorFeedbackDescription({
         message: localizedErrorMessage,
         detail: error.detail,
         traceId: error.traceId,
         formatMessage: (id: string, values?: Record<string, string>) =>
           intl.formatMessage({ id }, values),
       }),
-      screenshots: [],
-    });
-    toast(intl.formatMessage({ id: "chat.error.feedbackOpened" }));
+    );
   };
 
   const handleCopyError = async () => {

@@ -20,8 +20,6 @@ const capturedHeaderHelp = vi.hoisted(() => {
     openExternal: vi.fn(),
     exportLogs: vi.fn(async () => ({ success: true })),
     captureWindowScreenshot: vi.fn(async () => screenshot),
-    openSubmit: vi.fn(),
-    openFeatureRequest: vi.fn(),
     menuItems: [] as Array<{
       onSelect: (() => void | Promise<void>) | undefined;
     }>,
@@ -80,19 +78,6 @@ vi.mock("@/hooks/usePlatform.js", () => ({
 vi.mock("@/components/ui/toast.js", () => ({
   dismissToast: vi.fn(),
   toast: vi.fn(() => 1),
-}));
-
-vi.mock("@/feedback/feedbackStore.js", () => ({
-  useFeedbackStore: (
-    selector: (state: {
-      openSubmit: (draft?: unknown) => void;
-      openFeatureRequest: () => void;
-    }) => unknown,
-  ) =>
-    selector({
-      openSubmit: capturedHeaderHelp.openSubmit,
-      openFeatureRequest: capturedHeaderHelp.openFeatureRequest,
-    }),
 }));
 
 describe("WorkspaceHeaderActionSection", () => {

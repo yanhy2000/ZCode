@@ -5684,6 +5684,7 @@ const enUS: Record<string, string> = {
   "chat.error.collapseDetails": "Hide details",
   "chat.error.feedback": "Report issue",
   "chat.error.feedbackOpened": "Feedback opened with the error context attached",
+  "chat.error.issueReportCopied": "Error details copied, paste them into the Issue",
   "chat.error.noAvailableModel": "No model available. Set a custom model.",
   "zcode.error.modelSuspiciousEmpty":
     "The model returned no content. Please send the message again.",

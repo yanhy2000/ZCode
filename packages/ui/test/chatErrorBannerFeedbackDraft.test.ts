@@ -3,9 +3,9 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatErrorBanner } from "@/ChatErrorBanner.js";
-import { useFeedbackStore } from "@/feedback/feedbackStore.js";
 import { PlatformProvider } from "@/hooks/usePlatform.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
+import { ZCODE_PROJECT_ISSUES_URL } from "@/lib/productLinks.js";
 
 const buttonMock = vi.hoisted(() => ({
   props: [] as Array<Record<string, unknown>>,
@@ -30,17 +30,11 @@ vi.mock("@/components/ui/toast.js", () => ({
 
 const mockPlatform = {
   captureWindowScreenshot: vi.fn(async () => null),
+  openExternal: vi.fn(),
 } as unknown as IPlatformService;
 
-function resetFeedbackStore() {
-  useFeedbackStore.setState({
-    open: false,
-    featureRequestOpen: false,
-    tab: "submit",
-    submitDraft: null,
-    selectedTicketId: null,
-  });
-}
+/** 反馈入口现在先复制脱敏摘要再打开 issue 页，这里拦截剪贴板以断言摘要内容。 */
+const clipboardWriteText = vi.fn(async (_text: string) => {});
 
 function renderErrorBanner() {
   renderToStaticMarkup(
@@ -70,29 +64,29 @@ async function openFeedbackFromBanner() {
     throw new Error("Feedback issue button was not rendered");
   }
 
-  (feedbackButton.onClick as () => void)();
-  await Promise.resolve();
-  await Promise.resolve();
+  await (feedbackButton.onClick as () => Promise<void>)();
 }
 
 describe("ChatErrorBanner feedback draft", () => {
   beforeEach(() => {
     buttonMock.props = [];
     vi.clearAllMocks();
-    resetFeedbackStore();
+    vi.stubGlobal("navigator", { clipboard: { writeText: clipboardWriteText } });
   });
 
-  it("uses a compact one-line error summary without the generic investigation heading", async () => {
+  it("copies a compact one-line error summary and opens the project issue page", async () => {
     renderErrorBanner();
 
     await openFeedbackFromBanner();
 
     expect(mockPlatform.captureWindowScreenshot).not.toHaveBeenCalled();
-    expect(useFeedbackStore.getState().submitDraft?.includeLogs).toBe(true);
-    const description = useFeedbackStore.getState().submitDraft?.description;
+    // 反馈入口改为复制脱敏摘要 + 打开 issue 页，不再写入本地反馈草稿。
+    expect(clipboardWriteText).toHaveBeenCalledTimes(1);
+    const description = clipboardWriteText.mock.calls[0]?.[0];
     expect(description).toContain("报错摘要：Provider authentication failed.");
     expect(description).toContain("TraceID: trace-auth-failed");
     expect(description).not.toContain("我在使用过程中遇到了报错，请帮忙排查。");
     expect(description).not.toContain("报错摘要\nProvider authentication failed.");
+    expect(mockPlatform.openExternal).toHaveBeenCalledWith(ZCODE_PROJECT_ISSUES_URL);
   });
 });

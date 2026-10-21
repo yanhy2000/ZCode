@@ -34,6 +34,14 @@ vi.mock("@/store/StoreProvider.js", () => ({
   useZCodeStoreWithDefault: (_selector: unknown, fallback: unknown) => fallback,
 }));
 
+// 订阅错误页的“反馈问题”改走 useReportErrorToIssue，它用强制版 usePlatform 取 openExternal；
+// 同时 SessionPane 自身用 useOptionalPlatform 判断平台能力，两者都要提供，
+// 否则渲染期会抛「usePlatform 必须在 PlatformProvider 内使用」或缺少导出。
+vi.mock("@/hooks/usePlatform.js", () => ({
+  usePlatform: () => ({ openExternal: () => {} }),
+  useOptionalPlatform: () => undefined,
+}));
+
 vi.mock("@/hooks/useSettingService.js", () => ({
   useSettings: () => ({
     settings: { zcodeInteractionBehavior: "queue" },

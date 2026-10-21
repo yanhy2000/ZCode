@@ -5441,6 +5441,7 @@ const zhCN: Record<string, string> = {
   "chat.error.collapseDetails": "收起详情",
   "chat.error.feedback": "反馈问题",
   "chat.error.feedbackOpened": "已打开反馈，并自动带上报错现场",
+  "chat.error.issueReportCopied": "已复制错误详情，请在 Issue 页粘贴提交",
   "chat.error.noAvailableModel": "当前没有可用模型。请配置自定义模型。",
   "chat.error.sendFailed": "发送失败，请稍后重试。",
   "chat.error.modelSettings": "模型设置",

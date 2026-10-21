@@ -4,21 +4,18 @@ import type { IPlatformService } from "@zcode/shared";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useFeedbackStore } from "@/feedback/feedbackStore.js";
 import { PlatformProvider } from "@/hooks/usePlatform.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
+import { ZCODE_PROJECT_ISSUES_URL } from "@/lib/productLinks.js";
 import { SessionSubscriptionErrorPanel } from "@/v4/SessionSubscriptionErrorPanel.js";
 
-const screenshot = {
-  filename: "session-subscription-error.png",
-  contentType: "image/png",
-  dataBase64: "c2NyZWVuc2hvdA==",
-  size: 10,
-};
-const captureWindowScreenshot = vi.fn(async () => screenshot);
+const openExternal = vi.fn();
 const platform = {
-  captureWindowScreenshot,
+  openExternal,
 } as unknown as IPlatformService;
+
+/** 反馈入口现在先复制脱敏摘要再打开 issue 页，这里拦截剪贴板以断言摘要内容。 */
+const clipboardWriteText = vi.fn(async (_text: string) => {});
 
 function renderPanel() {
   return render(
@@ -40,19 +37,13 @@ function renderPanel() {
 }
 
 beforeEach(() => {
-  useFeedbackStore.setState({
-    open: false,
-    featureRequestOpen: false,
-    tab: "submit",
-    submitDraft: null,
-    submissionJobId: null,
-    selectedTicketId: null,
-  });
+  vi.stubGlobal("navigator", { clipboard: { writeText: clipboardWriteText } });
 });
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("SessionSubscriptionErrorPanel", () => {
@@ -64,26 +55,16 @@ describe("SessionSubscriptionErrorPanel", () => {
     expect(screen.getByRole("button", { name: "重新连接" })).toBeTruthy();
   });
 
-  it("opens a feedback draft with the subscription error context", async () => {
+  it("copies the subscription error context and opens the project issue page", async () => {
     renderPanel();
 
     fireEvent.click(screen.getByRole("button", { name: "反馈问题" }));
 
-    await waitFor(() => expect(useFeedbackStore.getState().open).toBe(true));
-    expect(useFeedbackStore.getState().submitDraft).toMatchObject({
-      title: "EPERM: operation not permitted",
-      type: "bug",
-      module: "Agent任务执行失败",
-      severity: "P2-中",
-      includeLogs: true,
-      screenshots: [],
-    });
-    expect(useFeedbackStore.getState().submitDraft?.description).toContain(
-      "报错摘要：EPERM: operation not permitted",
-    );
-    expect(useFeedbackStore.getState().submitDraft?.description).toContain("任务 ID: session-1");
-    expect(useFeedbackStore.getState().submitDraft?.description).toContain(
-      "工作区: F:\\ZCode_data",
-    );
+    await waitFor(() => expect(openExternal).toHaveBeenCalledWith(ZCODE_PROJECT_ISSUES_URL));
+    expect(clipboardWriteText).toHaveBeenCalledTimes(1);
+    const description = clipboardWriteText.mock.calls[0]?.[0] ?? "";
+    expect(description).toContain("报错摘要：EPERM: operation not permitted");
+    expect(description).toContain("任务 ID: session-1");
+    expect(description).toContain("工作区: F:\\ZCode_data");
   });
 });

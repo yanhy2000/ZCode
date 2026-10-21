@@ -1,8 +1,7 @@
 import { useCallback } from "react";
 import { TID_V4_RETRY_SUBSCRIBE } from "@zcode/shared";
 import { Button } from "@/components/ui/button.js";
-import { toast } from "@/components/ui/toast.js";
-import { useFeedbackStore } from "@/feedback/feedbackStore.js";
+import { useReportErrorToIssue } from "@/hooks/useReportErrorToIssue.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { buildErrorFeedbackDescription } from "@/lib/errorFeedbackDraft.js";
 
@@ -20,15 +19,12 @@ export function SessionSubscriptionErrorPanel({
   onReconnect,
 }: SessionSubscriptionErrorPanelProps) {
   const { intl } = useZCodeIntl();
-  const openFeedbackSubmit = useFeedbackStore((state) => state.openSubmit);
+  const reportErrorToIssue = useReportErrorToIssue();
   const handleOpenFeedback = useCallback(async () => {
-    openFeedbackSubmit({
-      title: error.slice(0, 80),
-      type: "bug",
-      module: "Agent任务执行失败",
-      severity: "P2-中",
-      includeLogs: true,
-      description: buildErrorFeedbackDescription({
+    // 反馈入口不再打开内置表单（它 POST 到上游 feedback API，未登录上游账号必然失败），
+    // 改为把脱敏后的错误与任务上下文复制到剪贴板并打开项目 issue 页。
+    await reportErrorToIssue(
+      buildErrorFeedbackDescription({
         message: error,
         contextLines: [
           intl.formatMessage({ id: "feedback.submit.template.section.taskInfo" }),
@@ -41,10 +37,8 @@ export function SessionSubscriptionErrorPanel({
         formatMessage: (id: string, values?: Record<string, string>) =>
           intl.formatMessage({ id }, values),
       }),
-      screenshots: [],
-    });
-    toast(intl.formatMessage({ id: "chat.error.feedbackOpened" }));
-  }, [error, intl, openFeedbackSubmit, sessionId, workspacePath]);
+    );
+  }, [error, intl, reportErrorToIssue, sessionId, workspacePath]);
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 p-4 text-ui-base">
