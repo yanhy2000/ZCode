@@ -80,8 +80,18 @@ jobs:
       - name: Verify production identity
         shell: pwsh
         run: |
+          # 产品名不再硬编码：身份改名（如 ZCode → ZCode Dev）时这里必须跟着变，
+          # 否则会在打包成功后误报“缺少产物”。统一从 desktop-product-identity 解析，
+          # 且按 production 身份显式求值，不依赖文件里的书写顺序。
+          $resolution = node --input-type=module -e "import { resolveDesktopProductIdentity } from './packages/desktop/scripts/desktop-product-identity.mjs'; const id = resolveDesktopProductIdentity({ ZCODE_ENV: 'production' }); console.log(id.productName + '|' + id.appId);"
+          if ($LASTEXITCODE -ne 0) { throw "Failed to resolve desktop product identity" }
+          $parts = $resolution.Trim().Split('|')
+          $productName = $parts[0]
+          $appId = $parts[1]
+          Write-Host "[identity] resolved productName=$productName appId=$appId"
+
           $appDir = "packages/desktop/dist/win-unpacked"
-          $appExe = Join-Path $appDir "ZCode.exe"
+          $appExe = Join-Path $appDir "$productName.exe"
           $previewExe = Join-Path $appDir "ZCode Preview.exe"
           if (-not (Test-Path $appExe)) {
             throw "Missing packaged application: $appExe"
@@ -89,13 +99,16 @@ jobs:
           if (Test-Path $previewExe) {
             throw "Preview identity leaked into production build: $previewExe"
           }
-          node -e "const asar=require('@electron/asar'); const pkg=JSON.parse(asar.extractFile('packages/desktop/dist/win-unpacked/resources/app.asar','package.json').toString()); const root=require('./package.json').version; if (pkg.zcodeProductFlavor !== 'production') throw new Error('flavor=' + pkg.zcodeProductFlavor); if (pkg.version !== root) throw new Error('app version=' + pkg.version + ' != root ' + root); console.log('[identity] product=ZCode flavor=' + pkg.zcodeProductFlavor + ' version=' + pkg.version)"
+          node -e "const asar=require('@electron/asar'); const pkg=JSON.parse(asar.extractFile('packages/desktop/dist/win-unpacked/resources/app.asar','package.json').toString()); const root=require('./package.json').version; if (pkg.zcodeProductFlavor !== 'production') throw new Error('flavor=' + pkg.zcodeProductFlavor); if (pkg.version !== root) throw new Error('app version=' + pkg.version + ' != root ' + root); console.log('[identity] product=$productName flavor=' + pkg.zcodeProductFlavor + ' version=' + pkg.version)"
 
       - name: Verify installer version and checksum
         shell: pwsh
         run: |
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          $expectedName = "ZCode-$version-win-x64.exe"
+          $productName = node --input-type=module -e "import { resolveDesktopProductIdentity } from './packages/desktop/scripts/desktop-product-identity.mjs'; console.log(resolveDesktopProductIdentity({ ZCODE_ENV: 'production' }).productName);"
+          if ($LASTEXITCODE -ne 0) { throw "Failed to resolve desktop product identity" }
+          $productName = $productName.Trim()
+          $expectedName = "$productName-$version-win-x64.exe"
           $installer = Get-ChildItem -Path packages/desktop/dist -Filter *.exe | Select-Object -First 1
           if ($null -eq $installer) {
             throw "No Windows installer was produced under packages/desktop/dist"
