@@ -84,7 +84,6 @@ git diff --stat v3.15.1..<新tag>
 - [`docs/specs/selfhost-runtime.md`](./docs/specs/selfhost-runtime.md)：产品规则与验收清单
 - [`docs/selfhosting/local-verification.md`](./docs/selfhosting/local-verification.md)：Windows 构建与沙箱验收
 - [`docs/selfhosting/repository-settings.md`](./docs/selfhosting/repository-settings.md)：仓库权限与开关
-- [`docs/selfhosting/rebranding.md`](./docs/selfhosting/rebranding.md)：改包名（品牌重命名）的成本评估与方案
 - [`docs/windows-test-compatibility.md`](./docs/windows-test-compatibility.md)：Windows 测试兼容与已知失败模式
 
 ## 为什么自维护
