@@ -246,7 +246,11 @@ const PACKAGING_PRUNE_PATTERNS = [
 
 function buildDesktopArtifactName(platformName, extension = "${ext}") {
   // 测试环境产物必须和正式安装包文件名区分，避免上传、下载或人工验收时混用。
-  return `\${productName}-\${version}-${platformName}-\${arch}${desktopArtifactEnvSuffix}.${extension}`;
+  // 不能用 electron-builder 的 ${productName} 宏：产品名带空格（`ZCode Dev`）时，
+  // 上传到 GitHub Release 会被规范化成 `ZCode.Dev-...exe`，和 SHA256SUMS 里记录的文件名对不上，
+  // 用户下载后按 checksum 校验会直接失败。这里用空格转连字符的稳定短名。
+  const artifactBaseName = desktopProductIdentity.productName.replace(/\s+/g, "-");
+  return `${artifactBaseName}-\${version}-${platformName}-\${arch}${desktopArtifactEnvSuffix}.${extension}`;
 }
 
 function runAsarCommand(args) {

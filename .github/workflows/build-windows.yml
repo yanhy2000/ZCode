@@ -108,7 +108,11 @@ jobs:
           $productName = node --input-type=module -e "import { resolveDesktopProductIdentity } from './packages/desktop/scripts/desktop-product-identity.mjs'; console.log(resolveDesktopProductIdentity({ ZCODE_ENV: 'production' }).productName);"
           if ($LASTEXITCODE -ne 0) { throw "Failed to resolve desktop product identity" }
           $productName = $productName.Trim()
-          $expectedName = "$productName-$version-win-x64.exe"
+          # 产物名用空格转连字符的短名，与 electron-builder 的 buildDesktopArtifactName 一致：
+          # productName = `ZCode Dev` → 文件名 `ZCode-Dev-<version>-win-x64.exe`。
+          # 直接用 productName 会得到带空格的名字，上传到 Release 时被规范成点号，校验和文件名对不上。
+          $artifactBaseName = $productName -replace '\s+', '-'
+          $expectedName = "$artifactBaseName-$version-win-x64.exe"
           $installer = Get-ChildItem -Path packages/desktop/dist -Filter *.exe | Select-Object -First 1
           if ($null -eq $installer) {
             throw "No Windows installer was produced under packages/desktop/dist"
