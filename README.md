@@ -1,6 +1,8 @@
-# ZCode Self-hosted
+# ZCode Dev
 
 本项目是 ZCode 官方开源版（Apache-2.0）的个人自维护分支，目标是在保留桌面 AI 编程工作台核心能力的同时，让更新、遥测和云端控制保持可解释、可关闭。
+
+安装身份是独立的 **`ZCode Dev`**，可以与官方 ZCode **同时安装、同时运行**，不会覆盖官方版本。
 
 本项目不是官方项目，与 Z.ai / ZCode 官方没有隶属关系。官方说明和上游文档见 [README_OFFICIAL.md](./README_OFFICIAL.md)（英文版：[README_OFFICIAL.en.md](./README_OFFICIAL.en.md)）。
 
@@ -11,10 +13,10 @@
 - 上游基线：`v3.15.1`（**已冻结**，不自动跟随上游更新）
 - 平台：Windows x64
 - 构建：GitHub Actions 手动触发
-- 当前身份：`ZCode` 正式版（替换同机官方安装，不再使用 `ZCode Preview`）
+- 当前身份：`ZCode Dev`（`appId` = `dev.zcode.app.dev`），可与官方 `ZCode` 并排安装
 - 当前版本：`1.0.0+3.15.1`（私有版本 `1.0.0` + 官方基线 `3.15.1`）
 - 最新发布：[`v1.0.0+3.15.1`](https://github.com/yanhy2000/ZCode/releases/tag/v1.0.0%2B3.15.1)（2026-10-21）
-- Windows 产物：`ZCode-1.0.0+3.15.1-win-x64.exe`（153,280,198 字节；同页附 `SHA256SUMS.txt`）
+- Windows 产物：`ZCode-Dev-1.0.0+3.15.1-win-x64.exe`（153,277,441 字节；同页附 `SHA256SUMS.txt`）
 
 ### 查看上游是否有新版本
 
@@ -55,18 +57,38 @@ git diff --stat v3.15.1..<新tag>
 | **账号 / 套餐 / 支付 / 分享 / 设置同步**：✅ | ❌ 服务端不完整 | ❌ 云端入口与相关 UI 已物理删除 |
 | **问题反馈**：✅ 云端工单系统 | ❌ | ✅ 跳转本项目 GitHub issue，错误现场复制到剪贴板 |
 | **余额 / 用量**：✅ 官方套餐展示 | ❌ | 🚧 计划第三方余额 + 本地统计 |
-| **数据目录**：官方默认 | 可配置 | ✅ 官方默认（`~/.zcode`、`%APPDATA%\ZCode`）；切换前备份 |
+| **数据目录**：官方默认 | 可配置 | ✅ 业务数据沿用 `~/.zcode`（与官方共享）；Electron 数据独立在 `%APPDATA%\ZCode Dev` |
 | **上游同步**：— | — | ❌ 已冻结在 `v3.15.1`，仅在自己需要时手动合并 |
 | **Windows 安装包**：✅ 官方发布 | ❌ 无预编译包 | ✅ GitHub Actions 手动构建 + Release 发布 |
 
-> 本项目已完成阶段 A（构建/CI/仓库流程）、阶段 B（GitHub Release 更新检查、移除遥测、关闭 Provider 云刷新、跳过官方强更）、阶段 C（切换为正式 `ZCode` 身份、工作流改为始终提供）和阶段 D（移除云端账号面、自建远控与问题上报通路）。表中标 `🚧` 或写“计划”的能力是后续计划，不是已实现。
+> 本项目已完成阶段 A（构建/CI/仓库流程）、阶段 B（GitHub Release 更新检查、移除遥测、关闭 Provider 云刷新、跳过官方强更）、阶段 C（工作流改为始终提供）和阶段 D（移除云端账号面、自建远控与问题上报通路），并在 `v1.0.0+3.15.1` 正式发布。表中标 `🚧` 或写“计划”的能力是后续计划，不是已实现。
 
 ## 安装与数据
 
-- 安装包使用正式 `ZCode` 身份，会替换同机的官方 ZCode，不能与官方版并排安装。
-- 业务数据位于 `~/.zcode`，Electron 用户数据位于 `%APPDATA%\ZCode`。
-- 首次从官方版或旧的 `ZCode Preview` 切换过来前，先备份上述两个目录。如果官方安装版本高于当前上游基线，先确认数据格式可以回退。
-- 旧的 `ZCode Preview` 不需要保留；切换后不要与正式版同时运行。
+- 安装包使用独立身份 `ZCode Dev`，**可以与本机的官方 ZCode 同时安装、同时运行**，不会替换官方版本。
+- 安装位置与用户数据都独立：`%LOCALAPPDATA%\Programs\ZCode Dev`、`%APPDATA%\ZCode Dev`。
+- **业务数据仍在 `~/.zcode`，与官方版共享**（会话、Provider 配置、凭据、插件）。
+
+  这一点是有意为之，并且是安全的：本版与官方 `v3.15.1` 的数据库 schema 完全一致，
+  凭据写入带文件锁与原子写（损坏时先备份再报错），数据库迁移只往前补。
+
+  **唯一需要遵守的约定：不要用两个版本同时打开同一个会话。** 数据本身不会损坏，
+  但两边的界面状态可能互相覆盖。
+- 从旧的 `ZCode` 身份自建包升级过来时，因为 `appId` 变了，会被识别成两个应用，建议先卸载旧版。
+- 备份：首次切换前可备份 `~/.zcode` 与 `%APPDATA%\ZCode Dev`。
+
+### 名称显示
+
+| 位置 | 显示 |
+| --- | --- |
+| 快捷方式 / 开始菜单 | ZCode Dev |
+| 任务栏悬停 / Alt+Tab | ZCode Dev |
+| 托盘悬停提示 | ZCode Dev |
+| 关于页 | ZCode Dev |
+| 应用内界面（设置、对话、菜单项） | ZCode |
+| Web 远控端浏览器标签 | ZCode Dev |
+
+这样可以保证两个版本同时运行时，从任务栏、托盘、浏览器标签都能一眼分辨。
 
 ## 分支与发布
 
@@ -101,4 +123,5 @@ git diff --stat v3.15.1..<新tag>
 
 - 本项目基于 ZCode 官方开源版，遵循 Apache-2.0；保留 `LICENSE`、`NOTICE.md` 和上游版权声明。
 - 本项目不是官方项目，不提供官方支持，也不代表 Z.ai / ZCode 官方立场。
+- 使用独立身份 `ZCode Dev` 分发，仅用于区分安装与运行实例，不暗示官方背书。
 - 官方 README 已备份为 [README_OFFICIAL.md](./README_OFFICIAL.md) 和 [README_OFFICIAL.en.md](./README_OFFICIAL.en.md)。
