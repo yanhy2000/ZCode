@@ -1,9 +1,8 @@
 name: Sync upstream
 
+# 自建 fork 有意停留在 v3.15.1 基线：不再自动跟随上游。
+# 需要合并某个上游版本时，从这里手动触发，或按下方命令在本地操作。
 on:
-  schedule:
-    # 每天 UTC 19:00（北京时间 03:00）检查上游 tag。
-    - cron: "0 19 * * *"
   workflow_dispatch:
 
 permissions:
@@ -61,9 +60,11 @@ jobs:
             exit 0
           fi
           curl -fsS -X POST -H "Content-Type: application/json" \
-            -d "{\"msg_type\":\"text\",\"content\":{\"text\":\"ZCode 上游出现新 tag $LATEST（当前基线 v$BASE），请同步。\"}}" \
+            -d "{\"msg_type\":\"text\",\"content\":{\"text\":\"ZCode 上游出现新 tag $LATEST（当前基线 v$BASE），需要合并时请手动处理。\"}}" \
             "$FEISHU_WEBHOOK" || echo "Feishu notification failed"
 
+      # 这个 fork 有意停留在当前基线，所以发现新 tag 只记录信息，不判失败：
+      # 每天一次红色 X 只会淹没真正的构建问题。
       - name: Report new upstream tag
         if: steps.upstream.outputs.new == 'true'
         shell: bash
@@ -72,10 +73,12 @@ jobs:
           BASE: ${{ steps.upstream.outputs.base }}
         run: |
           {
-            echo "### Upstream sync required"
+            echo "### Upstream has a newer tag (informational)"
             echo ""
             echo "- Current base: v$BASE"
             echo "- Latest upstream tag: $LATEST"
+            echo ""
+            echo "This fork intentionally stays on v$BASE. Merge only when you want to."
             echo ""
             echo "Commands:"
             echo '```bash'
@@ -86,8 +89,7 @@ jobs:
             echo ""
             echo "Do not use GitHub's Sync fork; it would overwrite self-host commits."
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "::error::Upstream tag $LATEST is newer than base v$BASE. Sync manually."
-          exit 1
+          echo "::notice::Upstream tag $LATEST is newer than base v$BASE. Informational only; merge manually when desired."
 
       - name: Report up-to-date
         if: steps.upstream.outputs.new == 'false'
